@@ -6,3 +6,11 @@ dist/
 !.env.example
 *.log
 data/
+photos/
+work/
+wardrobe-gallery/
+
+.vercel
+
+# 本機暫存 debug
+_insp.mjs

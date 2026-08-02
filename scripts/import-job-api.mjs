@@ -8,7 +8,7 @@ const ASSET_ROOT = "/api/import/assets";
 const LIBRARY_ASSET_ROOT = "/api/import/library";
 const STAGES = new Set(["crop", "garment", "modeled"]);
 const DECISIONS = new Set(["approve", "reject"]);
-const PARTS = new Set(["upperbody", "wholebody_up", "lowerbody", "accessories_up", "shoes"]);
+const PARTS = new Set(["upperbody", "wholebody_up", "lowerbody", "socks", "shoes", "bag", "eyewear", "wrist", "accessories_up"]);
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 function json(res, status, value) {
