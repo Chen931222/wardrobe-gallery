@@ -65,7 +65,7 @@ export function AddGarment({ onAdded }) {
       setStatus("");
     } catch (cause) {
       console.error(cause);
-      setError("去背失敗,可能是照片太大或網路斷線。換一張試試,或把照片給 Claude 處理。");
+      setError("去背失敗,可能是照片太大或網路斷線。換一張試試,或改用離線流程處理。");
       setStage("idle");
     }
   };

@@ -1,6 +1,17 @@
 // [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
+//
+// tools/build-manifest.mjs — 把逐件辨識的結果整理成匯入用的 work/manifest.json。
+//
+// 用法:node tools/build-manifest.mjs <辨識結果.json>
+// 輸入檔可以是 { items: [...] } 或 { result: { items: [...] } };每個 item 需有
+// slug / name / part / color / tags,另可帶 warmth / occasions / rainOk。
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
-const OUT = "C:/Users/User/AppData/Local/Temp/claude/G--/e6b768ff-e3a5-46eb-80df-87b24b824d72/tasks/w24yxxptb.output";
+
+const OUT = process.argv[2];
+if (!OUT) {
+  console.error("用法:node tools/build-manifest.mjs <辨識結果.json>");
+  process.exit(1);
+}
 const d = JSON.parse(readFileSync(OUT, "utf8"));
 const src = (d.result || d).items;
 // 這兩件淺色衣物在米黃床單上對比不足,去背成品是半透明鬼影,不入庫

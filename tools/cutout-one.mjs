@@ -1,5 +1,5 @@
 // [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
-// tools/cutout-one.mjs — 單件去背流水線,給工作流的代理各自呼叫。
+// tools/cutout-one.mjs — 單件去背流水線,可平行呼叫、每件互不影響。
 //
 // 用法:
 //   node tools/cutout-one.mjs --file IMG_4320.JPG --slug been-idea-shorts --box 40,180,900,700 [--refine]

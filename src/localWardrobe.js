@@ -4,7 +4,7 @@
  * 為什麼是 IndexedDB 而不是 localStorage:去背後的 PNG 動輒數百 KB,
  * localStorage 只有 5MB 且只能存字串,存兩三件就爆掉。IndexedDB 可以直接存 Blob。
  *
- * 這一層只管「使用者自己加的」衣物;Claude 匯入的那批仍然來自 data/library.json,
+ * 這一層只管「使用者自己加的」衣物;離線流程匯入的那批仍然來自 data/library.json,
  * 兩者在 App 裡合併顯示。線上唯讀版也能用這條路新增,因為完全不碰伺服器。 */
 
 const DB_NAME = "open-wardrobe-local";
@@ -69,7 +69,7 @@ export async function deleteLocalItem(id) {
 /* ---------- 影像處理:去背後的收尾 ---------- */
 
 /** 裁掉四周全透明的邊,並留一點內距 —— 和 Node 端 tools/cutout-one.mjs 的 trim 行為對齊,
- *  這樣網頁新增的衣物和 Claude 匯入的擺在一起才不會大小不一。 */
+ *  這樣網頁新增的衣物和離線匯入的擺在一起才不會大小不一。 */
 export async function trimTransparent(blob, maxSize = 1400) {
   const bitmap = await createImageBitmap(blob);
   const canvas = document.createElement("canvas");

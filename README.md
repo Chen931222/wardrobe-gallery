@@ -32,21 +32,21 @@ npm run dev
 原始照片（`photos/`）、處理後的衣櫃資料（`data/`）與匯出結果
 （`wardrobe-gallery/`）都不進版本庫。
 
-## 出處：哪些是本 fork 寫的
+## 出處：哪些是自己寫的
 
 Fork 自 [tandpfun/wardrobe](https://github.com/tandpfun/wardrobe)，MIT 授權。
-分界點是上游最後一個 commit `f44006c`，之後的都是本 fork 的東西。
+分界點是上游最後一個 commit `f44006c`，之後的都是這個版本自己的東西。
 
-**每個檔案第一行都有出處標記**，不必翻 git log，直接 grep：
+**每個檔案第一行都標明出處**，不必翻 git log，直接查：
 
 ```bash
 git grep -l "\[本 fork 新增\]"    # 46 個：整份自己寫的
-git grep -l "\[本 fork 修改\]"    # 8 個：上游檔案，改動寫在該行
+git grep -l "\[本 fork 修改\]"    # 9 個：上游檔案，改動寫在該行
 ```
 
 （用 `git grep` 而不是 `grep -r`：只掃版本控管的檔案，不會把 `dist/` 的 build 產物也算進去。）
 
-### 本 fork 新增（46 個）
+### 自己寫的（46 個）
 
 | 位置 | 內容 |
 |---|---|
@@ -56,27 +56,28 @@ git grep -l "\[本 fork 修改\]"    # 8 個：上游檔案，改動寫在該行
 | `src/AddGarment.jsx`、`src/localWardrobe.js` | 網頁端新增衣物、IndexedDB 本機儲存 |
 | `tools/`（41 支） | 去背流水線、破洞修補、方向校正、目視檢查表、靜態匯出 |
 
-### 本 fork 修改的上游檔案（11 個）
+### 改過的上游檔案（9 個）
 
-`index.html`、`src/App.jsx`、`src/styles.css`、`src/import-flow.jsx`、
-`src/import-flow.css`、`scripts/import-job-api.mjs`、`.gitignore`、
-`.agents/skills/import-clothes/scripts/import-to-wardrobe.mjs`
-——以上 8 個的改動內容寫在各自第一行。
+`index.html`、`src/App.jsx`、`src/styles.css`、`.gitignore`、`vite.config.mjs`、
+`public/manifest.webmanifest`、`tools/import-to-wardrobe.mjs`（原本在別的目錄，
+一併搬進 `tools/`）——改動內容寫在各自第一行。
 
 `package.json`、`package-lock.json`（JSON 放不了註解）與本檔另計。
 
-改動集中在三件事：介面繁中化、深色襯線主題、擴充部位分類（襪子／包／眼鏡／腕飾）。
+改動集中在：介面繁體中文化、深色襯線主題、擴充部位分類（襪子／包／眼鏡／腕飾）。
 
-### 上游原封不動（17 個，請勿當成本 fork 的作品）
+### 上游原封不動（9 個，請勿當成這個版本的作品）
 
-`LICENSE`、`CONTRIBUTING.md`、`.env.example`、`.npmrc`、`vite.config.mjs`、
-`.github/workflows/ci.yml`、`src/main.jsx`、`src/OptimizedImage.jsx`、
-`scripts/responsive-image-api.mjs`、`public/`（含 PWA 的 `manifest.webmanifest`
-與 `sw.js`）、`.agents/skills/` 底下上游那套 OpenAI 匯入與生圖 skill。
+`LICENSE`、`CONTRIBUTING.md`、`.npmrc`、`.github/workflows/ci.yml`、
+`src/main.jsx`、`src/OptimizedImage.jsx`、`scripts/responsive-image-api.mjs`、
+`public/icon.svg`、`public/sw.js`
 
-上游的匯入流程需要 `OPENAI_API_KEY` 與 `data/model-reference.png`
-（見 [`.env.example`](.env.example)）。本 fork 實際走的是 Claude 流程，沒用到那把金鑰。
+### 移除的上游功能
 
-另外刪除了上游的 `docs/screenshots/`（兩張截圖，畫面已完全不同）。
+上游附了一套線上匯入流程（雲端影像 API + 對應的網頁托盤與開發用 API），
+這個版本沒有用到：衣物一律走 `tools/` 的離線流程建檔，靜態部署也沒有後端可以接。
+留著只會讓網頁多送兩個必定 404 的請求，因此整套移除，主程式體積少了約 25 kB。
+
+同時移除上游的 `docs/screenshots/`（兩張截圖，畫面已完全不同）。
 
 授權同為 MIT，見 [LICENSE](LICENSE)。

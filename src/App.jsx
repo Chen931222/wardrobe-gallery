@@ -1,7 +1,6 @@
 // [本 fork 修改] 上游 tandpfun/wardrobe 既有檔案。本 fork 的改動:介面全繁中化並擴充分類,新增入口環/衣櫃/搭配三頁切換、IndexedDB 本機衣物合併與格子刪除鈕。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Plus, Trash, X } from "@phosphor-icons/react";
-import { WardrobeImportFlow } from "./import-flow.jsx";
 import { OptimizedImage } from "./OptimizedImage.jsx";
 import { OutfitStudio } from "./OutfitStudio.jsx";
 import { LandingRing } from "./LandingRing.jsx";
@@ -562,7 +561,7 @@ export function App() {
   const [view, setView] = useState("landing");
   const [pendingOutfit, setPendingOutfit] = useState(null);   // 由入口頁的今日推薦帶進搭配頁
 
-  // 衣櫃 = Claude 匯入的(data/library.json)+ 使用者自己在網頁加的(IndexedDB)
+  // 衣櫃 = 離線流程匯入的(data/library.json)+ 使用者自己在網頁加的(IndexedDB)
   const refresh = useCallback(async () => {
     const edits = readEdits();
     const deleted = readDeletedItems();
@@ -623,15 +622,6 @@ export function App() {
     persistDeletedItem(id);
     setSelectedId(null);
   };
-
-  const addImportedItem = useCallback((newItem) => {
-    setItems((current) => current.some((item) => item.id === newItem.id) ? current : [...current, newItem]);
-  }, []);
-
-  const attachImportedModeledImage = useCallback((jobId, modeledImage) => {
-    const id = `import-${jobId}`;
-    setItems((current) => current.map((item) => item.id === id ? { ...item, modeledImage } : item));
-  }, []);
 
   return (
     <div className={`app-shell${selectedItem ? " has-selection" : ""}`}>
@@ -701,7 +691,6 @@ export function App() {
       </main>
 
       {selectedItem && <ItemViewer item={selectedItem} onClose={() => setSelectedId(null)} onSave={saveItem} onDelete={deleteItem} />}
-      <WardrobeImportFlow onGarmentApproved={addImportedItem} onModeledApproved={attachImportedModeledImage} />
     </div>
   );
 }
