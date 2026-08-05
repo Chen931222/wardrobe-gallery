@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // tools/refine-cutout.mjs — 二次去背:把首輪 cutout 鋪白底再去背一次,清掉殘留的門板/雜訊
 // 與 crop-cutout.mjs 相同的多程序編排(sharp 與 @imgly 的 libvips 不能同程序)。
 import { execFileSync } from "node:child_process";

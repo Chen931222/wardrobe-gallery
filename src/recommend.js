@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 /* recommend.js — 每日穿搭推薦引擎(純函式,不碰 DOM)。
  *
  * 規則移植自 outfit-today 專案的 engine.js,改吃 wardrobe-ai 的資料格式:

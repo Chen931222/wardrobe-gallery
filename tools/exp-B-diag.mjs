@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // exp-B 診斷:量測床單 vs 衣物在 LAB 各通道的實際距離
 import sharp from "sharp";
 

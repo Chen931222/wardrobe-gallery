@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // 把半透明鬼影補實:alpha 曲線 a>=96 → 255、a<=25 → 0、中間線性放大。
 // 直接改 data/imported/ 裡的正式檔(不動 library.json,id 不變)。
 import sharp from "sharp";

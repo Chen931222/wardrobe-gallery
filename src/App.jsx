@@ -1,3 +1,4 @@
+// [本 fork 修改] 上游 tandpfun/wardrobe 既有檔案。本 fork 的改動:介面全繁中化並擴充分類,新增入口環/衣櫃/搭配三頁切換、IndexedDB 本機衣物合併與格子刪除鈕。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Plus, Trash, X } from "@phosphor-icons/react";
 import { WardrobeImportFlow } from "./import-flow.jsx";

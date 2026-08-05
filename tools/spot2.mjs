@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 import sharp from "sharp";
 const CELL=380, files=["work/items/retry4381.png","work/items/retry4395.png"], layers=[];
 for(let i=0;i<files.length;i++){

@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // tools/D-solid.mjs — 只用 sharp。把 @imgly 給的「形狀對但半透明」遮罩實心化,
 // 再用色度鍵(chroma key)修邊,最後貼回原圖。
 //

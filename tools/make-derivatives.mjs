@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // tools/make-derivatives.mjs — 產生縮圖與顯示尺寸的 WebP,並把 library.json 指向它們。
 //
 // 為什麼需要:去背後的 PNG 是相機原始解析度(常見 4000x7000、單張 10-27MB),

@@ -1,3 +1,4 @@
+# [本 fork 修改] 上游 tandpfun/wardrobe 既有檔案。本 fork 的改動:純新增忽略規則:photos/、work/、wardrobe-gallery/、.vercel 與 _insp.mjs。
 node_modules/
 dist/
 .DS_Store

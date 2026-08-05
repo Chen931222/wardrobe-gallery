@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Sparkle, X } from "@phosphor-icons/react";
 import { fetchWeather, readWearLog, recommendOutfit } from "./recommend.js";

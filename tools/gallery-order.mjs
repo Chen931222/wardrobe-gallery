@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 import sharp from "sharp";
 import { readFileSync } from "node:fs";
 const lib=JSON.parse(readFileSync("data/library.json","utf8"));

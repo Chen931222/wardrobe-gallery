@@ -1,3 +1,4 @@
+// [本 fork 修改] 上游 tandpfun/wardrobe 既有檔案。本 fork 的改動:僅擴充 PARTS 允許清單,新增 socks、bag、eyewear、wrist 四個部位。
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";

@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 import { useRef, useState } from "react";
 import { Plus, SpinnerGap, X } from "@phosphor-icons/react";
 import { deleteLocalItem, dominantColor, guessPart, saveLocalItem, trimTransparent } from "./localWardrobe.js";

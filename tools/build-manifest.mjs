@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 const OUT = "C:/Users/User/AppData/Local/Temp/claude/G--/e6b768ff-e3a5-46eb-80df-87b24b824d72/tasks/w24yxxptb.output";
 const d = JSON.parse(readFileSync(OUT, "utf8"));

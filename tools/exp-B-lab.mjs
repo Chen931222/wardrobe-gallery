@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // exp-B — 路線 B:LAB b* 通道放大去背
 //
 // 核心觀察(由 tools/exp-B-diag.mjs 量到):

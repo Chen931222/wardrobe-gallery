@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // tools/test-shoes.mjs — 驗證推薦引擎會挑鞋,而且下雨天不挑麂皮/帆布。
 import { readFile } from "node:fs/promises";
 import { recommendOutfit } from "../src/recommend.js";

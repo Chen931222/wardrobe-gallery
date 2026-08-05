@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // tools/D-diag.mjs <seg.png> <src.JPG> <outprefix> — 只用 sharp。傾印 bin/core/region/k 四張圖。
 import sharp from "sharp";
 const [seg, src, prefix] = process.argv.slice(2);

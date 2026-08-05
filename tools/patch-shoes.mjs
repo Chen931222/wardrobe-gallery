@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // tools/patch-shoes.mjs — 手動指定鞋款的推薦屬性。
 //
 // enrich-metadata 的通用規則對鞋子只有一條「warmth 2 / school+out」,把拖鞋和真皮鞋

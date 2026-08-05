@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // tools/D-apply.mjs --seg <去背結果.png> --src <原圖.JPG> --out <輸出.png> [--long 2600] [--gamma 1] [--floor 0] [--trim]
 // 只用 sharp。從分割結果抽出 alpha,放大回目標尺寸,套回「原始色彩」的圖上。
 import sharp from "sharp";

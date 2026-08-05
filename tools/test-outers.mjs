@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // tools/test-outers.mjs — 驗證「薄外套(棒球球衣)」的分層規則。
 //
 // 背景:needOuter() 只在 24° 以下或下雨時才把外套放進候選池,台中夏天永遠碰不到。

@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // 把先前旋轉過的 4 件還原回原始方向(從去背中繼檔 work/tmp 或重新從 photos 去背都太慢,
 // 這裡直接對現有檔案套用「反向旋轉」抵銷之前的操作)。
 import sharp from "sharp";

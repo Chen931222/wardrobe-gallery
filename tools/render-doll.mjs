@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // 在 Node 端重現搭配頁的人形合成,用來目視驗證槽位(瀏覽器截圖在本機會逾時)
 import sharp from "sharp";
 import { readFile } from "node:fs/promises";

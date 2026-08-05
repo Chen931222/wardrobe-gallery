@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // 對指定 PNG 直接做 alpha 實心化(半透明鬼影 → 不透明),並回報前後不透明比例。
 // 與 solidify-alpha.mjs 的差別:那支是查 library.json 改正式檔,這支吃任意路徑,用於搶救候選。
 //

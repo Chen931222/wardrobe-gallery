@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // tools/D-seg.mjs <in.jpg> <outMask.png> [model] — 只用 @imgly,不可 import 專案的 sharp。
 // 輸出的是「去背後的 RGBA 圖」,alpha 通道就是遮罩,交給 D-apply.mjs 貼回原圖。
 import { removeBackground } from "@imgly/background-removal-node";

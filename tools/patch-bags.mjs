@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // tools/patch-bags.mjs — 手動指定包款的推薦屬性(同 patch-shoes 的理由)。
 //
 // warmth 對包沒有意義,但推薦引擎的 byPart 會濾掉 warmth === undefined 的單品,

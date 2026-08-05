@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // tools/measure.mjs <png...> — 客觀評分去背成品,並輸出洋紅底檢查圖供目視
 import sharp from "sharp";
 for (const f of process.argv.slice(2)) {

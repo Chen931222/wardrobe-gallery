@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // tools/crop-cutout.mjs — 針對特定照片:裁切到衣物區域 → 去背 → 修邊
 // 地雷:@imgly/background-removal-node 內建 sharp 0.32(libvips 8.14),與專案的 sharp 0.34
 // (libvips 8.17)不能載入同一個 Node 程序,否則 ERR_DLOPEN_FAILED。

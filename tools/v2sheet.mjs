@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 import sharp from "sharp";
 const files=["navy-wide-leg-trousers-v2","washed-black-straight-jeans-v2","light-gray-washed-jeans-v2","adidas-white-contrast-stitch-hoodie-v2"];
 const CELL=420,COLS=4,layers=[];

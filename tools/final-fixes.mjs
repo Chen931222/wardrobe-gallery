@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 import sharp from "sharp";
 import { readFile, writeFile, rename, rm } from "node:fs/promises";
 const lib = JSON.parse(await readFile("data/library.json","utf8"));

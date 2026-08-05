@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 /* localWardrobe.js — 使用者自己在網頁上新增的衣物,存在瀏覽器的 IndexedDB。
  *
  * 為什麼是 IndexedDB 而不是 localStorage:去背後的 PNG 動輒數百 KB,

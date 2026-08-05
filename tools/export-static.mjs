@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // tools/export-static.mjs — 匯出唯讀靜態版衣櫃(給 Vercel)
 // 原理:前端啟動只 GET /api/import/wardrobe(= data/library.json)和
 // /api/import/library/*.png(= data/imported/),把它們照路徑擺成靜態檔即可。

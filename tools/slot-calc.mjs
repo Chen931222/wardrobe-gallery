@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // 給定候選槽位,算出整櫃衣物實際會被渲染成多寬多高,用來驗證比例是否落在合理帶
 import sharp from "sharp";
 import { readFile } from "node:fs/promises";

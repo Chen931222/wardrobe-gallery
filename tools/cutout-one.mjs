@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // tools/cutout-one.mjs — 單件去背流水線,給工作流的代理各自呼叫。
 //
 // 用法:

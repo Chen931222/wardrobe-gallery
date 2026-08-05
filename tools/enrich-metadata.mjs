@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // 幫 library.json 的每件衣物補上推薦引擎需要的欄位:
 //   warmth 1(最涼)~5(最保暖)、occasions [school/out/sport]、rainOk
 // 規則從品名+標籤推導。之後匯入新衣物後要重跑一次(只補缺的,不覆蓋已有的)。

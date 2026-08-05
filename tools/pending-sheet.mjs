@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // 待重拍清單對照表:左=原始照片(供辨認是哪一件),右=去背失敗的結果(說明問題)
 import sharp from "sharp";
 

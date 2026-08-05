@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // tools/claude-cutout.mjs — Claude 匯入流程的去背步驟(取代 OpenAI 生圖)
 // photos/ 的衣服照片 → 本地 AI 去背 → work/items/ 透明 PNG
 // 之後由 Claude 撰寫 work/manifest.json,再跑官方匯入腳本:

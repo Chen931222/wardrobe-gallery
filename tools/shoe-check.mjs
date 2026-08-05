@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // tools/shoe-check.mjs — 只檢查這批鞋的去背成品:實心度 + 併一張聯絡表方便肉眼看。
 // 淺色鞋(米白帆布、米白麂皮)在灰白磨石子地上是高風險組合,所以先量再入庫。
 import sharp from "sharp";

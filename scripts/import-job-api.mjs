@@ -1,3 +1,4 @@
+// [本 fork 修改] 上游 tandpfun/wardrobe 既有檔案。本 fork 的改動:僅擴充 PARTS 部位白名單,加入襪子、包、眼鏡、腕飾四類。
 import { randomUUID } from "node:crypto";
 import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";

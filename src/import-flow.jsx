@@ -1,3 +1,4 @@
+// [本 fork 修改] 上游 tandpfun/wardrobe 既有檔案。本 fork 的改動:匯入托盤與彈窗文案繁中化,並把 OpenAI 金鑰設定提示改寫成「交給 Claude 匯入」說明。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowCounterClockwise, Check, Plus, SpinnerGap, Trash, UploadSimple, WarningCircle, X } from "@phosphor-icons/react";
 import "./import-flow.css";

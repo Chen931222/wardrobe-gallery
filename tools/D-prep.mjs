@@ -1,3 +1,4 @@
+// [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // tools/D-prep.mjs <srcPhoto> <outPrefix> — 只用 sharp。
 // 路線 D:通道重映射 / 色相旋轉,把米黃床單與中性白衣物在 RGB 上推開。
 //
