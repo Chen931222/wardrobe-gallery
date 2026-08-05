@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { responsiveImageApi } from "./scripts/responsive-image-api.mjs";
+import { wardrobeDataApi } from "./scripts/wardrobe-data-api.mjs";
 
 export default defineConfig(() => {
   return {
@@ -19,6 +20,6 @@ export default defineConfig(() => {
       port: 4173,
       allowedHosts: ["localhost"],
     },
-    plugins: [react(), responsiveImageApi()],
+    plugins: [react(), responsiveImageApi(), wardrobeDataApi()],
   };
 });
