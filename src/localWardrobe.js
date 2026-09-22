@@ -66,6 +66,18 @@ export async function deleteLocalItem(id) {
   await tx("readwrite", (store) => store.delete(id));
 }
 
+/** 備份匯出用:讀原始 record(含 blob),不像 loadLocalItems 轉成 objectURL。 */
+export async function dumpLocalRecords() {
+  if (typeof indexedDB === "undefined") return [];
+  try { return (await tx("readonly", (store) => store.getAll())) || []; }
+  catch { return []; }
+}
+
+/** 備份匯入用:把原始 record(含 blob)寫回 IndexedDB。 */
+export async function putLocalRecord(record) {
+  await tx("readwrite", (store) => store.put(record));
+}
+
 /* ---------- 影像處理:去背後的收尾 ---------- */
 
 /** 裁掉四周全透明的邊,並留一點內距 —— 和 Node 端 tools/cutout-one.mjs 的 trim 行為對齊,

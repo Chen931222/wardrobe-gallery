@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowCounterClockwise, ArrowsClockwise, CalendarCheck, Export, FloppyDisk, ImageSquare, Lock, LockOpen, Microphone, Sparkle, Trash, X } from "@phosphor-icons/react";
 import { adjustIntent, fetchWeather, findItemForSwap, parseRequest, readWearLog, recommendOutfit, recordWear } from "./recommend.js";
+import { buildBackup, downloadBackup, restoreBackup } from "./backup.js";
 import { LookCard } from "./LookCard.jsx";
 
 // 搭配工作室:把去背衣物疊在人形上組穿搭。
@@ -538,6 +539,27 @@ export function OutfitStudio({ items, initialOutfit = null }) {
     try { rec.start(); } catch { recognitionRef.current = null; setListening(false); }
   };
 
+  /* ---------- 紀錄備份/還原:整台瀏覽器的衣櫃紀錄打包成 JSON,PC↔iPhone 搬或防 iOS 清資料 ---------- */
+  const backupFileRef = useRef(null);
+  const [backupMsg, setBackupMsg] = useState("");
+  const exportBackup = async () => {
+    try { downloadBackup(await buildBackup()); setBackupMsg("已匯出備份檔到你的下載"); }
+    catch { setBackupMsg("匯出失敗,再試一次"); }
+  };
+  const importBackup = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!confirm("匯入會用備份覆蓋這台瀏覽器目前的紀錄(穿著紀錄、收藏、微調…),確定?")) return;
+    try {
+      await restoreBackup(JSON.parse(await file.text()));
+      setBackupMsg("已還原,重新整理讓紀錄生效…");
+      setTimeout(() => window.location.reload(), 800);
+    } catch (cause) {
+      setBackupMsg(`匯入失敗:${cause?.message || "檔案格式不對"}`);
+    }
+  };
+
   const wearToday = () => {
     if (!wornItems.length) return;
     recordWear(wornItems);
@@ -731,7 +753,22 @@ export function OutfitStudio({ items, initialOutfit = null }) {
                     台中 {daily.weather.temp}°(體感 {daily.weather.feelsLike}°)· {daily.weather.desc} · 降雨 {daily.weather.rainProb}%
                   </p>
                 )}
-                <p className="studio-daily-reasons">{daily.reasons.join(" · ")}</p>
+                {(() => {
+                  // 一句一行才讀得下去(舊版全用「·」串成一坨,手機上七行擠在一起);
+                  // 「看到的線索」是透明化細節,獨立成一條較淡的小字,不跟主要理由搶。
+                  const clue = daily.reasons.find((reason) => reason.startsWith("看到的線索"));
+                  const main = daily.reasons.filter((reason) => reason !== clue);
+                  return (
+                    <>
+                      {!!main.length && (
+                        <ul className="studio-daily-reasons">
+                          {main.map((reason, index) => <li key={index}>{reason}</li>)}
+                        </ul>
+                      )}
+                      {clue && <p className="studio-daily-clue">{clue}</p>}
+                    </>
+                  );
+                })()}
               </>
             )}
           </div>
@@ -804,6 +841,18 @@ export function OutfitStudio({ items, initialOutfit = null }) {
             </ul>
           </div>
         )}
+
+        {/* 紀錄備份:資料 local-first,換裝置或防 iOS 清 storage 前先匯出,到新裝置匯入。全程本機。 */}
+        <div className="studio-backup">
+          <div className="studio-backup-controls">
+            <span className="studio-backup-label">紀錄備份</span>
+            <button type="button" onClick={exportBackup}>匯出備份</button>
+            <button type="button" onClick={() => backupFileRef.current?.click()}>匯入備份</button>
+            <input ref={backupFileRef} type="file" accept="application/json,.json" onChange={importBackup} hidden />
+          </div>
+          {backupMsg && <p className="studio-backup-msg" role="status">{backupMsg}</p>}
+          <p className="studio-backup-note">穿著紀錄、收藏、微調都只存在這台瀏覽器。換裝置或清資料前先「匯出」,到新裝置「匯入」。全程本機,不上傳。</p>
+        </div>
       </div>
 
       <aside className="studio-rack">
