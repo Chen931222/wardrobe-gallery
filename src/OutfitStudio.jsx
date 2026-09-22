@@ -1,7 +1,8 @@
 // [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowsClockwise, CalendarCheck, FloppyDisk, Sparkle, Trash, X } from "@phosphor-icons/react";
-import { fetchWeather, readWearLog, recommendOutfit, recordWear } from "./recommend.js";
+import { ArrowCounterClockwise, ArrowsClockwise, CalendarCheck, Export, FloppyDisk, ImageSquare, Lock, LockOpen, Microphone, Sparkle, Trash, X } from "@phosphor-icons/react";
+import { adjustIntent, fetchWeather, findItemForSwap, parseRequest, readWearLog, recommendOutfit, recordWear } from "./recommend.js";
+import { LookCard } from "./LookCard.jsx";
 
 // 搭配工作室:把去背衣物疊在人形上組穿搭。
 //
@@ -14,6 +15,8 @@ import { fetchWeather, readWearLog, recommendOutfit, recordWear } from "./recomm
 // 微調(位移/縮放/旋轉)以「衣物 id」為鍵存 localStorage,同一件衣服在任何穿搭都記得。
 const LOOKS_KEY = "open-wardrobe-looks-v1";
 const FIT_KEY = "open-wardrobe-fit-v1";
+const WEARING_KEY = "open-wardrobe-wearing-v1";   // 身上這套(槽位→id),刷新後還原
+const HISTORY_MAX = 5;                             // 復原最多退幾步
 const DEFAULT_FIT = { dx: 0, dy: 0, scale: 1, rot: 0 };
 const SCALE_MIN = 0.35, SCALE_MAX = 2.4;
 
@@ -85,6 +88,31 @@ export function OutfitStudio({ items, initialOutfit = null }) {
   const [wearing, setWearing] = useState({});
   const [looks, setLooks] = useState(readLooks);
   const [stripType, setStripType] = useState("upperbody");
+  const [occasion, setOccasion] = useState("");           // 「說個場合」輸入框
+  const [locks, setLocks] = useState({});                 // 槽位→true:重挑時那格不動
+  const [past, setPast] = useState([]);                   // 復原用:最近幾套 wearing
+  const lastIntentRef = useRef(null);                     // 上一次整套推薦的場合,給「再正式一點」「再推薦一套」接著用
+  const dirtyRef = useRef(false);                         // 使用者真的動過穿搭才寫 localStorage,免得還原前先被空狀態蓋掉
+  const pushHistory = (current) => setPast((stack) => [current, ...stack].slice(0, HISTORY_MAX));
+  const [card, setCard] = useState(null);                 // Look 卡面板:{ outfit, caption } | null
+
+  // 開 Look 卡:把身上這套(或收藏的某套)連同日期/天氣/場合做成 caption,交給 LookCard 合成
+  const openCard = (outfitMap, meta = {}) => {
+    const names = Object.values(outfitMap).filter(Boolean).map((item) => item.name).filter(Boolean);
+    if (!names.length) return;
+    const now = new Date();
+    const date = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, "0")}.${String(now.getDate()).padStart(2, "0")}`;
+    const weather = meta.weather;
+    setCard({
+      outfit: { ...outfitMap },
+      caption: {
+        title: meta.title || meta.understood || "今日穿搭",
+        date,
+        subtitle: weather ? `台中 ${weather.temp}° · ${weather.desc} · 降雨 ${weather.rainProb}%` : "",
+        items: names.join(" · "),
+      },
+    });
+  };
   const [fits, setFits] = useState(readFits);
   const [adjusting, setAdjusting] = useState(null);       // 選取中的槽位
   const [natSizes, setNatSizes] = useState({});            // itemId → {w,h} 圖片原始尺寸
@@ -96,6 +124,30 @@ export function OutfitStudio({ items, initialOutfit = null }) {
   useEffect(() => {
     if (initialOutfit) { setWearing(initialOutfit); setAdjusting(null); }
   }, [initialOutfit]);
+
+  // 記住身上這套:進頁面先從 localStorage 還原(入口頁帶進來的優先),之後只要使用者動過就存。
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current || !items.length) return;
+    restoredRef.current = true;
+    if (initialOutfit) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(WEARING_KEY) || "{}");
+      const next = {};
+      for (const [slot, id] of Object.entries(saved)) {
+        const item = items.find((existing) => existing.id === id);
+        if (item && item.part === slot) next[slot] = item;
+      }
+      if (Object.keys(next).length) setWearing(next);
+    } catch { /* 壞掉就當沒存 */ }
+  }, [items, initialOutfit]);
+  useEffect(() => {
+    if (!dirtyRef.current) return;
+    try {
+      const ids = Object.fromEntries(Object.entries(wearing).filter(([, item]) => item).map(([slot, item]) => [slot, item.id]));
+      localStorage.setItem(WEARING_KEY, JSON.stringify(ids));
+    } catch { /* 私密模式等存不了就算了 */ }
+  }, [wearing]);
 
   const fitOf = useCallback((item) => (item && fits[item.id]) || DEFAULT_FIT, [fits]);
 
@@ -278,6 +330,7 @@ export function OutfitStudio({ items, initialOutfit = null }) {
 
   /* ---------- 穿脫 / 隨機 / 收藏 ---------- */
   const toggleWear = (item) => {
+    pushHistory(wearing); dirtyRef.current = true;
     setWearing((current) => {
       const removing = current[item.part]?.id === item.id;
       if (removing && adjusting === item.part) setAdjusting(null);
@@ -293,6 +346,7 @@ export function OutfitStudio({ items, initialOutfit = null }) {
       next[slot] = group[Math.floor(Math.random() * group.length)];
     }
     setAdjusting(null);
+    pushHistory(wearing); dirtyRef.current = true;
     setWearing(next);
     setDaily(null);
   };
@@ -303,23 +357,185 @@ export function OutfitStudio({ items, initialOutfit = null }) {
   const [recorded, setRecorded] = useState(false);
   const weatherRef = useRef(null);               // 快取,同一次瀏覽不重抓
 
-  const recommendToday = async () => {
+  // 今日推薦、「照場合挑」、「再正式一點」、「上衣留著其他重挑」全走這一條;差別只在帶進來的參數:
+  //   intent      場合意圖(null=純看天氣);會記成 lastIntent 給下一句「再…一點」「再推薦一套」接著用
+  //   pin         「面試要穿襯衫」:整套挑完再把指定那格釘成指定單品
+  //   unknownRaw  沒學過的詞:不死路,照天氣挑一套並老實說
+  //   useLocks    鎖住的槽位:把身上那件當固定,引擎圍著它配
+  //   notes       要一起講給使用者聽的話(例如「已經最正式了」)
+  const runRecommend = async (intent = null, pin = null, unknownRaw = null, useLocks = locks, notes = []) => {
     setDailyBusy(true);
     setRecorded(false);
     try {
       if (!weatherRef.current) weatherRef.current = await fetchWeather();
       const weather = weatherRef.current;
-      const result = recommendOutfit(items, weather, readWearLog());
+      const wearLog = readWearLog();
+      const locked = {};
+      for (const slot of Object.keys(useLocks)) if (wearing[slot]) locked[slot] = wearing[slot];
+      const result = recommendOutfit(items, weather, wearLog, intent, locked);
       if (result.error) { setDaily({ error: result.error }); return; }
+      // 引擎不管眼鏡/手錶/配件,身上有就留著,別每次推薦都被脫掉
+      for (const slot of ["eyewear", "wrist", "accessories_up"]) if (wearing[slot]) result.outfit[slot] = wearing[slot];
+      if (notes.length) result.reasons.unshift(...notes);
+      const lockedLabels = Object.keys(locked).map((slot) => SLOT_LABEL[slot]);
+      if (lockedLabels.length) result.reasons.push(`鎖住沒動:${lockedLabels.join("、")}`);
+      if (unknownRaw) {
+        result.reasons.push(`「${unknownRaw}」我還沒學過,這套是純照天氣挑的;想更準可以說場合(上班、約會、運動、下雨天上課)或「換成黑色襯衫」`);
+      }
+      if (pin) {
+        const found = findItemForSwap(items, pin, wearLog, null);
+        if (found) {
+          result.outfit[pin.slot] = found.item;
+          const asked = `${pin.color?.word ? `${pin.color.word}色` : ""}${pin.category || SLOT_LABEL[pin.slot]}`;
+          result.reasons.push(found.exact
+            ? `照你指定換上「${found.item.name}」`
+            : `你指定的${asked}櫃裡沒有,先用最接近的「${found.item.name}」`);
+        }
+      }
+      lastIntentRef.current = intent;
       setAdjusting(null);
+      pushHistory(wearing); dirtyRef.current = true;
       setWearing(result.outfit);
-      setDaily({ weather, reasons: result.reasons });
+      setDaily({ weather, reasons: result.reasons, understood: unknownRaw ? `沒學過「${unknownRaw}」,先照天氣挑` : (intent?.understood || null) });
     } catch (cause) {
       console.warn("weather failed", cause);
       setDaily({ error: "抓不到天氣資料,檢查一下網路再試" });
     } finally {
       setDailyBusy(false);
     }
+  };
+
+  const recommendToday = () => runRecommend(null);
+  const recommendAgain = () => runRecommend(lastIntentRef.current);   // 「再推薦一套」要記得上次的場合,不能弄丟
+
+  const undo = () => {
+    if (!past.length) { setDaily({ understood: "復原", reasons: ["沒有上一步了"] }); return; }
+    const [previous, ...rest] = past;
+    setPast(rest);
+    dirtyRef.current = true;
+    setAdjusting(null);
+    setWearing(previous);
+    setDaily({ understood: "復原", reasons: [`回到上一套(還可以再退 ${rest.length} 步)`] });
+  };
+
+  const toggleLock = (slot) => {
+    setLocks((current) => {
+      const next = { ...current };
+      if (next[slot]) delete next[slot]; else next[slot] = true;
+      return next;
+    });
+  };
+
+  // 把輸入框那句話分四路:整套(場合)/換單品/脫一件/聽不懂。換和脫只動那一格,其他衣服不動。
+  // text 參數給語音用:辨識完直接送,不等 setOccasion 的非同步狀態。
+  const handleRequest = (text = occasion) => {
+    const req = parseRequest(text);
+    if (!req) return;
+
+    if (req.kind === "undo") { undo(); return; }
+
+    if (req.kind === "unlock") {
+      if (req.slot) setLocks((current) => { const next = { ...current }; delete next[req.slot]; return next; });
+      else setLocks({});
+      setDaily({ understood: req.slot ? `解鎖${SLOT_LABEL[req.slot]}` : "全部解鎖", reasons: ["之後重挑會一起換"] });
+      return;
+    }
+
+    if (req.kind === "keep") {
+      const label = SLOT_LABEL[req.slot];
+      if (!wearing[req.slot]) { setDaily({ understood: `鎖住${label}`, reasons: [`身上沒穿${label},沒東西可以留`] }); return; }
+      const nextLocks = { ...locks, [req.slot]: true };
+      setLocks(nextLocks);
+      if (req.reroll) { runRecommend(lastIntentRef.current, null, null, nextLocks); return; }
+      setDaily({ understood: `鎖住${label}`, reasons: [`「${wearing[req.slot].name}」留著,之後重挑不會動;說「其他重挑」或按「再推薦一套」換其他的`] });
+      return;
+    }
+
+    if (req.kind === "adjust") {
+      const { intent, notes } = adjustIntent(lastIntentRef.current, req);
+      runRecommend(intent, null, null, locks, notes);
+      return;
+    }
+
+    if (req.kind === "outfit") { runRecommend(req.intent, req.pin || null); return; }
+
+    if (req.kind === "swap") {
+      const label = SLOT_LABEL[req.slot];
+      const vague = !req.color && !req.category;                       // 「換一件上衣」→ 要跟身上那件不一樣
+      const found = findItemForSwap(items, req, readWearLog(), vague ? (wearing[req.slot]?.id || null) : null);
+      if (!found) { setDaily({ understood: `換${label}`, reasons: [`櫃裡沒有${label}這一類的單品`] }); return; }
+      const asked = `${req.color?.word ? `${req.color.word}色` : ""}${req.category || label}`;
+      setAdjusting(null);
+      setRecorded(false);
+      pushHistory(wearing); dirtyRef.current = true;
+      setWearing((current) => ({ ...current, [req.slot]: found.item }));
+      setDaily({
+        understood: `換${label}${vague ? "" : `:${asked}`}`,
+        reasons: [found.exact ? `換上「${found.item.name}」` : `櫃裡沒有${asked},最接近的是「${found.item.name}」,先換上這件`],
+      });
+      return;
+    }
+
+    if (req.kind === "remove") {
+      const label = SLOT_LABEL[req.slot];
+      const had = !!wearing[req.slot];
+      if (adjusting === req.slot) setAdjusting(null);
+      pushHistory(wearing); dirtyRef.current = true;
+      setWearing((current) => ({ ...current, [req.slot]: null }));
+      setDaily({ understood: `脫掉${label}`, reasons: [had ? `${label}拿掉了` : `身上本來就沒穿${label}`] });
+      return;
+    }
+
+    runRecommend(null, null, req.raw);   // 聽不懂也不死路:照天氣挑一套,並老實說沒學過
+  };
+
+  /* ---------- 語音輸入(Stage 1):瀏覽器 Web Speech API,zh-TW,免 key ---------- */
+  // 注意:這不是裝置端辨識 —— Chrome 送 Google、Safari 送 Apple。短指令夠用;要句中中英混講別指望它。
+  // iOS Safari 雖然有 webkitSpeechRecognition,但服務常被 Apple 擋(service-not-allowed),網頁端修不動;
+  // iPhone 上可靠的語音是「鍵盤內建聽寫」(也支援中英夾雜),所以 iOS 改成引導使用者用鍵盤麥克風。
+  const isIOS = typeof navigator !== "undefined"
+    && (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
+  const SpeechAPI = typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef(null);
+  const inputRef = useRef(null);
+
+  useEffect(() => () => { try { recognitionRef.current?.abort(); } catch { /* 已停 */ } }, []);
+
+  // iPhone:不硬跑必失敗的 Web Speech,改把游標帶進輸入框並教使用者用鍵盤的麥克風聽寫
+  const promptKeyboardDictation = () => {
+    inputRef.current?.focus();
+    setDaily({ understood: "用講的", reasons: ["iPhone 網頁語音常被 Apple 擋,改用鍵盤「右下角」的 🎤 聽寫(左下角 🌐 是換語言);中英夾著講都行,講完按「照這句挑」。沒反應就到 設定>一般>鍵盤 開「啟用聽寫」"] });
+  };
+
+  const toggleListening = () => {
+    if (!SpeechAPI) return;
+    if (recognitionRef.current) { recognitionRef.current.stop(); return; }   // 再按一次 = 停
+    const rec = new SpeechAPI();
+    rec.lang = "zh-TW";
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.onresult = (event) => {
+      const text = event.results?.[0]?.[0]?.transcript?.trim();
+      if (!text) return;
+      setOccasion(text);           // 留在框裡,讓你看到它聽成什麼
+      handleRequest(text);         // 講完直接跑,不用再按
+    };
+    rec.onerror = (event) => {
+      // 被拒時「再按一次」是錯方向(再按也不會跳權限),要引導去瀏覽器的權限設定
+      const [msg, how] = event.error === "not-allowed"
+        ? ["瀏覽器擋了麥克風", "到網址列的權限圖示把麥克風設成允許,再試一次"]
+        : event.error === "no-speech"
+          ? ["沒聽到聲音", "靠近一點,再按一次麥克風"]
+          : event.error === "service-not-allowed"
+            ? ["這個瀏覽器不給用語音", "改用打字,或用系統鍵盤的 🎤 聽寫"]
+            : ["語音辨識出錯", `(${event.error})可以改用打字`];
+      setDaily({ understood: msg, reasons: [how] });
+    };
+    rec.onend = () => { recognitionRef.current = null; setListening(false); };
+    recognitionRef.current = rec;
+    setListening(true);
+    try { rec.start(); } catch { recognitionRef.current = null; setListening(false); }
   };
 
   const wearToday = () => {
@@ -343,6 +559,7 @@ export function OutfitStudio({ items, initialOutfit = null }) {
       if (item) next[item.part] = item;
     }
     setAdjusting(null);
+    pushHistory(wearing); dirtyRef.current = true;
     setWearing(next);
   };
 
@@ -379,7 +596,7 @@ export function OutfitStudio({ items, initialOutfit = null }) {
         >
           <Silhouette />
           {Object.entries(wearing).map(([slot, item]) => {
-            if (!item) return null;
+            if (!item || slot === "socks") return null;   // 襪子不畫在人形上(浮在短褲和鞋中間很假),改用下面一行字
             const s = SLOT_STYLE[slot];
             const fit = fitOf(item);
             const nat = natSizes[item.id];
@@ -438,6 +655,7 @@ export function OutfitStudio({ items, initialOutfit = null }) {
 
           {!wornItems.length && <p className="studio-hint">從右邊點衣服穿上去</p>}
         </div>
+        {wearing.socks && <p className="studio-socks-note">襪子:{wearing.socks.name}</p>}
 
         {adjusting && wearing[adjusting] && (
           <div className="studio-fit-tools">
@@ -447,7 +665,54 @@ export function OutfitStudio({ items, initialOutfit = null }) {
             <button type="button" className="studio-fit-reset" onClick={() => resetFit(wearing[adjusting])}>
               重設這件
             </button>
+            <button type="button" className="studio-fit-lock" onClick={() => toggleLock(adjusting)} aria-pressed={!!locks[adjusting]}>
+              {locks[adjusting]
+                ? <><LockOpen size={13} weight="regular" aria-hidden="true" /> 解鎖這件</>
+                : <><Lock size={13} weight="regular" aria-hidden="true" /> 鎖住這件</>}
+            </button>
           </div>
+        )}
+
+        {Object.keys(locks).some((slot) => wearing[slot]) && (
+          <div className="studio-locks" role="status">
+            <Lock size={12} weight="fill" aria-hidden="true" />
+            <span>重挑時不動:</span>
+            {Object.keys(locks).filter((slot) => wearing[slot]).map((slot) => (
+              <button type="button" key={slot} onClick={() => toggleLock(slot)} aria-label={`解鎖${SLOT_LABEL[slot]}`} title="點一下解鎖">
+                {SLOT_LABEL[slot]} <X size={11} weight="bold" aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        )}
+
+        <form className="studio-occasion" onSubmit={(event) => { event.preventDefault(); handleRequest(); }}>
+          <input
+            ref={inputRef}
+            type="text"
+            value={occasion}
+            onChange={(event) => setOccasion(event.target.value)}
+            placeholder="「約會」「換成黑色襯衫」「再正式一點」「上衣留著其他重挑」「上一步」"
+            aria-label="輸入場合或指定要換的單品"
+          />
+          {(SpeechAPI || isIOS) && (
+            <button
+              type="button"
+              className={`studio-mic${listening ? " listening" : ""}`}
+              onClick={isIOS ? promptKeyboardDictation : toggleListening}
+              disabled={dailyBusy}
+              aria-pressed={listening}
+              aria-label={isIOS ? "用鍵盤的麥克風聽寫" : listening ? "停止聆聽" : "用說的"}
+              title={isIOS ? "iPhone:用鍵盤的麥克風聽寫" : listening ? "聆聽中,再按一次停止" : "用說的(語音會送到瀏覽器的辨識服務轉成文字)"}
+            >
+              <Microphone size={15} weight={listening ? "fill" : "regular"} aria-hidden="true" />
+            </button>
+          )}
+          <button type="submit" disabled={dailyBusy || !occasion.trim()}>
+            <Sparkle size={14} weight="regular" aria-hidden="true" /> 照這句挑
+          </button>
+        </form>
+        {listening && (
+          <p className="studio-mic-note" role="status">聆聽中… 語音會傳到瀏覽器的辨識服務(Chrome→Google、Safari→Apple)轉成文字</p>
         )}
 
         {daily && (
@@ -456,31 +721,51 @@ export function OutfitStudio({ items, initialOutfit = null }) {
               <p className="studio-daily-error">{daily.error}</p>
             ) : (
               <>
-                <p className="studio-daily-weather">
-                  台中 {daily.weather.temp}°(體感 {daily.weather.feelsLike}°)· {daily.weather.desc} · 降雨 {daily.weather.rainProb}%
-                </p>
+                {daily.understood && (
+                  <p className="studio-daily-understood">
+                    <span className="studio-daily-label">聽你說的</span>{daily.understood}
+                  </p>
+                )}
+                {daily.weather && (
+                  <p className="studio-daily-weather">
+                    台中 {daily.weather.temp}°(體感 {daily.weather.feelsLike}°)· {daily.weather.desc} · 降雨 {daily.weather.rainProb}%
+                  </p>
+                )}
                 <p className="studio-daily-reasons">{daily.reasons.join(" · ")}</p>
               </>
             )}
           </div>
         )}
 
+        {/* 動作分三層,只有「今日推薦」是 accent 實心:一眼看到主要下一步 */}
         <div className="studio-actions">
-          <button type="button" className="studio-recommend" onClick={recommendToday} disabled={dailyBusy}>
-            <Sparkle size={15} weight="regular" aria-hidden="true" /> {dailyBusy ? "推薦中…" : daily && !daily.error ? "再推薦一套" : "今日推薦"}
-          </button>
-          <button type="button" onClick={randomize}>
-            <ArrowsClockwise size={15} weight="regular" aria-hidden="true" /> 隨機一套
-          </button>
-          <button type="button" onClick={() => { setWearing({}); setAdjusting(null); setDaily(null); }} disabled={!wornItems.length}>
-            <X size={15} weight="regular" aria-hidden="true" /> 脫掉
-          </button>
-          <button type="button" className="studio-save" onClick={saveLook} disabled={!wornItems.length}>
-            <FloppyDisk size={15} weight="regular" aria-hidden="true" /> 收藏這套
-          </button>
-          <button type="button" className={`studio-wear-today${recorded ? " done" : ""}`} onClick={wearToday} disabled={!wornItems.length || recorded}>
-            <CalendarCheck size={15} weight="regular" aria-hidden="true" /> {recorded ? "已記錄,近幾天不再推薦" : "今天穿這套"}
-          </button>
+          <div className="studio-actions-primary">
+            <button type="button" className="studio-recommend" onClick={daily && !daily.error ? recommendAgain : recommendToday} disabled={dailyBusy}>
+              <Sparkle size={16} weight="regular" aria-hidden="true" /> {dailyBusy ? "推薦中…" : daily && !daily.error ? "再推薦一套" : "今日推薦"}
+            </button>
+          </div>
+          <div className="studio-actions-modify" role="group" aria-label="調整這套">
+            <button type="button" onClick={randomize}>
+              <ArrowsClockwise size={15} weight="regular" aria-hidden="true" /> 隨機一套
+            </button>
+            <button type="button" onClick={undo} disabled={!past.length} title="退回上一套(也可以說「上一步」)">
+              <ArrowCounterClockwise size={15} weight="regular" aria-hidden="true" /> 復原
+            </button>
+            <button type="button" onClick={() => { pushHistory(wearing); dirtyRef.current = true; setWearing({}); setLocks({}); setAdjusting(null); setDaily(null); }} disabled={!wornItems.length}>
+              <X size={15} weight="regular" aria-hidden="true" /> 脫掉
+            </button>
+          </div>
+          <div className="studio-actions-finalize" role="group" aria-label="定案這套">
+            <button type="button" className="studio-save" onClick={saveLook} disabled={!wornItems.length}>
+              <FloppyDisk size={15} weight="regular" aria-hidden="true" /> 收藏這套
+            </button>
+            <button type="button" onClick={() => openCard(wearing, { understood: daily?.understood, weather: daily?.weather })} disabled={!wornItems.length} title="做成一張可分享的圖(不上傳)">
+              <Export size={15} weight="regular" aria-hidden="true" /> 匯出這套
+            </button>
+            <button type="button" className={`studio-wear-today${recorded ? " done" : ""}`} onClick={wearToday} disabled={!wornItems.length || recorded}>
+              <CalendarCheck size={15} weight="regular" aria-hidden="true" /> {recorded ? "已記錄,近幾天不再推薦" : "今天穿這套"}
+            </button>
+          </div>
         </div>
 
         {!!looks.length && (
@@ -496,6 +781,19 @@ export function OutfitStudio({ items, initialOutfit = null }) {
                   <li key={look.id}>
                     <button type="button" className="studio-look-load" onClick={() => wearLook(look)}>
                       {names.join(" + ")}
+                    </button>
+                    <button
+                      type="button"
+                      className="studio-look-card"
+                      aria-label="把這套做成卡片"
+                      title="做成一張可分享的圖"
+                      onClick={() => {
+                        const map = {};
+                        for (const id of look.itemIds) { const item = items.find((existing) => existing.id === id); if (item) map[item.part] = item; }
+                        openCard(map, { title: "收藏的穿搭" });
+                      }}
+                    >
+                      <ImageSquare size={14} weight="regular" aria-hidden="true" />
                     </button>
                     <button type="button" className="studio-look-delete" onClick={() => deleteLook(look.id)} aria-label="刪除這套穿搭">
                       <Trash size={13} weight="regular" aria-hidden="true" />
@@ -535,10 +833,20 @@ export function OutfitStudio({ items, initialOutfit = null }) {
             </button>
           ))}
           {!(wardrobeByType[stripType] || []).length && (
-            <p className="studio-rack-empty">這一類還沒有衣服,快去補貨</p>
+            <p className="studio-rack-empty">這一類還沒有單品</p>
           )}
         </div>
       </aside>
+
+      {card && (
+        <LookCard
+          outfit={card.outfit}
+          caption={card.caption}
+          fits={fits}
+          slotStyle={SLOT_STYLE}
+          onClose={() => setCard(null)}
+        />
+      )}
     </div>
   );
 }

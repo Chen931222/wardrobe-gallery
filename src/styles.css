@@ -548,6 +548,36 @@ h1, h2, h3 {
   margin-top: 24px;
 }
 
+/* ===== 公開唯讀版的單品資訊(分類 / 色票 / 標籤 / 穿上) ===== */
+.viewer-readonly { display: flex; flex-direction: column; gap: 18px; }
+.viewer-ro-category {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.viewer-ro-colors { display: flex; flex-wrap: wrap; gap: 18px; }
+.viewer-ro-color { display: inline-flex; align-items: center; gap: 9px; }
+.viewer-ro-swatch {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border: 1px solid var(--line);
+}
+.viewer-ro-color-copy { display: flex; flex-direction: column; line-height: 1.35; }
+.viewer-ro-color-copy small { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.viewer-ro-color-copy code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; color: var(--ink); }
+.viewer-ro-tags { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.viewer-ro-tags li {
+  border: 1px solid var(--line);
+  padding: 4px 11px;
+  font-size: 12px;
+  color: var(--body);
+}
+.viewer-ro-actions { margin-top: 2px; }
+
 .unsaved-notice {
   margin: 14px 0 -8px;
   color: var(--accent);
@@ -1068,11 +1098,21 @@ h1, h2, h3 {
   color: var(--muted);
 }
 
+/* 動作三層:主(accent 實心)/ 調整(ghost)/ 定案(描邊),一眼看到主要下一步 */
 .studio-actions {
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.studio-actions-primary,
+.studio-actions-modify,
+.studio-actions-finalize {
+  display: flex;
   justify-content: center;
-  gap: 10px;
   flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
 }
 
 .studio-actions button {
@@ -1086,19 +1126,34 @@ h1, h2, h3 {
   border-radius: 0;
   font-size: 13px;
   cursor: pointer;
-  transition: background-color 160ms ease, color 160ms ease;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
 }
-
 .studio-actions button:hover:not(:disabled) { background: var(--hover-tint); }
 .studio-actions button:active:not(:disabled) { transform: translateY(1px); }
-
 .studio-actions button:disabled { opacity: .35; cursor: default; }
 
-.studio-actions .studio-save {
-  background: var(--ink);
-  border-color: var(--ink);
+/* 第一層:唯一的 accent 實心主鈕(今日推薦/再推薦一套),撐大一點 */
+.studio-actions-primary .studio-recommend {
+  min-width: 240px;
+  justify-content: center;
+  padding: 12px 26px;
+  font-size: 14px;
+  background: var(--accent);
+  border-color: var(--accent);
   color: var(--paper);
 }
+.studio-actions-primary .studio-recommend:hover:not(:disabled) { background: var(--accent); opacity: .9; }
+
+/* 第二層:調整動作 = ghost(無邊框、退到背景),工具而已不搶戲 */
+.studio-actions-modify button {
+  border-color: transparent;
+  color: var(--muted);
+  padding: 8px 14px;
+}
+.studio-actions-modify button:hover:not(:disabled) { color: var(--ink); background: var(--hover-tint); }
+
+/* 第三層:定案動作 = 描邊,同一權重(收藏/匯出/今天穿這套) */
+.studio-actions-finalize .studio-wear-today.done { color: var(--ok); border-color: var(--ok); opacity: 1; }
 
 .studio-looks h3 {
   margin: 8px 0 10px;
@@ -1141,6 +1196,106 @@ h1, h2, h3 {
 }
 
 .studio-look-delete:hover { color: var(--accent); }
+
+.studio-look-card {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+}
+.studio-look-card:hover { color: var(--accent); }
+
+/* ===== Look 卡面板(本地合成、可下載/分享) ===== */
+
+.lookcard-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--scrim);
+  animation: overlay-in 180ms ease-out both;
+}
+
+.lookcard {
+  width: min(520px, 100%);
+  max-height: calc(100dvh - 48px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px 16px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  box-shadow: 0 24px 60px var(--shadow-soft);
+}
+
+.lookcard-head { display: flex; align-items: center; justify-content: space-between; }
+
+.lookcard-tabs { display: inline-flex; border: 1px solid var(--line); }
+.lookcard-tabs button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 7px 16px;
+  font-size: 13px;
+  letter-spacing: .1em;
+  cursor: pointer;
+}
+.lookcard-tabs button + button { border-left: 1px solid var(--line); }
+.lookcard-tabs button.active { background: var(--ink); color: var(--paper); }
+
+.lookcard-close {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+}
+.lookcard-close:hover { color: var(--ink); }
+
+.lookcard-preview {
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  overflow: hidden;
+}
+.lookcard-preview img {
+  display: block;
+  width: 100%;
+  max-height: calc(100dvh - 260px);
+  object-fit: contain;
+}
+.lookcard-status { margin: 0; font-size: 13px; letter-spacing: .12em; color: var(--muted); }
+.lookcard-status.error { color: var(--danger); letter-spacing: 0; }
+
+.lookcard-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.lookcard-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  padding: 9px 18px;
+  border-radius: 0;
+  font-size: 13px;
+  cursor: pointer;
+}
+.lookcard-actions button:hover:not(:disabled) { background: var(--hover-tint); }
+.lookcard-actions button:disabled { opacity: .35; cursor: default; }
+.lookcard-actions .lookcard-share { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+
+.lookcard-note { margin: 0; text-align: center; font-size: 11.5px; letter-spacing: .06em; color: var(--muted); }
+
+@media (max-width: 520px) {
+  .lookcard-overlay { padding: 12px; }
+  .lookcard { padding: 14px 14px 12px; }
+}
 
 .studio-rack {
   border-left: 1px solid var(--line);
@@ -1436,6 +1591,67 @@ h1, h2, h3 {
   letter-spacing: .06em;
 }
 
+/* 鎖住這件:跟重設同款;鎖上時描邊換 accent */
+.studio-fit-lock {
+  padding: 0 12px;
+  gap: 5px;
+  font-size: 12px;
+}
+.studio-fit-lock[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+
+/* 鎖住清單:一行小字 + 可點的槽位膠囊(方形,無圓角) */
+.studio-locks {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.studio-locks > svg { color: var(--accent); }
+.studio-locks button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  padding: 3px 8px;
+  border-radius: 0;
+  font-size: 12px;
+  cursor: pointer;
+}
+.studio-locks button:hover { background: var(--hover-tint); }
+
+/* 襪子不畫在人形上,改一行字貼在舞台「下方」的正常流(舊版用 absolute 疊在舞台底會被鞋子蓋住) */
+.studio-socks-note {
+  margin: 6px 0 0;
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: .08em;
+  color: var(--muted);
+}
+
+/* 麥克風聆聽時的隱私揭露:和 Look 卡「零上傳」同一種誠實 */
+.studio-mic-note {
+  margin: 6px 0 0;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: var(--muted);
+}
+
+/* 「聽你說的」拆成標籤+內文,手機上長句才不會擠成一團 */
+.studio-daily-label {
+  display: inline-block;
+  margin-right: 8px;
+  font-size: 10.5px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 /* ===== 選取框(拉角縮放 / 頂點旋轉) ===== */
 
 /* 框本身不吃指標事件(拖曳移動交給舞台的命中測試),只有手把吃 */
@@ -1503,13 +1719,76 @@ h1, h2, h3 {
 .studio-daily-weather { margin: 0; font-size: 13px; color: var(--ink); letter-spacing: .03em; }
 .studio-daily-reasons { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); }
 .studio-daily-error { margin: 0; font-size: 13px; color: var(--danger); }
+.studio-daily-understood { margin: 0 0 4px; font-size: 12px; letter-spacing: .06em; color: var(--accent); }
 
-.studio-actions .studio-recommend {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--paper);
+/* 「說個場合」輸入 —— 沿用方形無圓角、--line/--surface/--ink 的設計系統 */
+.studio-occasion {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
 }
-.studio-actions .studio-wear-today.done { color: var(--ok); border-color: var(--ok); opacity: 1; }
+.studio-occasion input {
+  flex: 1 1 240px;
+  max-width: 340px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  padding: 9px 12px;
+  border-radius: 0;
+  font-size: 13px;
+  font-family: inherit;
+}
+.studio-occasion input::placeholder { color: var(--muted); }
+.studio-occasion input:focus-visible { outline: none; border-color: var(--accent); }
+/* 「照這句挑」改 ink 描邊(不再實心),讓全站唯一的實心 accent 留給「今日推薦」 */
+.studio-occasion button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  padding: 9px 16px;
+  border-radius: 0;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 160ms ease, opacity 160ms ease;
+}
+.studio-occasion button:hover:not(:disabled) { background: var(--hover-tint); }
+.studio-occasion button:disabled { opacity: .35; cursor: default; }
+
+/* 麥克風:跟輸入框同款的方形描邊鈕;聆聽中只把描邊和 icon 換成 accent 並輕微呼吸,不做多餘動畫 */
+.studio-occasion .studio-mic {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--line);
+  padding: 9px 11px;
+}
+.studio-occasion .studio-mic:hover:not(:disabled) { opacity: 1; background: var(--hover-tint); }
+.studio-occasion .studio-mic.listening {
+  color: var(--accent);
+  border-color: var(--accent);
+  animation: studio-mic-breathe 1.4s ease-in-out infinite;
+}
+@keyframes studio-mic-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .55; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .studio-occasion .studio-mic.listening { animation: none; }
+}
+
+/* 手機:輸入框獨占一行,麥克風+送出共一行(送出撐滿);動作三層各自排。
+   要放在上面 .studio-occasion input 的基礎規則之後,同特異度靠順序贏。 */
+@media (max-width: 520px) {
+  .studio-occasion input { flex: 1 1 100%; max-width: none; }
+  .studio-occasion button[type="submit"] { flex: 1 1 auto; justify-content: center; }
+  .studio-actions-primary .studio-recommend { width: 100%; min-width: 0; }
+  .studio-actions-modify button { flex: 1 1 auto; justify-content: center; }
+  .studio-actions-finalize button { flex: 1 1 calc(50% - 4px); justify-content: center; }
+  .studio-actions-finalize .studio-wear-today { flex: 1 1 100%; }
+}
 
 /* ===== 入口導覽頁(圓環轉盤) ===== */
 
@@ -1550,6 +1829,7 @@ h1, h2, h3 {
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: .08em;
+  white-space: nowrap;
   color: var(--muted);
   cursor: pointer;
   transition: background-color 160ms ease, color 160ms ease;
@@ -1617,6 +1897,8 @@ h1, h2, h3 {
   .landing-top { padding: 16px 18px; }
   .landing-top h1 { font-size: 18px; }
   .landing-top nav button { padding: 8px 16px; }
+  /* 圓環卡片:最小點擊區(小如襪子的圖仍照原比例置中,只是把可點範圍撐到 40px) */
+  .landing-card { min-width: 40px; min-height: 40px; }
 }
 
 /* 聚焦模式的資訊卡(右下,深咖啡底 = 衣櫃門片色) */
@@ -1762,4 +2044,69 @@ h1, h2, h3 {
 @media (max-width: 640px) {
   .landing-daily h2 { font-size: 17px; }
   .landing-daily-list { font-size: 11.5px; }
+}
+
+/* ===== 手機:環心手勢提示 + 環下方今日推薦長條(取代會壓卡片的中央塊) ===== */
+.landing-ring-note {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.7;
+  letter-spacing: .14em;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.landing-daily-strip {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  z-index: 40;
+  padding: 16px 20px calc(18px + env(safe-area-inset-bottom));
+  background: var(--paper);
+  border-top: 1px solid var(--line);
+  text-align: center;
+  animation: landing-daily-in 500ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) { .landing-daily-strip { animation: none; } }
+
+.landing-daily-strip .landing-daily-weather,
+.landing-daily-strip .landing-daily-loading { margin: 0 0 8px; }
+
+.landing-strip-head {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.landing-strip-pieces {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 16px;
+  font-size: 13px;
+  color: var(--body);
+}
+.landing-strip-pieces b {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-right: 5px;
+}
+.landing-daily-strip .landing-daily-go {
+  margin-top: 0;
+  display: inline-flex;
+  min-height: 44px;
+  padding: 10px 22px;
 }

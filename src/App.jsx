@@ -1,11 +1,12 @@
 // [本 fork 修改] 上游 tandpfun/wardrobe 既有檔案。本 fork 的改動:介面全繁中化並擴充分類,新增入口環/衣櫃/搭配三頁切換、IndexedDB 本機衣物合併與格子刪除鈕。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Plus, Trash, X } from "@phosphor-icons/react";
+import { Check, Plus, Sparkle, Trash, X } from "@phosphor-icons/react";
 import { OptimizedImage } from "./OptimizedImage.jsx";
 import { OutfitStudio } from "./OutfitStudio.jsx";
 import { LandingRing } from "./LandingRing.jsx";
 import { AddGarment } from "./AddGarment.jsx";
 import { deleteLocalItem, loadLocalItems } from "./localWardrobe.js";
+import { CAN_EDIT } from "./ownerMode.js";
 
 const STORAGE_KEY = "open-wardrobe-edits-v1";
 const DELETED_STORAGE_KEY = "open-wardrobe-deleted-v1";
@@ -183,14 +184,16 @@ function GalleryItem({ item, selected, onOpen, onDelete }) {
           breakpoints={[120, 180, 240, 320, 480]}
         />
       </button>
-      <button
-        className="gallery-delete"
-        type="button"
-        onClick={() => { if (confirm(`確定刪除「${label}」?`)) onDelete(item.id); }}
-        aria-label={`刪除${label}`}
-      >
-        <Trash size={14} weight="regular" aria-hidden="true" />
-      </button>
+      {CAN_EDIT && (
+        <button
+          className="gallery-delete"
+          type="button"
+          onClick={() => { if (confirm(`確定刪除「${label}」?`)) onDelete(item.id); }}
+          aria-label={`刪除${label}`}
+        >
+          <Trash size={14} weight="regular" aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
 }
@@ -355,7 +358,45 @@ function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleSta
   );
 }
 
-function ItemViewer({ item, onClose, onSave, onDelete }) {
+// 公開展覽版:唯讀呈現單品(分類、色票+hex、標籤),再給一個「拿去搭配頁穿上」的出口。
+function ReadOnlyDetails({ item, onWear }) {
+  const type = TYPE_MAP[item.part]?.singular || "衣物";
+  const colors = [
+    item.color && { hex: item.color, label: "主色" },
+    item.secondaryColor && { hex: item.secondaryColor, label: "副色" },
+  ].filter(Boolean);
+  const tags = item.tags || [];
+  return (
+    <div className="viewer-readonly">
+      <p className="viewer-ro-category">{type}</p>
+      {!!colors.length && (
+        <div className="viewer-ro-colors">
+          {colors.map((color) => (
+            <span className="viewer-ro-color" key={color.label}>
+              <span className="viewer-ro-swatch" style={{ backgroundColor: color.hex }} aria-hidden="true" />
+              <span className="viewer-ro-color-copy">
+                <small>{color.label}</small>
+                <code>{color.hex}</code>
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
+      {!!tags.length && (
+        <ul className="viewer-ro-tags" aria-label="細節標籤">
+          {tags.map((tag) => <li key={tag}>{tag}</li>)}
+        </ul>
+      )}
+      <div className="viewer-actions viewer-ro-actions">
+        <button className="primary-button" type="button" onClick={() => onWear(item)}>
+          <Sparkle size={15} weight="regular" aria-hidden="true" /> 在搭配頁穿上
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ItemViewer({ item, onClose, onSave, onDelete, onWear }) {
   const closeButtonRef = useRef(null);
   const imageRef = useRef(null);
   const samplingCanvasRef = useRef(null);
@@ -524,27 +565,33 @@ function ItemViewer({ item, onClose, onSave, onDelete }) {
       )}
 
       <div className="viewer-details editing">
-        <ItemEditor
-          draft={draft}
-          setDraft={setDraft}
-          palette={palette}
-          sampling={sampling}
-          setSampling={setSampling}
-          sampleStatus={sampleStatus}
-        />
+        {CAN_EDIT ? (
+          <>
+            <ItemEditor
+              draft={draft}
+              setDraft={setDraft}
+              palette={palette}
+              sampling={sampling}
+              setSampling={setSampling}
+              sampleStatus={sampleStatus}
+            />
 
-        {closeBlocked && <p className="unsaved-notice" role="status">關閉前請先儲存或取消變更。</p>}
+            {closeBlocked && <p className="unsaved-notice" role="status">關閉前請先儲存或取消變更。</p>}
 
-        <div className="viewer-actions">
-          <button className="delete-button" type="button" onClick={() => onDelete(item.id)}>
-            <Trash size={15} weight="regular" aria-hidden="true" /> 刪除
-          </button>
-          <span className="action-spacer" />
-          <button className="secondary-button" type="button" onClick={cancelEditing}>取消</button>
-          <button className="primary-button" type="button" onClick={saveEditing}>
-            <Check size={15} weight="bold" aria-hidden="true" /> 儲存
-          </button>
-        </div>
+            <div className="viewer-actions">
+              <button className="delete-button" type="button" onClick={() => onDelete(item.id)}>
+                <Trash size={15} weight="regular" aria-hidden="true" /> 刪除
+              </button>
+              <span className="action-spacer" />
+              <button className="secondary-button" type="button" onClick={cancelEditing}>取消</button>
+              <button className="primary-button" type="button" onClick={saveEditing}>
+                <Check size={15} weight="bold" aria-hidden="true" /> 儲存
+              </button>
+            </div>
+          </>
+        ) : (
+          <ReadOnlyDetails item={item} onWear={onWear} />
+        )}
       </div>
     </aside>
     </div>
@@ -641,7 +688,7 @@ export function App() {
           <div className="gallery-meta-row">
             <p className="piece-count">{items.length} 件單品</p>
             <div className="header-tools">
-              <AddGarment onAdded={refresh} />
+              {CAN_EDIT && <AddGarment onAdded={refresh} />}
               <nav className="view-nav" aria-label="切換頁面">
                 <button type="button" onClick={() => setView("landing")}>入口</button>
                 <button type="button" className={view === "closet" ? "active" : ""} onClick={() => setView("closet")}>衣櫃</button>
@@ -669,7 +716,9 @@ export function App() {
 
         {error && <p className="status error">{error}</p>}
         {view !== "landing" && !error && loading && <p className="status">衣櫃載入中</p>}
-        {!error && !loading && !items.length && <p className="status empty">拖曳、貼上或新增照片,匯入你的第一件衣服。</p>}
+        {!error && !loading && !items.length && (
+          <p className="status empty">{CAN_EDIT ? "拖曳、貼上或新增照片,匯入你的第一件衣服。" : "這個衣櫃還沒有單品。"}</p>
+        )}
 
         {view === "styling" && !loading && !!items.length && (
           <OutfitStudio items={items} initialOutfit={pendingOutfit} />
@@ -690,7 +739,15 @@ export function App() {
         )}
       </main>
 
-      {selectedItem && <ItemViewer item={selectedItem} onClose={() => setSelectedId(null)} onSave={saveItem} onDelete={deleteItem} />}
+      {selectedItem && (
+        <ItemViewer
+          item={selectedItem}
+          onClose={() => setSelectedId(null)}
+          onSave={saveItem}
+          onDelete={deleteItem}
+          onWear={(item) => { setPendingOutfit({ [item.part]: item }); setSelectedId(null); setView("styling"); }}
+        />
+      )}
     </div>
   );
 }

@@ -60,7 +60,16 @@ function pickVaried(items, count) {
 }
 
 export function LandingRing({ items, onOpen, onEnter, onWearOutfit }) {
-  const picked = useMemo(() => pickVaried(items, PICK), [items]);
+  // 手機(<640)重排:少放幾件圓環卡才夠大可點,今日推薦從環心移到環下方長條,不再壓卡片
+  const [phone, setPhone] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches);
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const mq = window.matchMedia("(max-width: 640px)");
+    const on = () => setPhone(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  const picked = useMemo(() => pickVaried(items, phone ? 8 : PICK), [items, phone]);
   const stageRef = useRef(null);
   const [dims, setDims] = useState(null);
   const [focusIdx, setFocusIdx] = useState(null);
@@ -164,8 +173,9 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit }) {
   const metrics = useMemo(() => {
     if (!dims) return null;
     const { w, h } = dims;
-    const mobile = w < 800;
-    const ringR = mobile ? w * 0.32 : Math.min(w * 0.168, h * 0.295);
+    const wide = w >= 800;
+    // 手機:環往上收、半徑小一點,把畫面下半讓給今日推薦長條;平板(640–800)與桌機維持原本
+    const ringR = wide ? Math.min(w * 0.168, h * 0.295) : phone ? Math.min(w * 0.36, h * 0.26) : w * 0.32;
     const GAP = 6;                                            // 卡與卡之間至少留白(px)
 
     const clashes = (k) => {
@@ -191,14 +201,14 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit }) {
       const mid = (lo + hi) / 2;
       if (clashes(mid)) hi = mid; else lo = mid;
     }
-    return { mobile, ringR, k: lo };
-  }, [dims, boxes, n]);
+    return { wide, ringR, k: lo };
+  }, [dims, boxes, n, phone]);
 
   // 依模式算每張卡的位置與大小(純函式,一次算完交給 CSS transition 去飛)
   const layout = (index) => {
     if (!dims || !metrics) return null;
     const { w, h } = dims;
-    const { mobile, ringR, k } = metrics;
+    const { wide, ringR, k } = metrics;
     const box = boxes[index];
     const cardW = box.w * k, cardH = box.h * k;
 
@@ -207,21 +217,21 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit }) {
       const a = ((index - ringOffset) / n) * Math.PI * 2 + Math.PI / 2;
       return {
         x: w * 0.5 + Math.cos(a) * ringR,
-        y: h * (mobile ? 0.46 : 0.5) - Math.sin(a) * ringR,
+        y: h * (wide ? 0.5 : phone ? 0.34 : 0.46) - Math.sin(a) * ringR,   // 手機把環往上收,下半留給推薦長條
         cardW, cardH, scale: 1,
         z: Math.round(10 + 5 * Math.cos(a)),
       };
     }
 
-    // 聚焦模式:圓心移到左緣外側,被點的在三點鐘方向(θ=0)
-    const r = mobile ? w * 0.78 : w * 0.414;
-    const cx = mobile ? -w * 0.30 : -w * 0.014;
-    const cy = h * (mobile ? 0.40 : 0.5);
+    // 聚焦模式:圓心移到左緣外側,被點的在三點鐘方向(θ=0)。<800 都走原本的手機弧線
+    const r = !wide ? w * 0.78 : w * 0.414;
+    const cx = !wide ? -w * 0.30 : -w * 0.014;
+    const cy = h * (!wide ? 0.40 : 0.5);
     const a = ((index - focusIdx) / n) * Math.PI * 2;
     const focused = index === focusIdx;
     // 放大倍率全體一致(FOCUS_ZOOM),只有塞不下畫面時才收斂 —— 這樣長褲仍舊比帽T長
     const fBox = boxes[focusIdx];
-    const focusLimit = Math.min(h * 0.66, mobile ? w * 0.86 : w * 0.34);
+    const focusLimit = Math.min(h * 0.66, !wide ? w * 0.86 : w * 0.34);
     const zoom = Math.min(FOCUS_ZOOM, focusLimit / (Math.max(fBox.w, fBox.h) * k));
     return {
       x: cx + Math.cos(a) * r,
@@ -255,13 +265,13 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit }) {
 
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
       <div ref={stageRef} className="landing-stage" onClick={onStageClick}>
-        {/* 圓環中央的今日推薦(聚焦模式時整圈會移開,所以這裡也一起收掉) */}
-        {focusIdx === null && metrics && dims && (
+        {/* 圓環中央的今日推薦(桌機/平板);手機改放環下方長條,見下方 landing-daily-strip */}
+        {focusIdx === null && metrics && dims && !phone && (
           <div
             className="landing-daily"
             style={{
               left: `${dims.w * 0.5}px`,
-              top: `${dims.h * (metrics.mobile ? 0.46 : 0.5)}px`,
+              top: `${dims.h * (metrics.wide ? 0.5 : 0.46)}px`,
               width: `${metrics.ringR * 1.12}px`,
             }}
           >
@@ -317,7 +327,37 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit }) {
             </button>
           );
         })}
+        {/* 手機:環心空出來,放一行手勢提示(桌機的提示在底部) */}
+        {phone && focusIdx === null && dims && (
+          <p className="landing-ring-note" style={{ left: `${dims.w * 0.5}px`, top: `${dims.h * 0.34}px` }}>
+            滑一下轉一件<br />點一件放大
+          </p>
+        )}
       </div>
+
+      {/* 手機:今日推薦改成環下方長條,不再壓圓環卡片 */}
+      {phone && focusIdx === null && (
+        <div className="landing-daily-strip">
+          {!daily && <p className="landing-daily-loading">讀取今天的天氣…</p>}
+          {daily?.error && <p className="landing-daily-loading">{daily.error}</p>}
+          {daily?.outfit && (
+            <>
+              <p className="landing-daily-weather">
+                台中 {daily.weather.temp}° · 體感 {daily.weather.feelsLike}° · 降雨 {daily.weather.rainProb}%
+              </p>
+              <p className="landing-strip-head">今日推薦</p>
+              <ul className="landing-strip-pieces">
+                {["wholebody_up", "upperbody", "lowerbody", "shoes"].filter((slot) => daily.outfit[slot]).slice(0, 4).map((slot) => (
+                  <li key={slot}><b>{SLOT_LABEL[slot]}</b>{daily.outfit[slot].name}</li>
+                ))}
+              </ul>
+              <button type="button" className="landing-daily-go" onClick={() => onWearOutfit(daily.outfit)}>
+                <Sparkle size={14} weight="regular" aria-hidden="true" /> 穿這套
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {focusedItem && (
         <aside className="landing-info" aria-label="聚焦單品資訊">
@@ -335,9 +375,14 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit }) {
         </aside>
       )}
 
-      <p className="landing-hint">
-        {focusIdx === null ? "滾輪轉動 · 點一件聚焦" : "滾輪瀏覽下一件 · 再點一下看細節 · 點空白處返回"}
-      </p>
+      {/* 手機圓環模式的提示移到環心(見上),底部提示只在其餘情況出現 */}
+      {!(phone && focusIdx === null) && (
+        <p className="landing-hint">
+          {focusIdx === null
+            ? "滾輪轉動 · 點一件聚焦"
+            : phone ? "上下滑看下一件 · 再點看細節 · 點空白返回" : "滾輪瀏覽下一件 · 再點一下看細節 · 點空白處返回"}
+        </p>
+      )}
     </section>
   );
 }

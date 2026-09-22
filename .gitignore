@@ -14,3 +14,6 @@ wardrobe-gallery/
 
 # 本機暫存 debug
 _insp.mjs
+
+# impeccable 設計審查快取(工具產物,不進版控)
+.impeccable/
