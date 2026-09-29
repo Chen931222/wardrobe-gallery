@@ -3,7 +3,7 @@
 //
 // 為什麼需要:去背後的 PNG 是相機原始解析度(常見 4000x7000、單張 10-27MB),
 // 但畫廊格子只顯示約 180px。原本 thumbnail 和 image 都指向原檔,等於一次下載數百 MB。
-// OptimizedImage 對 /api/ 路徑會跳過 IPX,靜態部署也沒有 IPX 伺服器,所以只能預先產檔。
+// OptimizedImage 對 /data/ 路徑會跳過 IPX,靜態部署也沒有 IPX 伺服器,所以只能預先產檔。
 //
 // 產出(與原檔放在一起):
 //   {id}-thumb.webp  最長邊 460px   → 畫廊格子、搭配頁衣架
@@ -38,8 +38,8 @@ for (const item of lib) {
     .webp({ quality: 86, alphaQuality: 92 }).toFile(`${DIR}/${viewName}`);
 
   after += (await stat(`${DIR}/${thumbName}`)).size + (await stat(`${DIR}/${viewName}`)).size;
-  item.thumbnail = `/api/import/library/${thumbName}`;
-  item.image = `/api/import/library/${viewName}`;
+  item.thumbnail = `/data/library/${thumbName}`;
+  item.image = `/data/library/${viewName}`;
   made += 1;
 }
 

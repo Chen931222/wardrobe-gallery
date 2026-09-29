@@ -140,8 +140,8 @@ if (!Array.isArray(records)) throw new Error(`${libraryFile} must contain a JSON
 
 const nextRecords = [...records];
 for (const item of prepared) {
-  const assetUrl = `/api/import/library/${item.assetName}`;
-  const modeledUrl = item.modeledAssetName ? `/api/import/library/${item.modeledAssetName}` : null;
+  const assetUrl = `/data/library/${item.assetName}`;
+  const modeledUrl = item.modeledAssetName ? `/data/library/${item.modeledAssetName}` : null;
   const existingIndex = nextRecords.findIndex((entry) => entry.id === item.id);
   const existing = existingIndex === -1 ? null : nextRecords[existingIndex];
   const record = {

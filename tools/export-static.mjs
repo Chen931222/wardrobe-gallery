@@ -1,21 +1,17 @@
 // [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // tools/export-static.mjs — 匯出唯讀靜態版衣櫃(給 Vercel)
-// 原理:前端啟動只 GET /api/import/wardrobe(= data/library.json)和
-// /api/import/library/*.png(= data/imported/),把它們照路徑擺成靜態檔即可。
+// 原理:前端啟動只 GET /data/wardrobe.json(= data/library.json)和
+// /data/library/*.webp(= data/imported/),把它們照路徑擺成靜態檔即可。
+// 不能放 api/ 底下:Vercel 把 api/ 保留給 functions,裡面的靜態檔一律 404
+// (2026-09 線上版就是這樣壞的:首頁 200,但衣櫃資料與圖片全部 404)。
 // 用法:npx vite build && node tools/export-static.mjs → 產出 wardrobe-gallery/
-import { cp, mkdir, rm, readdir, copyFile } from "node:fs/promises";
+import { cp, mkdir, rm, readdir, readFile, copyFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const OUT = join(ROOT, "wardrobe-gallery");
-
-await rm(OUT, { recursive: true, force: true });
-await cp(join(ROOT, "dist"), OUT, { recursive: true });
-
-const apiDir = join(OUT, "api", "import");
-await mkdir(join(apiDir, "library"), { recursive: true });
-await copyFile(join(ROOT, "data", "library.json"), join(apiDir, "wardrobe"));
+const ASSET_PREFIX = "/data/library/";
 
 // 只帶 .webp 衍生檔上線 —— 原始 PNG 是相機解析度(全部約 800MB),留在本機當來源就好。
 // 衍生檔由 tools/make-derivatives.mjs 產生,匯出前請先跑過。
@@ -24,7 +20,36 @@ if (!assets.length) {
   console.error("找不到任何 .webp 衍生檔,請先執行:node tools/make-derivatives.mjs");
   process.exit(1);
 }
-for (const f of assets) {
-  await copyFile(join(ROOT, "data", "imported", f), join(apiDir, "library", f));
+
+// 先對帳再動手:衣櫃裡每個圖片網址都要對得到一個會被匯出的檔案,
+// 否則線上就是破圖。對不上就停在這裡,不要蓋掉上一份可用的輸出。
+const library = JSON.parse(await readFile(join(ROOT, "data", "library.json"), "utf8"));
+const exported = new Set(assets);
+const broken = [];
+for (const item of library) {
+  for (const key of ["image", "thumbnail", "modeledImage"]) {
+    const url = item[key];
+    if (!url) continue;
+    if (!url.startsWith(ASSET_PREFIX) || !exported.has(url.slice(ASSET_PREFIX.length))) {
+      broken.push(`${item.name}(${key}):${url}`);
+    }
+  }
 }
-console.log(`匯出完成:wardrobe-gallery/(${assets.length} 個圖檔)→ cd wardrobe-gallery && vercel deploy --prod --yes`);
+if (broken.length) {
+  console.error(`有 ${broken.length} 個圖片網址上線後會 404(必須是 ${ASSET_PREFIX}*.webp 且檔案存在):`);
+  for (const line of broken.slice(0, 10)) console.error("  " + line);
+  if (broken.length > 10) console.error(`  …還有 ${broken.length - 10} 個`);
+  console.error("請先執行:node tools/make-derivatives.mjs");
+  process.exit(1);
+}
+
+await rm(OUT, { recursive: true, force: true });
+await cp(join(ROOT, "dist"), OUT, { recursive: true });
+
+const dataDir = join(OUT, "data");
+await mkdir(join(dataDir, "library"), { recursive: true });
+await copyFile(join(ROOT, "data", "library.json"), join(dataDir, "wardrobe.json"));
+for (const f of assets) {
+  await copyFile(join(ROOT, "data", "imported", f), join(dataDir, "library", f));
+}
+console.log(`匯出完成:wardrobe-gallery/(${library.length} 件、${assets.length} 個圖檔)→ cd wardrobe-gallery && vercel deploy --prod --yes`);

@@ -7,6 +7,10 @@
 // 線上是靜態部署,同樣的路徑由 tools/export-static.mjs 事先寫成實體檔案,
 // 因此前端不必分辨自己在開發還是正式環境 —— 兩邊的網址完全一樣。
 //
+// 讀取走 /data/(wardrobe.json 與 library/*):Vercel 把 api/ 保留給 functions,
+// 放在 api/ 底下的靜態檔一律 404,所以線上讀得到的東西不能放在 /api/。
+// 刪除只有本機有,留在 /api/import/wardrobe/:id。
+//
 // 這支只做「讀本機資料 + 刪一件」,沒有任何上傳或外部服務。
 import { readFile, writeFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
@@ -37,10 +41,11 @@ export function wardrobeDataApi() {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const url = new URL(req.url, "http://localhost");
-        if (!url.pathname.startsWith("/api/import/")) return next();
+        const isRead = url.pathname === "/data/wardrobe.json" || url.pathname.startsWith("/data/library/");
+        if (!isRead && !url.pathname.startsWith("/api/import/")) return next();
 
         try {
-          if (url.pathname === "/api/import/wardrobe" && req.method === "GET") {
+          if (url.pathname === "/data/wardrobe.json" && req.method === "GET") {
             return sendJson(res, 200, await readLibrary());
           }
 
@@ -60,7 +65,7 @@ export function wardrobeDataApi() {
             return sendJson(res, 200, { deleted: true, id });
           }
 
-          const asset = url.pathname.match(/^\/api\/import\/library\/([\w.-]+)$/);
+          const asset = url.pathname.match(/^\/data\/library\/([\w.-]+)$/);
           if (asset && req.method === "GET") {
             // basename 是必要的:阻擋 ../ 之類的路徑穿越
             const file = path.join(ASSET_DIR, path.basename(asset[1]));

@@ -1,3 +1,4 @@
+// [本 fork 修改] 上游 tandpfun/wardrobe 既有檔案。本 fork 的改動:跳過 IPX 的路徑由 /api/ 改為 /data/(衣櫃圖片搬出 api/,Vercel 不出 api/ 底下的靜態檔)。
 import { forwardRef } from "react";
 import { Image } from "@unpic/react";
 
@@ -22,7 +23,7 @@ export const OptimizedImage = forwardRef(function OptimizedImage({
 }, ref) {
   const normalizedSource = sourcePath(src);
 
-  if (!normalizedSource || normalizedSource.startsWith("data:") || normalizedSource.startsWith("blob:") || normalizedSource.startsWith("/api/")) {
+  if (!normalizedSource || normalizedSource.startsWith("data:") || normalizedSource.startsWith("blob:") || normalizedSource.startsWith("/data/")) {
     return <img ref={ref} src={src} alt={alt} sizes={sizes} loading={loading || (priority ? "eager" : "lazy")} decoding={decoding || "async"} {...props} />;
   }
 

@@ -613,7 +613,7 @@ export function App() {
     const edits = readEdits();
     const deleted = readDeletedItems();
     const [served, local] = await Promise.all([
-      fetch("/api/import/wardrobe", { cache: "no-store" })
+      fetch("/data/wardrobe.json", { cache: "no-store" })
         .then((response) => (response.ok ? response.json() : Promise.reject(new Error("衣櫃載入失敗。"))))
         .catch((cause) => { setError(cause.message); return []; }),
       loadLocalItems(),

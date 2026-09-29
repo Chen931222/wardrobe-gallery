@@ -27,7 +27,8 @@ npm run dev
 ```
 
 本地優先架構，編輯與匯入都在本機跑。線上那份是 `tools/export-static.mjs`
-匯出的唯讀靜態版（前端只 GET 衣櫃 JSON 與圖片，照路徑擺成靜態檔）。
+匯出的唯讀靜態版（前端只 GET `/data/wardrobe.json` 與 `/data/library/` 的圖片，
+照路徑擺成靜態檔；不能放 `api/` 底下，Vercel 不出那裡的靜態檔）。
 
 原始照片（`photos/`）、處理後的衣櫃資料（`data/`）與匯出結果
 （`wardrobe-gallery/`）都不進版本庫。
@@ -56,20 +57,20 @@ git grep -l "\[本 fork 修改\]"    # 9 個：上游檔案，改動寫在該行
 | `src/AddGarment.jsx`、`src/localWardrobe.js` | 網頁端新增衣物、IndexedDB 本機儲存 |
 | `tools/`（41 支） | 去背流水線、破洞修補、方向校正、目視檢查表、靜態匯出 |
 
-### 改過的上游檔案（9 個）
+### 改過的上游檔案（10 個）
 
-`index.html`、`src/App.jsx`、`src/styles.css`、`.gitignore`、`vite.config.mjs`、
-`public/manifest.webmanifest`、`tools/import-to-wardrobe.mjs`（原本在別的目錄，
-一併搬進 `tools/`）——改動內容寫在各自第一行。
+`index.html`、`src/App.jsx`、`src/styles.css`、`src/OptimizedImage.jsx`、`.gitignore`、
+`vite.config.mjs`、`public/manifest.webmanifest`、`tools/import-to-wardrobe.mjs`
+（原本在別的目錄，一併搬進 `tools/`）——改動內容寫在各自第一行。
 
 `package.json`、`package-lock.json`（JSON 放不了註解）與本檔另計。
 
 改動集中在：介面繁體中文化、深色襯線主題、擴充部位分類（襪子／包／眼鏡／腕飾）。
 
-### 上游原封不動（9 個，請勿當成這個版本的作品）
+### 上游原封不動（8 個，請勿當成這個版本的作品）
 
 `LICENSE`、`CONTRIBUTING.md`、`.npmrc`、`.github/workflows/ci.yml`、
-`src/main.jsx`、`src/OptimizedImage.jsx`、`scripts/responsive-image-api.mjs`、
+`src/main.jsx`、`scripts/responsive-image-api.mjs`、
 `public/icon.svg`、`public/sw.js`
 
 ### 移除的上游功能
