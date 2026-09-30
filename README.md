@@ -42,16 +42,18 @@ npm run dev
 Fork 自 [tandpfun/wardrobe](https://github.com/tandpfun/wardrobe)，MIT 授權。
 分界點是上游最後一個 commit `f44006c`，之後的都是這個版本自己的東西。
 
-**每個檔案第一行都標明出處**，不必翻 git log，直接查：
+上游在分界點共 30 個檔案：原封不動 8 個、就地改過 10 個、搬家後改過 1 個、移除 11 個。
+
+**能寫註解的檔案，第一行都標明出處**，不必翻 git log，直接查：
 
 ```bash
-git grep -l "\[本 fork 新增\]"    # 46 個：整份自己寫的
-git grep -l "\[本 fork 修改\]"    # 9 個：上游檔案，改動寫在該行
+git grep -l "\[本 fork 新增\]"    # 51 個：整份自己寫的
+git grep -l "\[本 fork 修改\]"    # 7 個：上游檔案，改動寫在該行
 ```
 
 （用 `git grep` 而不是 `grep -r`：只掃版本控管的檔案，不會把 `dist/` 的 build 產物也算進去。）
 
-### 自己寫的（46 個）
+### 自己寫的（51 個）
 
 | 位置 | 內容 |
 |---|---|
@@ -59,15 +61,22 @@ git grep -l "\[本 fork 修改\]"    # 9 個：上游檔案，改動寫在該行
 | `src/recommend.js` | 配衣規則引擎：體感溫度、場合、配色、最近穿過降權 |
 | `src/LandingRing.jsx` | 入口圓環與今日推薦面板 |
 | `src/AddGarment.jsx`、`src/localWardrobe.js` | 網頁端新增衣物、IndexedDB 本機儲存 |
+| `src/lookCard.js`、`src/LookCard.jsx` | Look 卡：在瀏覽器裡把一套穿搭合成一張圖，不上傳 |
+| `src/ownerMode.js` | 線上預設唯讀展覽、本機才有編輯 |
+| `src/backup.js` | 把瀏覽器裡的紀錄打包成一個 JSON，換裝置時搬 |
+| `scripts/wardrobe-data-api.mjs` | 開發時把本機衣櫃資料用 HTTP 端出來 |
 | `tools/`（41 支） | 去背流水線、破洞修補、方向校正、目視檢查表、靜態匯出 |
 
-### 改過的上游檔案（10 個）
+另有 `vercel.json`（JSON 放不了註解）：關掉 Git 自動部署。
 
-`index.html`、`src/App.jsx`、`src/styles.css`、`src/OptimizedImage.jsx`、`.gitignore`、
-`vite.config.mjs`、`public/manifest.webmanifest`、`tools/import-to-wardrobe.mjs`
-（原本在別的目錄，一併搬進 `tools/`）——改動內容寫在各自第一行。
+### 改過的上游檔案（11 個）
 
-`package.json`、`package-lock.json`（JSON 放不了註解）與本檔另計。
+有標頭的 7 個：`index.html`、`src/App.jsx`、`src/styles.css`、`src/OptimizedImage.jsx`、
+`.gitignore`、`vite.config.mjs`，以及 `tools/import-to-wardrobe.mjs`
+（原本在 `.agents/skills/import-clothes/scripts/`，搬進 `tools/`）——改動內容寫在各自第一行。
+
+放不了註解的 4 個：`package.json`、`package-lock.json`、`public/manifest.webmanifest`
+（JSON）與本檔。
 
 改動集中在：介面繁體中文化、深色襯線主題、擴充部位分類（襪子／包／眼鏡／腕飾）。
 
@@ -82,7 +91,13 @@ git grep -l "\[本 fork 修改\]"    # 9 個：上游檔案，改動寫在該行
 上游附了一套線上匯入流程（雲端影像 API + 對應的網頁托盤與開發用 API），
 這個版本沒有用到：衣物一律走 `tools/` 的離線流程建檔，靜態部署也沒有後端可以接。
 留著只會讓網頁多送兩個必定 404 的請求，因此整套移除，主程式體積少了約 25 kB。
+一起移除的還有配合這套流程的兩個 agent skill（`.agents/skills/` 的 generate-outfits、
+import-clothes，走 OpenAI 生圖；import-clothes 的匯入腳本搬進 `tools/` 保留）與
+`.env.example`（OpenAI 金鑰範本）。
 
 同時移除上游的 `docs/screenshots/`（兩張截圖，畫面已完全不同）。
+
+移除的 11 個：`src/import-flow.jsx`、`src/import-flow.css`、`scripts/import-job-api.mjs`、
+`.env.example`、`.agents/skills/` 底下 5 個、`docs/screenshots/` 底下 2 個。
 
 授權同為 MIT，見 [LICENSE](LICENSE)。
