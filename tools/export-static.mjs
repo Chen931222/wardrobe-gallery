@@ -2,9 +2,10 @@
 // tools/export-static.mjs — 匯出唯讀靜態版衣櫃(給 Vercel)
 // 原理:前端啟動只 GET /data/wardrobe.json(= data/library.json)和
 // /data/library/*.webp(= data/imported/),把它們照路徑擺成靜態檔即可。
-// 不能放 api/ 底下:Vercel 把 api/ 保留給 functions,裡面的靜態檔一律 404
-// (2026-09 線上版就是這樣壞的:首頁 200,但衣櫃資料與圖片全部 404)。
+// 不放 api/ 底下:Vercel 把 api/ 保留給 functions,靜態檔放那裡可能不出(未實測,避開就好)。
 // 用法:npx vite build && node tools/export-static.mjs → 產出 wardrobe-gallery/
+// 上線只能從 wardrobe-gallery/ 用 CLI 部署。repo 沒有 data/,Git 建置出來的站是空的,
+// 所以 vercel.json 關掉了 Git 自動部署(2026-09 線上版兩次被 push 觸發的建置蓋掉)。
 import { cp, mkdir, rm, readdir, readFile, copyFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";

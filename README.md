@@ -28,7 +28,11 @@ npm run dev
 
 本地優先架構，編輯與匯入都在本機跑。線上那份是 `tools/export-static.mjs`
 匯出的唯讀靜態版（前端只 GET `/data/wardrobe.json` 與 `/data/library/` 的圖片，
-照路徑擺成靜態檔；不能放 `api/` 底下，Vercel 不出那裡的靜態檔）。
+照路徑擺成靜態檔）。
+
+`vercel.json` 關掉了 Git 自動部署：repo 裡沒有 `data/`，push 觸發的建置
+會產出一個沒有衣櫃資料的站並蓋掉線上版（2026-09-22、09-29 各發生一次）。
+上線一律從 `wardrobe-gallery/` 用 CLI 部署。
 
 原始照片（`photos/`）、處理後的衣櫃資料（`data/`）與匯出結果
 （`wardrobe-gallery/`）都不進版本庫。

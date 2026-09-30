@@ -1,4 +1,4 @@
-// [本 fork 修改] 上游 tandpfun/wardrobe 既有檔案。本 fork 的改動:跳過 IPX 的路徑由 /api/ 改為 /data/(衣櫃圖片搬出 api/,Vercel 不出 api/ 底下的靜態檔)。
+// [本 fork 修改] 上游 tandpfun/wardrobe 既有檔案。本 fork 的改動:跳過 IPX 的路徑由 /api/ 改為 /data/(衣櫃圖片搬到 /data/library/,線上靜態版沒有 IPX 伺服器)。
 import { forwardRef } from "react";
 import { Image } from "@unpic/react";
 
