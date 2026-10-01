@@ -261,6 +261,8 @@ h1, h2, h3 {
   justify-content: flex-end;
   background: var(--scrim);
   animation: overlay-in 180ms ease-out both;
+  /* 滑入動畫從右邊多 24px 開始;不裁的話那一瞬間頁面變寬,iPad Safari 會留下白邊和橫向捲軸 */
+  overflow: hidden;
 }
 
 .viewer-entry {
@@ -279,7 +281,8 @@ h1, h2, h3 {
   flex-direction: column;
   padding: 42px 34px 46px;
   background: var(--paper);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   box-shadow: -18px 0 50px var(--shadow-soft);
 }
 

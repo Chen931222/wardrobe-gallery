@@ -64,7 +64,8 @@ function hmallImages(host, region, code) {
   return list;
 }
 
-/* 從品名猜分類。順序有意義:「外套」要先於「T恤」,「襪」要先於「鞋」(船型襪)。 */
+/* 從品名猜分類:取「最後出現」的關鍵字,因為中文的主詞在尾巴(針織外套→外套、毛絨針織上衣→上衣)。
+   同一個位置有兩個字時,照下面的順序(「船型襪」的襪排在鞋前面)。 */
 const PART_WORDS = [
   ["socks", /襪/],
   ["shoes", /鞋|靴|拖/],
@@ -77,6 +78,18 @@ const PART_WORDS = [
 ];
 
 export function partFromName(name) {
-  for (const [part, pattern] of PART_WORDS) if (pattern.test(name || "")) return part;
-  return null;
+  let best = null, bestAt = -1;
+  for (const [part, pattern] of PART_WORDS) {
+    const global = new RegExp(pattern.source, "g");
+    for (const match of String(name || "").matchAll(global)) {
+      const end = match.index + match[0].length;
+      if (end > bestAt) { best = part; bestAt = end; }
+    }
+  }
+  return best;
+}
+
+/** 品名優先;品名猜不出來才看品牌給的分類標籤(成套家居服的標籤裡常同時有「褲」)。 */
+export function partFromProduct(name, categories = []) {
+  return partFromName(name) || partFromName(categories.join(" "));
 }

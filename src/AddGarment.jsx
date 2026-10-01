@@ -2,7 +2,7 @@
 import { useRef, useState } from "react";
 import { Plus, SpinnerGap, X } from "@phosphor-icons/react";
 import { cleanUrl, cropBlob, deleteLocalItem, dominantColor, productUrlProblem, refillGaps, saveLocalItem, trimTransparent } from "./localWardrobe.js";
-import { fetchBrandProduct, parseBrandLink, partFromName } from "./brandLink.js";
+import { fetchBrandProduct, parseBrandLink, partFromName, partFromProduct } from "./brandLink.js";
 
 const PARTS = [
   { id: "upperbody", label: "上衣" },
@@ -133,7 +133,7 @@ export function AddGarment({ onAdded }) {
     fetchBrandProduct(parsedLink?.lookup).then((product) => {
       if (!product) return;
       const name = `${product.name}(${parsedLink.brand})`;
-      const part = partFromName([product.name, ...product.categories].join(" "));
+      const part = partFromProduct(product.name, product.categories);
       setLink((current) => (current?.url === parsedLink.url ? { ...current, name, part } : current));
       setDraft((current) => (current && current.sourceUrl === parsedLink.url && !current.name
         ? { ...current, name, part: current.part || part || "" }
