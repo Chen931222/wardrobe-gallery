@@ -7,6 +7,7 @@ import { LandingRing } from "./LandingRing.jsx";
 import { AddGarment } from "./AddGarment.jsx";
 import { cleanUrl, deleteLocalItem, loadLocalItems, productUrlProblem, updateLocalItem } from "./localWardrobe.js";
 import { CAN_EDIT } from "./ownerMode.js";
+import { findSimilar, kindLabel, wishOutfits } from "./wishCheck.js";
 
 const STORAGE_KEY = "open-wardrobe-edits-v1";
 const DELETED_STORAGE_KEY = "open-wardrobe-deleted-v1";
@@ -434,7 +435,69 @@ function WishLinkEditor({ item, onSetUrl }) {
   );
 }
 
-function ItemViewer({ item, onClose, onSave, onDelete, onWear, onBought, onSetUrl }) {
+const PIECE_ORDER = ["wholebody_up", "upperbody", "lowerbody", "shoes", "bag", "socks", "eyewear", "wrist"];
+const PART_NAME = { upperbody: "上衣", lowerbody: "下身", wholebody_up: "外套", shoes: "鞋", bag: "包", socks: "襪子" };
+
+/** 想買的那件:櫃裡有沒有很像的、跟已經有的能配出什麼。買之前看一眼用。 */
+function WishCheck({ item, owned, onOpen, onWearOutfit }) {
+  const similar = useMemo(() => findSimilar(item, owned), [item, owned]);
+  const plan = useMemo(() => wishOutfits(item, owned), [item, owned]);
+  const kind = kindLabel(item);
+
+  return (
+    <div className="wish-check">
+      <section aria-labelledby={`wish-similar-${item.id}`}>
+        <h3 id={`wish-similar-${item.id}`}>櫃裡很像的</h3>
+        {similar.length ? (
+          <>
+            <p>已經有 {similar.length} 件同色的{kind}。</p>
+            <div className="wish-thumbs">
+              {similar.slice(0, 4).map((piece) => (
+                <button key={piece.id} type="button" onClick={() => onOpen(piece.id)} aria-label={`查看${piece.name}`} title={piece.name}>
+                  <OptimizedImage src={piece.thumbnail || piece.image} alt="" sizes="72px" breakpoints={[120, 180]} />
+                </button>
+              ))}
+              {similar.length > 4 && <span className="wish-more">還有 {similar.length - 4} 件</span>}
+            </div>
+          </>
+        ) : (
+          <p>櫃裡沒有同色的{kind},這件不重複。</p>
+        )}
+      </section>
+
+      <section aria-labelledby={`wish-outfits-${item.id}`}>
+        <h3 id={`wish-outfits-${item.id}`}>跟已經有的怎麼配</h3>
+        {plan.error ? <p>{plan.error}</p> : (
+          <>
+            <p>
+              {plan.partner && plan.total > 0 && `${PART_NAME[plan.partner]} ${plan.total} 件裡,${plan.fit} 件跟它配色不打架。`}
+              照它適合的天氣(體感約 {plan.feelsLike}°)配了 {plan.outfits.length} 套:
+            </p>
+            <ul className="wish-outfits">
+              {plan.outfits.map((outfit) => {
+                const pieces = PIECE_ORDER.map((slot) => outfit[slot]).filter(Boolean);
+                return (
+                  <li key={pieces.map((piece) => piece.id).join("|")}>
+                    <div className="wish-outfit-pieces" aria-label={pieces.map((piece) => piece.name).join("、")} role="img">
+                      {pieces.map((piece) => (
+                        <span key={piece.id} className={piece.id === item.id ? "is-wish" : undefined}>
+                          <OptimizedImage src={piece.thumbnail || piece.image} alt="" sizes="56px" breakpoints={[120]} />
+                        </span>
+                      ))}
+                    </div>
+                    <button className="secondary-button" type="button" onClick={() => onWearOutfit(outfit)}>穿這套</button>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ItemViewer({ item, owned, onClose, onSave, onDelete, onWear, onBought, onSetUrl, onOpen, onWearOutfit }) {
   const closeButtonRef = useRef(null);
   const imageRef = useRef(null);
   const samplingCanvasRef = useRef(null);
@@ -616,6 +679,7 @@ function ItemViewer({ item, onClose, onSave, onDelete, onWear, onBought, onSetUr
               <button className="secondary-button" type="button" onClick={() => onBought(item.id)}>已經買了</button>
             </div>
             <WishLinkEditor item={item} onSetUrl={onSetUrl} />
+            <WishCheck item={item} owned={owned} onOpen={onOpen} onWearOutfit={onWearOutfit} />
           </div>
         )}
         {CAN_EDIT ? (
@@ -809,6 +873,9 @@ export function App() {
       {selectedItem && (
         <ItemViewer
           item={selectedItem}
+          owned={ownedItems}
+          onOpen={setSelectedId}
+          onWearOutfit={(outfit) => { setPendingOutfit(outfit); setSelectedId(null); setView("styling"); }}
           onClose={() => setSelectedId(null)}
           onSave={saveItem}
           onDelete={deleteItem}

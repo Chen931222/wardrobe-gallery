@@ -105,7 +105,7 @@ function isNeutral(hex) {
   return s < 0.22 || l < 0.18 || l > 0.9;
 }
 
-function colorScore(items) {
+export function colorScore(items) {
   const accents = [];
   for (const item of items) {
     if (item.color && !isNeutral(item.color)) accents.push(hexToHsl(item.color).h);
