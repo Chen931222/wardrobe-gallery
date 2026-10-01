@@ -51,6 +51,9 @@ for (const entry of await readdir(OUT)) {
   if (entry !== ".vercel") await rm(join(OUT, entry), { recursive: true, force: true });
 }
 await cp(join(ROOT, "dist"), OUT, { recursive: true });
+// 唯一的 Vercel function:貼 GU／UNIQLO 連結時查品名(瀏覽器被對方 CORS 擋,只能從伺服器問)
+await mkdir(join(OUT, "api"), { recursive: true });
+await copyFile(join(ROOT, "functions", "brand-product.mjs"), join(OUT, "api", "brand-product.mjs"));
 
 const dataDir = join(OUT, "data");
 await mkdir(join(dataDir, "library"), { recursive: true });

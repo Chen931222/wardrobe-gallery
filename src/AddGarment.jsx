@@ -1,8 +1,8 @@
 // [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 import { useRef, useState } from "react";
 import { Plus, SpinnerGap, X } from "@phosphor-icons/react";
-import { cleanUrl, cropBlob, deleteLocalItem, dominantColor, productUrlProblem, saveLocalItem, trimTransparent } from "./localWardrobe.js";
-import { parseBrandLink, partFromName } from "./brandLink.js";
+import { cleanUrl, cropBlob, deleteLocalItem, dominantColor, productUrlProblem, refillGaps, saveLocalItem, trimTransparent } from "./localWardrobe.js";
+import { fetchBrandProduct, parseBrandLink, partFromName } from "./brandLink.js";
 
 const PARTS = [
   { id: "upperbody", label: "上衣" },
@@ -129,6 +129,16 @@ export function AddGarment({ onAdded }) {
 
   const applyLink = () => {
     setLink(parsedLink);
+    // 品名在背景問,挑圖、去背照常進行;回來時如果名稱還空著才填,不蓋掉手打的
+    fetchBrandProduct(parsedLink?.lookup).then((product) => {
+      if (!product) return;
+      const name = `${product.name}(${parsedLink.brand})`;
+      const part = partFromName([product.name, ...product.categories].join(" "));
+      setLink((current) => (current?.url === parsedLink.url ? { ...current, name, part } : current));
+      setDraft((current) => (current && current.sourceUrl === parsedLink.url && !current.name
+        ? { ...current, name, part: current.part || part || "" }
+        : current));
+    });
     if (parsedLink?.images.length) setStage("pick");
     else inputRef.current?.click();
   };
@@ -167,7 +177,7 @@ export function AddGarment({ onAdded }) {
       const input = region === FULL ? source.file : await cropBlob(source.file, region);
       const cut = await removeBg(input, setStatus);
       setStatus("修邊…");
-      const { blob } = await trimTransparent(cut);
+      const { blob } = await trimTransparent(await refillGaps(input, cut));
       const color = await dominantColor(blob);
       setDraft({
         id: `local-${Date.now()}`,
@@ -175,7 +185,7 @@ export function AddGarment({ onAdded }) {
         preview: URL.createObjectURL(blob),
         name: link?.name || "",
         // 長寬比猜分類一直猜錯(短褲→鞋、外套→下身),沒有品名可以看就留空讓人選
-        part: partFromName(link?.name) || "",
+        part: link?.part || partFromName(link?.name) || "",
         color,
         wishlist: true,
         sourceUrl: link?.url || "",
@@ -279,6 +289,7 @@ export function AddGarment({ onAdded }) {
               <X size={20} weight="light" aria-hidden="true" />
             </button>
             <p className="add-step">挑一張平拍的</p>
+            {link.name && <small className="add-hint">{link.name}</small>}
             <small className="add-hint">衣服單獨擺著的那張去背最乾淨。模特兒穿著的,人會一起留下來。</small>
             <ImagePicker images={link.images} onPick={pickBrandImage} />
             <div className="add-actions">

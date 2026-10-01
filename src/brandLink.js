@@ -9,8 +9,8 @@ import { cleanUrl } from "./localWardrobe.js";
 
 /* 同一套商品頁系統的品牌。圖片網址規則一樣,只差網域。 */
 const HMALL = {
-  "www.gu-global.com": { brand: "GU", imageHost: "https://www.gu-global.com" },
-  "www.uniqlo.com": { brand: "UNIQLO", imageHost: "https://www.uniqlo.com" },
+  "www.gu-global.com": { key: "gu", brand: "GU", imageHost: "https://www.gu-global.com" },
+  "www.uniqlo.com": { key: "uniqlo", brand: "UNIQLO", imageHost: "https://www.uniqlo.com" },
 };
 
 const MAX_IMAGES = 15;
@@ -25,7 +25,10 @@ export function parseBrandLink(text) {
   const code = url.searchParams.get("productCode");
   const region = url.pathname.split("/")[1];
   if (hmall && code && /^u\d{8,}$/.test(code) && /^[a-z]{2}$/.test(region)) {
-    return { brand: hmall.brand, url: href, name: "", images: hmallImages(hmall.imageHost, region, code) };
+    return {
+      brand: hmall.brand, url: href, name: "", images: hmallImages(hmall.imageHost, region, code),
+      lookup: { brand: hmall.key, region, code },
+    };
   }
 
   if (url.host.endsWith("zara.com")) {
@@ -35,6 +38,19 @@ export function parseBrandLink(text) {
   }
 
   return { brand: "", url: href, name: "", images: [] };
+}
+
+/** 問自己的 /api/brand-product 拿品名與分類;失敗回 null,前端就讓人手動填。 */
+export async function fetchBrandProduct(lookup) {
+  if (!lookup) return null;
+  try {
+    const response = await fetch(`/api/brand-product?${new URLSearchParams(lookup)}`, { signal: AbortSignal.timeout(10000) });
+    if (!response.ok) return null;
+    const { name, categories } = await response.json();
+    return name ? { name, categories: categories || [] } : null;
+  } catch {
+    return null;
+  }
 }
 
 /* main/first 是第一張,main/other{i} 是其餘;張數每件不同,載不到的由畫面自己藏起來。

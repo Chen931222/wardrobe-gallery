@@ -162,6 +162,76 @@ export async function trimTransparent(blob, maxSize = 1400) {
   return { blob: trimmed, width: out.width, height: out.height };
 }
 
+async function pixelsOf(blob) {
+  const bitmap = await createImageBitmap(blob);
+  const canvas = document.createElement("canvas");
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  context.drawImage(bitmap, 0, 0);
+  return { canvas, context, image: context.getImageData(0, 0, canvas.width, canvas.height) };
+}
+
+/** 補回被去背挖掉的淺色條紋。
+ *
+ *  去背模型分不出「米白」和「淺灰棚拍底」:GU 橘／米白條紋 T 的米白條紋整條被挖空,
+ *  換最大的 isnet 模型也一樣(2026-10-01 實測,兩者不透明比例都是 19.8%)。
+ *  補法:一段透明的縫,上下(或左右)兩端都是衣服、長度不超過圖的 8%,而且原圖在那裡的顏色
+ *  明顯不是背景色,就從原圖把顏色補回來。腋下、褲襠那種長縫和真正的背景都不會被補。
+ *  只在四邊是單色底(品牌平拍)時才做;截圖四周雜亂,直接原樣回傳。 */
+export async function refillGaps(originalBlob, cutBlob) {
+  const original = await pixelsOf(originalBlob);
+  const cut = await pixelsOf(cutBlob);
+  const { width: W, height: H } = cut.canvas;
+  if (original.canvas.width !== W || original.canvas.height !== H) return cutBlob;
+  const src = original.image.data;
+  const out = cut.image.data;
+
+  // 背景色:四邊像素的平均;太雜就不是棚拍底,不補
+  let sum = [0, 0, 0], count = 0;
+  const border = [];
+  const step = Math.max(1, Math.floor(Math.min(W, H) / 200));
+  for (let x = 0; x < W; x += step) border.push(x, (H - 1) * W + x);
+  for (let y = 0; y < H; y += step) border.push(y * W, y * W + W - 1);
+  for (const p of border) { for (let c = 0; c < 3; c += 1) sum[c] += src[p * 4 + c]; count += 1; }
+  const bg = sum.map((value) => value / count);
+  const distance = (p) => Math.hypot(src[p * 4] - bg[0], src[p * 4 + 1] - bg[1], src[p * 4 + 2] - bg[2]);
+  const noisy = border.filter((p) => distance(p) > 18).length / border.length;
+  if (noisy > 0.05) return cutBlob;
+
+  const solid = (p) => out[p * 4 + 3] >= 128;
+  const fill = new Uint8Array(W * H);
+  const maxGap = Math.round(Math.max(W, H) * 0.08);
+  const scan = (length, lines, index) => {
+    for (let line = 0; line < lines; line += 1) {
+      let lastSolid = -1;
+      for (let i = 0; i < length; i += 1) {
+        if (!solid(index(line, i))) continue;
+        const gap = i - lastSolid - 1;
+        if (lastSolid >= 0 && gap > 0 && gap <= maxGap) {
+          for (let j = lastSolid + 1; j < i; j += 1) fill[index(line, j)] = 1;
+        }
+        lastSolid = i;
+      }
+    }
+  };
+  scan(H, W, (x, y) => y * W + x); // 直向:橫條紋
+  scan(W, H, (y, x) => y * W + x); // 橫向:直條紋
+
+  let filled = 0;
+  for (let p = 0; p < W * H; p += 1) {
+    if (!fill[p] || distance(p) <= 30) continue;
+    out[p * 4] = src[p * 4];
+    out[p * 4 + 1] = src[p * 4 + 1];
+    out[p * 4 + 2] = src[p * 4 + 2];
+    out[p * 4 + 3] = 255;
+    filled += 1;
+  }
+  if (!filled) return cutBlob;
+  cut.context.putImageData(cut.image, 0, 0);
+  return new Promise((resolve) => cut.canvas.toBlob(resolve, "image/png"));
+}
+
 /** 取出衣物的代表色(略過透明與極端明暗的像素,避免抓到陰影或反光)。 */
 export async function dominantColor(blob) {
   const bitmap = await createImageBitmap(blob);
