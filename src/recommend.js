@@ -383,7 +383,7 @@ export function parseRequest(text) {
 /** 在指定槽位找最符合「品類＋顏色」的單品。回 { item, exact } 或 null(這類沒東西)。
  *  excludeId:「換一件」沒指定顏色品類時,排除身上那件,不然會換回同一件。 */
 export function findItemForSwap(items, spec, wearLog = {}, excludeId = null) {
-  const pool = items.filter((it) => it.part === spec.slot);
+  const pool = items.filter((it) => it.part === spec.slot && !it.wishlist);
   if (!pool.length) return null;
   const aliases = spec.category ? (CATEGORY_ALIASES[spec.category] || [spec.category]) : null;
   const scored = pool.map((it) => {

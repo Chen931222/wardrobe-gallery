@@ -1459,13 +1459,74 @@ h1, h2, h3 {
   min-height: 40px; padding: 8px 10px;
   border: 1px solid var(--line); border-radius: 0;
   background: var(--paper); color: var(--ink);
-  font: inherit; font-size: 14px;
+  font: inherit; font-size: 16px; /* iPad 也會對 <16px 的輸入框聚焦放大 */
 }
 .add-field input:focus-visible, .add-field select:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 1px;
 }
 
 .add-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.add-actions .primary-button:disabled { opacity: .45; cursor: default; }
+
+/* ===== 框選 ===== */
+.add-panel .add-step { font-size: 15px; color: var(--ink); }
+.add-panel .add-hint { color: var(--muted); font-size: 12px; line-height: 1.6; }
+.crop-frame {
+  position: relative; align-self: center;
+  max-width: 100%; line-height: 0;
+  border: 1px solid var(--line); background: var(--paper);
+}
+.crop-frame img { max-width: 100%; max-height: 52vh; width: auto; height: auto; user-select: none; -webkit-user-select: none; }
+.crop-surface { position: absolute; inset: 0; touch-action: none; cursor: crosshair; }
+.crop-rect {
+  position: absolute;
+  border: 1px solid var(--accent);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, .45);
+  pointer-events: none;
+}
+
+/* ===== 想買 ===== */
+.add-owned { display: flex; gap: 18px; margin: 0; padding: 0; border: 0; font-size: 14px; color: var(--ink); }
+.add-owned legend { float: left; margin-right: 4px; padding: 0; color: var(--muted); font-size: 13px; }
+.add-owned label { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; cursor: pointer; }
+.add-owned input { accent-color: var(--accent); width: 18px; height: 18px; }
+.add-field-error { color: var(--danger); font-size: 12px; }
+
+.pick-grid {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px;
+  max-height: 60vh; overflow-y: auto;
+}
+.pick-cell {
+  padding: 0; border: 1px solid var(--line); border-radius: 0;
+  background: var(--paper); cursor: pointer; aspect-ratio: 3 / 4; overflow: hidden;
+}
+.pick-cell img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.pick-cell:hover, .pick-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.gallery-item, .studio-rack-item { position: relative; }
+.wish-badge {
+  position: absolute; left: 4px; bottom: 4px;
+  padding: 2px 6px;
+  font-size: 11px; letter-spacing: .08em; line-height: 1.4;
+  color: var(--accent); background: var(--paper);
+  border: 1px solid var(--accent);
+  pointer-events: none;
+}
+.piece-count-wish { color: var(--muted); }
+
+.viewer-wish {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 12px 0 16px; margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.viewer-wish p { margin: 0; font-size: 13px; color: var(--muted); }
+.viewer-wish-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.viewer-wish-actions .secondary-button { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; text-decoration: none; }
+.viewer-wish-link-row { display: flex; gap: 8px; }
+/* 16px:iPhone/iPad 對小於 16px 的輸入框會在聚焦時放大整頁 */
+.viewer-wish-link-row input { flex: 1; min-width: 0; min-height: 44px; font-size: 16px; }
+.viewer-wish-link-row .secondary-button { min-height: 44px; flex: none; }
+.viewer-wish-link-row .secondary-button:disabled { opacity: .45; cursor: default; }
 .add-error {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
   z-index: 96; max-width: min(420px, calc(100vw - 32px));
@@ -1475,6 +1536,9 @@ h1, h2, h3 {
 }
 
 @media (max-width: 640px) {
+  /* iOS Safari 遇到小於 16px 的輸入框會自動放大畫面 */
+  .add-field input, .add-field select { font-size: 16px; }
+  .add-overlay { padding: 12px; align-items: start; overflow-y: auto; }
   .gallery-meta-row { flex-wrap: wrap; gap: 12px; }
   .header-tools { width: 100%; justify-content: space-between; }
 }

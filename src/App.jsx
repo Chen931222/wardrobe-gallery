@@ -5,7 +5,7 @@ import { OptimizedImage } from "./OptimizedImage.jsx";
 import { OutfitStudio } from "./OutfitStudio.jsx";
 import { LandingRing } from "./LandingRing.jsx";
 import { AddGarment } from "./AddGarment.jsx";
-import { deleteLocalItem, loadLocalItems } from "./localWardrobe.js";
+import { cleanUrl, deleteLocalItem, loadLocalItems, productUrlProblem, updateLocalItem } from "./localWardrobe.js";
 import { CAN_EDIT } from "./ownerMode.js";
 
 const STORAGE_KEY = "open-wardrobe-edits-v1";
@@ -173,7 +173,7 @@ function GalleryItem({ item, selected, onOpen, onDelete }) {
         className="gallery-item"
         type="button"
         onClick={() => onOpen(item.id)}
-        aria-label={`查看${label}`}
+        aria-label={`查看${label}${item.wishlist ? "(還沒買)" : ""}`}
         aria-pressed={selected}
         data-testid={`wardrobe-item-${item.id}`}
       >
@@ -183,6 +183,7 @@ function GalleryItem({ item, selected, onOpen, onDelete }) {
           sizes="(max-width: 520px) calc(50vw - 16px), (max-width: 860px) calc(33vw - 18px), 180px"
           breakpoints={[120, 180, 240, 320, 480]}
         />
+        {item.wishlist && <span className="wish-badge">想買</span>}
       </button>
       {CAN_EDIT && (
         <button
@@ -396,7 +397,44 @@ function ReadOnlyDetails({ item, onWear }) {
   );
 }
 
-function ItemViewer({ item, onClose, onSave, onDelete, onWear }) {
+/* 想買的單品存好之後還能改網址;不然貼錯只能刪掉重新去背。 */
+function WishLinkEditor({ item, onSetUrl }) {
+  const [text, setText] = useState(item.sourceUrl || "");
+  const [saved, setSaved] = useState(false);
+  useEffect(() => { setText(item.sourceUrl || ""); }, [item.id, item.sourceUrl]);
+  useEffect(() => { setSaved(false); }, [item.id]);
+  const problem = productUrlProblem(text);
+  const changed = (cleanUrl(text) || "") !== (item.sourceUrl || "");
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (problem || !changed) return;
+    await onSetUrl(item.id, cleanUrl(text));
+    setSaved(true);
+  };
+
+  return (
+    <form className="add-field viewer-wish-link" onSubmit={submit}>
+      <label htmlFor={`wish-url-${item.id}`}>商品網址</label>
+      <div className="viewer-wish-link-row">
+        <input
+          id={`wish-url-${item.id}`}
+          type="url"
+          inputMode="url"
+          value={text}
+          onChange={(event) => { setText(event.target.value); setSaved(false); }}
+          placeholder="https://"
+          aria-invalid={Boolean(problem)}
+        />
+        <button className="secondary-button" type="submit" disabled={Boolean(problem) || !changed}>存網址</button>
+      </div>
+      {problem && <small className="add-field-error">{problem}</small>}
+      {saved && !problem && <small role="status">已存。</small>}
+    </form>
+  );
+}
+
+function ItemViewer({ item, onClose, onSave, onDelete, onWear, onBought, onSetUrl }) {
   const closeButtonRef = useRef(null);
   const imageRef = useRef(null);
   const samplingCanvasRef = useRef(null);
@@ -565,6 +603,21 @@ function ItemViewer({ item, onClose, onSave, onDelete, onWear }) {
       )}
 
       <div className="viewer-details editing">
+        {item.wishlist && (
+          <div className="viewer-wish">
+            <p>還沒買。只存在這台裝置,不會出現在公開的衣櫃。</p>
+            <div className="viewer-wish-actions">
+              {item.sourceUrl && !productUrlProblem(item.sourceUrl) && (
+                <a className="secondary-button" href={item.sourceUrl} target="_blank" rel="noopener noreferrer">回商品頁</a>
+              )}
+              <button className="secondary-button" type="button" onClick={() => onWear(item)}>
+                <Sparkle size={15} weight="regular" aria-hidden="true" /> 穿上看看
+              </button>
+              <button className="secondary-button" type="button" onClick={() => onBought(item.id)}>已經買了</button>
+            </div>
+            <WishLinkEditor item={item} onSetUrl={onSetUrl} />
+          </div>
+        )}
         {CAN_EDIT ? (
           <>
             <ItemEditor
@@ -626,17 +679,21 @@ export function App() {
   useEffect(() => { refresh(); }, [refresh]);
 
   const selectedItem = items.find((item) => item.id === selectedId) || null;
+  const ownedItems = useMemo(() => items.filter((item) => !item.wishlist), [items]);
+  const wishCount = items.length - ownedItems.length;
 
   const visibleItems = useMemo(() => {
-    const filtered = activeType === "all" ? items : items.filter((item) => item.part === activeType);
+    const filtered = activeType === "all" ? ownedItems
+      : activeType === "wishlist" ? items.filter((item) => item.wishlist)
+      : items.filter((item) => item.part === activeType);
     return [...filtered].sort((a, b) => {
-      if (activeType === "all") {
+      if (activeType === "all" || activeType === "wishlist") {
         const typeDifference = (TYPE_ORDER[a.part] ?? 99) - (TYPE_ORDER[b.part] ?? 99);
         if (typeDifference) return typeDifference;
       }
       return a.id.localeCompare(b.id);
     });
-  }, [activeType, items]);
+  }, [activeType, items, ownedItems]);
 
   const chooseType = (typeId) => {
     setActiveType(typeId);
@@ -646,6 +703,16 @@ export function App() {
   const saveItem = (updatedItem) => {
     setItems((current) => current.map((item) => item.id === updatedItem.id ? updatedItem : item));
     persistEdit(updatedItem);
+  };
+
+  const markBought = async (id) => {
+    await updateLocalItem(id, { wishlist: false, sourceUrl: null });
+    await refresh();
+  };
+
+  const setWishUrl = async (id, sourceUrl) => {
+    await updateLocalItem(id, { sourceUrl });
+    await refresh();
   };
 
   const deleteItem = async (id) => {
@@ -675,7 +742,7 @@ export function App() {
       <main className="gallery-pane">
         {view === "landing" && !loading && !!items.length && (
           <LandingRing
-            items={items}
+            items={ownedItems}
             onOpen={setSelectedId}
             onEnter={setView}
             onWearOutfit={(outfit) => { setPendingOutfit(outfit); setView("styling"); }}
@@ -686,7 +753,7 @@ export function App() {
         {view !== "landing" && (
         <header className="gallery-header">
           <div className="gallery-meta-row">
-            <p className="piece-count">{items.length} 件單品</p>
+            <p className="piece-count">{ownedItems.length} 件單品{wishCount > 0 && <span className="piece-count-wish"> · 想買 {wishCount}</span>}</p>
             <div className="header-tools">
               {CAN_EDIT && <AddGarment onAdded={refresh} />}
               <nav className="view-nav" aria-label="切換頁面">
@@ -698,7 +765,7 @@ export function App() {
           </div>
           {view === "closet" && (
             <nav className="category-nav" aria-label="依類型篩選衣櫃">
-              {TYPES.map((type) => (
+              {(wishCount ? [...TYPES, { id: "wishlist", label: `想買的 ${wishCount}` }] : TYPES).map((type) => (
                 <button
                   key={type.id}
                   type="button"
@@ -725,7 +792,7 @@ export function App() {
         )}
 
         {view === "closet" && !!items.length && (
-          <section className="gallery-grid" aria-label={`${TYPE_MAP[activeType]?.label || "全部"}衣物`}>
+          <section className="gallery-grid" aria-label={`${activeType === "wishlist" ? "想買的" : TYPE_MAP[activeType]?.label || "全部"}衣物`}>
             {visibleItems.map((item) => (
               <GalleryItem
                 key={item.id}
@@ -746,6 +813,8 @@ export function App() {
           onSave={saveItem}
           onDelete={deleteItem}
           onWear={(item) => { setPendingOutfit({ [item.part]: item }); setSelectedId(null); setView("styling"); }}
+          onBought={markBought}
+          onSetUrl={setWishUrl}
         />
       )}
     </div>

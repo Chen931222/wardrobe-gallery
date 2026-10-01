@@ -167,6 +167,7 @@ export function OutfitStudio({ items, initialOutfit = null }) {
     const groups = {};
     for (const slot of Object.keys(SLOT_STYLE)) groups[slot] = [];
     for (const item of items) groups[item.part]?.push(item);
+    for (const slot of Object.keys(groups)) groups[slot].sort((a, b) => Number(Boolean(b.wishlist)) - Number(Boolean(a.wishlist)));
     return groups;
   }, [items]);
 
@@ -341,7 +342,8 @@ export function OutfitStudio({ items, initialOutfit = null }) {
 
   const randomize = () => {
     const next = {};
-    for (const [slot, group] of Object.entries(wardrobeByType)) {
+    for (const [slot, all] of Object.entries(wardrobeByType)) {
+      const group = all.filter((item) => !item.wishlist);
       if (!group.length) continue;
       if (!CORE_SLOTS.has(slot) && Math.random() < 0.55) continue;
       next[slot] = group[Math.floor(Math.random() * group.length)];
@@ -876,9 +878,10 @@ export function OutfitStudio({ items, initialOutfit = null }) {
               type="button"
               className={`studio-rack-item${wearing[item.part]?.id === item.id ? " wearing" : ""}`}
               onClick={() => toggleWear(item)}
-              title={item.name}
+              title={item.wishlist ? `${item.name}(還沒買)` : item.name}
             >
               <img src={item.thumbnail || item.image} alt={item.name || SLOT_LABEL[item.part]} loading="lazy" />
+              {item.wishlist && <span className="wish-badge">想買</span>}
             </button>
           ))}
           {!(wardrobeByType[stripType] || []).length && (

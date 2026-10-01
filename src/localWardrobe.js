@@ -55,11 +55,53 @@ export async function loadLocalItems() {
   }
 }
 
-export async function saveLocalItem({ id, name, part, color, secondaryColor, tags, blob }) {
+export async function saveLocalItem({ id, name, part, color, secondaryColor, tags, blob, wishlist, sourceUrl }) {
   await tx("readwrite", (store) => store.put({
     id, name, part, color, secondaryColor: secondaryColor || null,
     tags: tags || [], blob, createdAt: new Date().toISOString(),
+    wishlist: Boolean(wishlist), sourceUrl: sourceUrl || null,
   }));
+}
+
+/** 只留 http(s) 網址,其他(javascript: 之類)一律丟掉,因為之後會被放進 <a href>。 */
+export function cleanUrl(text) {
+  try {
+    const url = new URL(String(text || "").trim());
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 商品網址欄的錯誤訊息,沒問題回空字串。剪貼簿常常還留著衣櫃自己的網址(開 ?edit 時拷的),
+ *  貼進來看起來像網址、點了卻回到衣櫃,所以要擋。 */
+export function productUrlProblem(text) {
+  if (!String(text || "").trim()) return "";
+  const url = cleanUrl(text);
+  if (!url) return "這不是網址,要 https:// 開頭";
+  if (typeof window !== "undefined" && new URL(url).host === window.location.host) {
+    return "這是衣櫃自己的網址。到品牌的商品頁按分享、拷貝連結再貼";
+  }
+  return "";
+}
+
+/** 依正規化 0–1 的框裁切照片;截圖裡的狀態列、價格字樣不裁掉,去背會一起留下來。 */
+export async function cropBlob(file, box) {
+  const bitmap = await createImageBitmap(file);
+  const sx = Math.round(box.x * bitmap.width);
+  const sy = Math.round(box.y * bitmap.height);
+  const sw = Math.max(1, Math.round(box.w * bitmap.width));
+  const sh = Math.max(1, Math.round(box.h * bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = sw;
+  canvas.height = sh;
+  canvas.getContext("2d").drawImage(bitmap, sx, sy, sw, sh, 0, 0, sw, sh);
+  return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+}
+
+export async function updateLocalItem(id, patch) {
+  const record = await tx("readonly", (store) => store.get(id));
+  if (record) await tx("readwrite", (store) => store.put({ ...record, ...patch }));
 }
 
 export async function deleteLocalItem(id) {

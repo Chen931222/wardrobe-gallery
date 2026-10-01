@@ -44,7 +44,12 @@ if (broken.length) {
   process.exit(1);
 }
 
-await rm(OUT, { recursive: true, force: true });
+// 清空內容、不刪資料夾本身:Windows 上只要有終端機或檔案總管停在這個資料夾,rmdir 就會 EBUSY。
+// .vercel 留著,部署時才不用重新連結專案。
+await mkdir(OUT, { recursive: true });
+for (const entry of await readdir(OUT)) {
+  if (entry !== ".vercel") await rm(join(OUT, entry), { recursive: true, force: true });
+}
 await cp(join(ROOT, "dist"), OUT, { recursive: true });
 
 const dataDir = join(OUT, "data");
