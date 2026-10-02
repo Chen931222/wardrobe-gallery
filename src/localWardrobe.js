@@ -117,6 +117,17 @@ export async function dumpLocalRecords() {
   catch { return []; }
 }
 
+/** 同步用:讀不到就丟錯。不能像 dumpLocalRecords 那樣回空陣列——同步會把「空的」當成「這台把衣服全刪了」,
+ *  再把刪除推到雲端和其他裝置。 */
+export async function readLocalRecords() {
+  if (typeof indexedDB === "undefined") throw new Error("這個瀏覽器不能存衣服,先不同步");
+  try {
+    return (await tx("readonly", (store) => store.getAll())) || [];
+  } catch {
+    throw new Error("讀不到這台存的衣服,先不同步(免得把雲端當成全刪了)");
+  }
+}
+
 /** 備份匯入用:把原始 record(含 blob)寫回 IndexedDB。 */
 export async function putLocalRecord(record) {
   await tx("readwrite", (store) => store.put(record));

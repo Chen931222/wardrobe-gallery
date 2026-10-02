@@ -10,7 +10,7 @@
 // 兩邊都改過同一件時,剛輸入同步碼的那台讓雲端贏(加入別人的衣櫃),之後讓手上這台贏。
 // 編輯、隱藏這類一整包 JSON 的,再往下一層逐項合,兩台各改不同件時不會互相蓋掉。
 
-import { deleteLocalItem, dumpLocalRecords, putLocalRecord } from "./localWardrobe.js";
+import { deleteLocalItem, putLocalRecord, readLocalRecords } from "./localWardrobe.js";
 
 const CODE_KEY = "open-wardrobe-sync-code";
 const BASE_KEY = "open-wardrobe-sync-base-v2";     // v2 = 加密後;v1 的 base 用不同的圖編號,留著只會誤判
@@ -114,7 +114,7 @@ const same = (a, b) => stable(a ?? null) === stable(b ?? null);
 /** 這台現在的樣子。圖用 HMAC 編號代表,每次重算(換過圖就會不同,不靠記錄)。 */
 async function snapshot(keys) {
   const items = {}, blobs = {};
-  for (const { blob, ...meta } of await dumpLocalRecords()) {
+  for (const { blob, ...meta } of await readLocalRecords()) {
     const img = blob ? hex(await crypto.subtle.sign("HMAC", keys.mac, await blob.arrayBuffer())) : null;
     items[meta.id] = { meta, img, type: blob?.type || null };
     if (img) blobs[img] = blob;
@@ -171,6 +171,16 @@ function merge3(local, base, remote, { remoteWins, deep }) {
 
 class SyncGone extends Error {}
 
+/* 一次同步裡,這台少了這麼多件「雲端還有」的衣服,就先停下來問:可能是真的刪了,
+   也可能是瀏覽器把資料清掉了。問過才決定推刪除(push)還是從雲端拿回來(restore)。 */
+const MASS_DELETE = 3;
+class MassDelete extends Error {
+  constructor(count) {
+    super(`這台少了 ${count} 件自己加的衣服,先不同步。`);
+    this.count = count;
+  }
+}
+
 async function api(code, { method = "GET", img, body, type, parent } = {}) {
   const url = img ? `/api/sync?img=${img}` : "/api/sync";
   return fetch(url, {
@@ -213,15 +223,18 @@ let timer = null;
  * 跑一次同步,跑完發 wardrobe-synced 事件(detail: { pulled, pushed, keysChanged, error, stopped, at }),
  * App 聽到就重新整理畫面;同一時間只跑一個,再叫一次會等前一個結束。
  */
-export function syncNow() {
+export function syncNow(options = {}) {
   if (!running) {
-    running = runSync()
+    running = runSync(options)
       .then((result) => ({ ...result, error: null }))
       .catch((error) => {
         if (error instanceof SyncGone) {
           // 碼被換掉或雲端被刪了:這台停下來,不要每次切回來都白打一次
           stopSync("這組同步碼已經失效(換了新碼,或雲端那份被刪了)。要繼續,到另一台按「看同步碼」,用新碼重新加入。");
           return { pulled: 0, pushed: 0, keysChanged: false, error: syncNotice(), stopped: true };
+        }
+        if (error instanceof MassDelete) {
+          return { pulled: 0, pushed: 0, keysChanged: false, error: error.message, pendingDeletes: error.count };
         }
         return { pulled: 0, pushed: 0, keysChanged: false, error: error?.message || String(error) };
       })
@@ -284,7 +297,8 @@ export async function deleteCloud() {
   stopSync();
 }
 
-async function runSync() {
+/** @param {{ deletes?: "push" | "restore" }} options 問過使用者之後才帶:一次少很多件時要推刪除還是拿回來 */
+async function runSync(options = {}) {
   const code = syncCode();
   if (!code) return { pulled: 0, pushed: 0, keysChanged: false };
   const keys = await keysFor(code);
@@ -293,7 +307,7 @@ async function runSync() {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const saved = JSON.parse(storageGet(BASE_KEY) || "null");
     const joining = !saved;
-    const base = saved || { items: {}, keys: {} };
+    const base = saved ? { ...saved, items: { ...saved.items } } : { items: {}, keys: {} };
     const cloud = await readJson(await api(code));
     // 加密前的舊格式(沒有 data)當作空的:這台的東西全部以密文重傳,伺服器會順手刪掉舊的明文圖
     const remote = cloud.data
@@ -301,6 +315,13 @@ async function runSync() {
       : { items: {}, keys: {} };
     const rev = cloud.rev || 0;
     const mine = await snapshot(keys);
+
+    // 上次同步還在、這台現在沒有、雲端也還有 = 這台要推出去的刪除
+    const leaving = Object.keys(base.items).filter((id) => !mine.items[id] && remote.items?.[id]);
+    if (leaving.length >= MASS_DELETE && options.deletes !== "push") {
+      if (options.deletes !== "restore") throw new MassDelete(leaving.length);
+      for (const id of leaving) delete base.items[id];   // 當作沒同步過這幾件:合併時雲端那份會被拿回來
+    }
 
     const items = merge3(mine.items, base.items, remote.items || {}, { remoteWins: joining });
     const values = merge3(mine.keys, base.keys, remote.keys || {}, { remoteWins: joining, deep: true });

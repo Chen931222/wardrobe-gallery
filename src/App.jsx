@@ -192,7 +192,7 @@ function GalleryItem({ item, selected, onOpen, onDelete }) {
         <button
           className="gallery-delete"
           type="button"
-          onClick={() => { if (confirm(`確定刪除「${label}」?`)) onDelete(item.id); }}
+          onClick={() => onDelete(item.id)}
           aria-label={`刪除${label}`}
         >
           <Trash size={14} weight="regular" aria-hidden="true" />
@@ -756,6 +756,13 @@ export function App() {
   useEffect(() => {
     if (!CAN_EDIT) return undefined;
     const onSynced = (event) => {
+      const { pendingDeletes } = event.detail;
+      if (pendingDeletes) {
+        // 這台一次少了好幾件:問清楚是真的刪了,還是資料被瀏覽器清掉了
+        const push = window.confirm(`這台少了 ${pendingDeletes} 件自己加的衣服。\n\n按「確定」:其他裝置和雲端也一起刪掉。\n按「取消」:從雲端把這 ${pendingDeletes} 件拿回來。`);
+        setTimeout(() => syncNow({ deletes: push ? "push" : "restore" }), 0);   // 等這一輪同步收尾
+        return;
+      }
       if (event.detail.keysChanged) window.location.reload();
       else if (event.detail.pulled) refresh();
     };
@@ -852,6 +859,10 @@ export function App() {
   };
 
   const deleteItem = async (id) => {
+    // 刪除一律先問(格子上的垃圾桶和單品頁的「刪除」都走這裡);開了同步,刪了會傳到每一台
+    const target = items.find((item) => item.id === id);
+    const note = syncCode() ? "\n開了同步,其他裝置也會一起刪掉。" : "";
+    if (!window.confirm(`確定刪除「${target?.name || "這件"}」?${note}`)) return;
     if (id.startsWith("local-")) {
       // 自己加的:直接從 IndexedDB 移除,不需要記到「已刪除」名單
       await deleteLocalItem(id);
