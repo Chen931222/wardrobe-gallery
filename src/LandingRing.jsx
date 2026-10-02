@@ -59,7 +59,7 @@ function pickVaried(items, count) {
   return shuffle(picked);
 }
 
-export function LandingRing({ items, onOpen, onEnter, onWearOutfit }) {
+export function LandingRing({ items, onOpen, onEnter, onWearOutfit, title = "我的衣櫃", note = null }) {
   // 手機(<640)重排:少放幾件圓環卡才夠大可點,今日推薦從環心移到環下方長條,不再壓卡片
   const [phone, setPhone] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches);
   useEffect(() => {
@@ -256,7 +256,10 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit }) {
   return (
     <section className="landing" aria-label="衣櫃入口導覽">
       <header className="landing-top">
-        <h1>我的衣櫃</h1>
+        <div className="landing-title">
+          <h1>{title}</h1>
+          {note && <p className="landing-note">{note}</p>}
+        </div>
         <nav>
           <button type="button" onClick={() => onEnter("closet")}>衣櫃</button>
           <button type="button" onClick={() => onEnter("styling")}>搭配</button>

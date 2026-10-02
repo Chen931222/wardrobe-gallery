@@ -730,6 +730,7 @@ export function App() {
   const [error, setError] = useState("");
   const [view, setView] = useState("landing");
   const [pendingOutfit, setPendingOutfit] = useState(null);   // 由入口頁的今日推薦帶進搭配頁
+  const [closetChoice, setClosetChoice] = useState(null);     // 訪客手動選的衣櫃;null = 照有沒有自己的衣服決定
 
   // 衣櫃 = 離線流程匯入的(data/library.json)+ 使用者自己在網頁加的(IndexedDB)
   const refresh = useCallback(async () => {
@@ -773,15 +774,27 @@ export function App() {
   }, [refresh]);
 
   const selectedItem = items.find((item) => item.id === selectedId) || null;
+
+  // 訪客的衣櫃跟站主的 104 件分開:自己加的是「我的衣櫃」,站主那批退成「示範衣櫃」,推薦只在同一個衣櫃裡配。
+  // 站主(?edit)照舊看全部;?public 只看示範。訪客還沒加過衣服時先看示範,加了第一件就換成自己的。
+  const mineCount = useMemo(() => items.filter((item) => item.isLocal && !item.wishlist).length, [items]);
+  const hasMine = useMemo(() => items.some((item) => item.isLocal), [items]);
+  const closet = CAN_EDIT ? "all" : !CAN_ADD ? "demo" : closetChoice || (hasMine ? "mine" : "demo");
+  const closetItems = useMemo(
+    () => (closet === "all" ? items : items.filter((item) => Boolean(item.isLocal) === (closet === "mine"))),
+    [items, closet],
+  );
+  const demoCount = items.length - items.filter((item) => item.isLocal).length;
+
   // 自己加、按了「已經買了」的衣服沒有保暖度,推薦引擎會整件跳過;從品名補一個。想買的不補,免得被當成已經有的拿去配
-  const wearItems = useMemo(() => items.map((item) => !item.wishlist && item.warmth === undefined ? { ...item, warmth: guessWarmth(item) } : item), [items]);
+  const wearItems = useMemo(() => closetItems.map((item) => !item.wishlist && item.warmth === undefined ? { ...item, warmth: guessWarmth(item) } : item), [closetItems]);
   const ownedItems = useMemo(() => wearItems.filter((item) => !item.wishlist), [wearItems]);
-  const wishCount = items.length - ownedItems.length;
+  const wishCount = closetItems.length - ownedItems.length;
 
   const visibleItems = useMemo(() => {
     const filtered = activeType === "all" ? ownedItems
-      : activeType === "wishlist" ? items.filter((item) => item.wishlist)
-      : items.filter((item) => item.part === activeType);
+      : activeType === "wishlist" ? closetItems.filter((item) => item.wishlist)
+      : closetItems.filter((item) => item.part === activeType);
     return [...filtered].sort((a, b) => {
       if (activeType === "all" || activeType === "wishlist") {
         const typeDifference = (TYPE_ORDER[a.part] ?? 99) - (TYPE_ORDER[b.part] ?? 99);
@@ -789,12 +802,31 @@ export function App() {
       }
       return a.id.localeCompare(b.id);
     });
-  }, [activeType, items, ownedItems]);
+  }, [activeType, closetItems, ownedItems]);
 
   const chooseType = (typeId) => {
     setActiveType(typeId);
     setSelectedId(null);
   };
+
+  const chooseCloset = (next) => {
+    setClosetChoice(next);
+    setActiveType("all");
+    setSelectedId(null);
+    setPendingOutfit(null);
+  };
+
+  // 訪客才有的切換;站主看全部、?public 只看示範,都不需要
+  const closetSwitch = closet !== "all" && CAN_ADD && (
+    <nav className="view-nav closet-switch" aria-label="切換衣櫃">
+      <button type="button" className={closet === "mine" ? "active" : ""} aria-pressed={closet === "mine"} onClick={() => chooseCloset("mine")}>
+        我的衣櫃 <small>{mineCount}</small>
+      </button>
+      <button type="button" className={closet === "demo" ? "active" : ""} aria-pressed={closet === "demo"} onClick={() => chooseCloset("demo")}>
+        示範衣櫃 <small>{demoCount}</small>
+      </button>
+    </nav>
+  );
 
   const saveItem = (updatedItem) => {
     setItems((current) => current.map((item) => item.id === updatedItem.id ? updatedItem : item));
@@ -836,8 +868,12 @@ export function App() {
   return (
     <div className={`app-shell${selectedItem ? " has-selection" : ""}`}>
       <main className="gallery-pane">
-        {view === "landing" && !loading && !!items.length && (
+        {view === "landing" && !loading && !!ownedItems.length && (
           <LandingRing
+            title={closet === "demo" && CAN_ADD ? "示範衣櫃" : "我的衣櫃"}
+            note={closet === "demo" && CAN_ADD ? (
+              <>這是站主自己的衣櫃,先拿來示範。<button type="button" onClick={() => { chooseCloset("mine"); setView("closet"); }}>{mineCount ? "回我的衣櫃" : "建立我的衣櫃"}</button></>
+            ) : null}
             items={ownedItems}
             onOpen={setSelectedId}
             onEnter={setView}
@@ -846,12 +882,12 @@ export function App() {
         )}
         {view === "landing" && loading && <p className="status">衣櫃載入中</p>}
 
-        {view !== "landing" && (
+        {(view !== "landing" || (!loading && !ownedItems.length)) && (
         <header className="gallery-header">
           <div className="gallery-meta-row">
             <p className="piece-count">{ownedItems.length} 件單品{wishCount > 0 && <span className="piece-count-wish"> · 想買 {wishCount}</span>}</p>
             <div className="header-tools">
-              {CAN_ADD && <AddGarment onAdded={refresh} />}
+              {CAN_ADD && <AddGarment onAdded={() => { if (!CAN_EDIT) setClosetChoice("mine"); refresh(); }} />}
               <nav className="view-nav" aria-label="切換頁面">
                 <button type="button" onClick={() => setView("landing")}>入口</button>
                 <button type="button" className={view === "closet" ? "active" : ""} onClick={() => setView("closet")}>衣櫃</button>
@@ -859,6 +895,7 @@ export function App() {
               </nav>
             </div>
           </div>
+          {closetSwitch}
           {view === "closet" && (
             <nav className="category-nav" aria-label="依類型篩選衣櫃">
               {(wishCount ? [...TYPES, { id: "wishlist", label: `想買的 ${wishCount}` }] : TYPES).map((type) => (
@@ -879,15 +916,17 @@ export function App() {
 
         {error && <p className="status error">{error}</p>}
         {view !== "landing" && !error && loading && <p className="status">衣櫃載入中</p>}
-        {!error && !loading && !items.length && (
-          <p className="status empty">{CAN_ADD ? "拖曳、貼上或新增照片,匯入你的第一件衣服。" : "這個衣櫃還沒有單品。"}</p>
+        {!error && !loading && !ownedItems.length && (activeType !== "wishlist" || !wishCount) && (
+          <p className="status empty">
+            {CAN_ADD ? "你的衣櫃還是空的。按右上「新增」,貼 GU、UNIQLO 的商品連結,或拍一張平放的衣服。" : "這個衣櫃還沒有單品。"}
+          </p>
         )}
 
-        {view === "styling" && !loading && !!items.length && (
+        {view === "styling" && !loading && !!ownedItems.length && (
           <OutfitStudio items={wearItems} initialOutfit={pendingOutfit} />
         )}
 
-        {view === "closet" && !!items.length && (
+        {view === "closet" && !!closetItems.length && (
           <section className="gallery-grid" aria-label={`${activeType === "wishlist" ? "想買的" : TYPE_MAP[activeType]?.label || "全部"}衣物`}>
             {visibleItems.map((item) => (
               <GalleryItem

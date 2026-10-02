@@ -1050,6 +1050,9 @@ h1, h2, h3 {
 }
 
 .view-nav button + button { border-left: 1px solid var(--line); }
+/* 我的衣櫃/示範衣櫃:跟頁面切換同一套樣式,放在件數那排下面,靠左 */
+.closet-switch { width: fit-content; margin-top: 14px; }
+.closet-switch small { margin-left: 4px; font-size: 11px; opacity: .7; }
 .view-nav button:hover { color: var(--ink); background: var(--hover-tint); }
 
 .view-nav button.active {
@@ -2010,6 +2013,24 @@ h1, h2, h3 {
   margin: 0;
   font-size: 22px;
   letter-spacing: .04em;
+}
+/* 訪客看示範衣櫃時,標題下一行說明這是誰的、怎麼換成自己的 */
+.landing-note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.landing-note button {
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
 }
 
 .landing-top nav { display: flex; gap: 0; border: 1px solid var(--line); background: var(--paper); }
