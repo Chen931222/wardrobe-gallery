@@ -69,10 +69,38 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
     mq.addEventListener("change", on);
     return () => mq.removeEventListener("change", on);
   }, []);
-  const picked = useMemo(() => pickVaried(items, phone ? 8 : PICK), [items, phone]);
+  // 只在衣服清單(id)真的變了才重抽;同步重讀衣櫃會產生新物件,不能因此把使用者正在看的圓環整圈重洗。
+  // 抽到的 id 每次 render 換回最新的物件,改名、改圖才跟得上。
+  // 清單變了(別台新增、隱藏)時,上一輪抽到、現在還在的那幾件留在原位,只補缺的;不然整圈換掉,正在看的那件也被收掉。
+  const idsKey = items.map((item) => item.id).join("|");
+  const prevPickedRef = useRef([]);
+  const pickedIds = useMemo(() => {
+    const count = phone ? 8 : PICK;
+    const present = new Set(items.map((item) => item.id));
+    const kept = prevPickedRef.current.filter((id) => present.has(id)).slice(0, count);
+    if (kept.length >= count) return kept;
+    const keptSet = new Set(kept);
+    const fill = pickVaried(items.filter((item) => !keptSet.has(item.id)), count - kept.length).map((item) => item.id);
+    return [...kept, ...fill];
+  }, [idsKey, phone]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { prevPickedRef.current = pickedIds; }, [pickedIds]);
+  const byId = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
+  const picked = useMemo(() => pickedIds.map((id) => byId.get(id)).filter(Boolean), [byId, pickedIds]);
   const stageRef = useRef(null);
   const [dims, setDims] = useState(null);
-  const [focusIdx, setFocusIdx] = useState(null);
+  const [focusState, setFocusIdx] = useState(null);
+  // 衣服變少(刪掉聚焦的最後一張)時,這次 render 的位置可能已經超出圓環;當下就夾成「沒聚焦」,
+  // 不能等下面的 effect 修正:那之前這次 render 就會讀到不存在的那張,整個 App 白屏
+  const focusIdx = focusState !== null && focusState < picked.length ? focusState : null;
+  // 聚焦記的是位置;衣服清單變了重抽之後,同一個位置會是另一件。記住聚焦的是哪一件,重抽後還在就跟過去,不在就退回圓環
+  const focusIdRef = useRef(null);
+  useEffect(() => { focusIdRef.current = focusIdx !== null ? pickedIds[focusIdx] ?? null : null; }, [focusIdx]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const id = focusIdRef.current;
+    if (id === null) return;
+    const index = pickedIds.indexOf(id);
+    setFocusIdx(index >= 0 ? index : null);
+  }, [pickedIds]);
   const [ringOffset, setRingOffset] = useState(0);   // 圓環模式的旋轉格數(整數,順時針為正)
   const [natSizes, setNatSizes] = useState({});      // itemId → {w,h} 照片原始尺寸
 
@@ -111,7 +139,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
       }
     })();
     return () => { alive = false; };
-  }, [items]);
+  }, [idsKey]);   // eslint-disable-line react-hooks/exhaustive-deps -- 同上:清單沒變就不重抽,使用者正要按「穿這套」
 
   // 聚焦模式的瀏覽:滾輪/方向鍵/上下滑一次跳一件(不是自由旋轉,所以不需要動畫迴圈,
   // 只是換 focusIdx,位移交給 CSS transition)。往下滾 = 順時針。
@@ -243,6 +271,13 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
   };
 
   const focusedItem = focusIdx !== null ? picked[focusIdx] : null;
+  // 今日推薦算出來那一刻的物件可能已經舊了(別台改名、換圖):顯示和「穿這套」都換成最新的,不見了或分類改了就拿掉
+  const freshDaily = daily?.outfit
+    ? Object.fromEntries(Object.entries(daily.outfit)
+      .map(([slot, piece]) => [slot, piece && byId.get(piece.id)])
+      .filter(([slot, piece]) => piece && piece.part === slot))
+    : null;
+  const dailyOutfit = freshDaily && Object.keys(freshDaily).length ? freshDaily : null;   // 全部拿掉了就不顯示空的「穿這套」
 
   const onCardClick = (index, item) => {
     if (focusIdx === index) onOpen(item.id);       // 已聚焦 → 開詳情
@@ -281,20 +316,20 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
           >
             {!daily && <p className="landing-daily-loading">讀取今天的天氣…</p>}
             {daily?.error && <p className="landing-daily-loading">{daily.error}</p>}
-            {daily?.outfit && (
+            {dailyOutfit && (
               <>
                 <p className="landing-daily-weather">
                   台中 {daily.weather.temp}° · 體感 {daily.weather.feelsLike}° · 降雨 {daily.weather.rainProb}%
                 </p>
                 <h2>今日推薦</h2>
                 <ul className="landing-daily-list">
-                  {Object.entries(daily.outfit).map(([slot, item]) => (
+                  {Object.entries(dailyOutfit).map(([slot, item]) => (
                     <li key={slot}>
                       <span>{SLOT_LABEL[slot]}</span>{item.name}
                     </li>
                   ))}
                 </ul>
-                <button type="button" className="landing-daily-go" onClick={() => onWearOutfit(daily.outfit)}>
+                <button type="button" className="landing-daily-go" onClick={() => onWearOutfit(dailyOutfit)}>
                   <Sparkle size={14} weight="regular" aria-hidden="true" /> 穿這套
                 </button>
               </>
@@ -344,18 +379,18 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
         <div className="landing-daily-strip">
           {!daily && <p className="landing-daily-loading">讀取今天的天氣…</p>}
           {daily?.error && <p className="landing-daily-loading">{daily.error}</p>}
-          {daily?.outfit && (
+          {dailyOutfit && (
             <>
               <p className="landing-daily-weather">
                 台中 {daily.weather.temp}° · 體感 {daily.weather.feelsLike}° · 降雨 {daily.weather.rainProb}%
               </p>
               <p className="landing-strip-head">今日推薦</p>
               <ul className="landing-strip-pieces">
-                {["wholebody_up", "upperbody", "lowerbody", "shoes"].filter((slot) => daily.outfit[slot]).slice(0, 4).map((slot) => (
-                  <li key={slot}><b>{SLOT_LABEL[slot]}</b>{daily.outfit[slot].name}</li>
+                {["wholebody_up", "upperbody", "lowerbody", "shoes"].filter((slot) => dailyOutfit[slot]).slice(0, 4).map((slot) => (
+                  <li key={slot}><b>{SLOT_LABEL[slot]}</b>{dailyOutfit[slot].name}</li>
                 ))}
               </ul>
-              <button type="button" className="landing-daily-go" onClick={() => onWearOutfit(daily.outfit)}>
+              <button type="button" className="landing-daily-go" onClick={() => onWearOutfit(dailyOutfit)}>
                 <Sparkle size={14} weight="regular" aria-hidden="true" /> 穿這套
               </button>
             </>

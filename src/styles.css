@@ -104,6 +104,7 @@ h1, h2, h3 {
 .view-nav button,
 .category-nav button,
 .studio-actions button,
+.studio-dock button,
 .studio-rack-nav button,
 .primary-button,
 .secondary-button,
@@ -250,6 +251,7 @@ h1, h2, h3 {
   letter-spacing: .04em;
   text-transform: uppercase;
 }
+.status .secondary-button { margin-top: 14px; }   /* 空狀態裡「看想買的」這類按鈕,跟上面那句隔開 */
 
 .status.error { color: var(--danger); }   /* 錯誤用語意色 --danger,別佔用單一強調色 --accent */
 
@@ -1095,9 +1097,15 @@ h1, h2, h3 {
   filter: drop-shadow(0 4px 10px var(--shadow-lift));
 }
 
+/* 空人台提示:掛在人台框外緣下方(舊版疊在框底,剛好壓在雙腿上)。用 absolute 不佔版面:
+   放進正常流會把下方的「今日推薦」推出桌機第一屏。19px 高剛好落在框和下一塊之間 20px 的間距裡。 */
 .studio-hint {
   position: absolute;
-  inset: auto 0 18px;
+  top: calc(100% + 1px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  line-height: 18px;   /* 寫死:20px 的間距只放得下一行,不靠各家字型的 normal 行高 */
   text-align: center;
   font-size: 13px;
   letter-spacing: .12em;
@@ -1121,7 +1129,8 @@ h1, h2, h3 {
   width: 100%;
 }
 
-.studio-actions button {
+.studio-actions button,
+.studio-dock button {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -1134,12 +1143,16 @@ h1, h2, h3 {
   cursor: pointer;
   transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
 }
-.studio-actions button:hover:not(:disabled) { background: var(--hover-tint); }
-.studio-actions button:active:not(:disabled) { transform: translateY(1px); }
-.studio-actions button:disabled { opacity: .35; cursor: default; }
+.studio-actions button:hover:not(:disabled),
+.studio-dock button:hover:not(:disabled) { background: var(--hover-tint); }
+.studio-actions button:active:not(:disabled),
+.studio-dock button:active:not(:disabled) { transform: translateY(1px); }
+.studio-actions button:disabled,
+.studio-dock button:disabled { opacity: .35; cursor: default; }
 
-/* 第一層:唯一的 accent 實心主鈕(今日推薦/再推薦一套),撐大一點 */
-.studio-actions-primary .studio-recommend {
+/* 第一層:唯一的 accent 實心主鈕(今日推薦/再推薦一套),撐大一點。手機上它在貼底列(.studio-dock) */
+.studio-actions-primary .studio-recommend,
+.studio-dock .studio-recommend {
   min-width: 240px;
   justify-content: center;
   padding: 12px 26px;
@@ -1148,7 +1161,8 @@ h1, h2, h3 {
   border-color: var(--accent);
   color: var(--paper);
 }
-.studio-actions-primary .studio-recommend:hover:not(:disabled) { background: var(--accent); opacity: .9; }
+.studio-actions-primary .studio-recommend:hover:not(:disabled),
+.studio-dock .studio-recommend:hover:not(:disabled) { background: var(--accent); opacity: .9; }
 
 /* 第二層:調整動作 = ghost(無邊框、退到背景),工具而已不搶戲 */
 .studio-actions-modify button {
@@ -1159,7 +1173,8 @@ h1, h2, h3 {
 .studio-actions-modify button:hover:not(:disabled) { color: var(--ink); background: var(--hover-tint); }
 
 /* 第三層:定案動作 = 描邊,同一權重(收藏/匯出/今天穿這套) */
-.studio-actions-finalize .studio-wear-today.done { color: var(--ok); border-color: var(--ok); opacity: 1; }
+.studio-actions-finalize .studio-wear-today.done,
+.studio-dock .studio-wear-today.done { color: var(--ok); border-color: var(--ok); opacity: 1; }
 
 .studio-looks h3 {
   margin: 8px 0 10px;
@@ -2010,10 +2025,72 @@ h1, h2, h3 {
 @media (max-width: 520px) {
   .studio-occasion input { flex: 1 1 100%; max-width: none; }
   .studio-occasion button[type="submit"] { flex: 1 1 auto; justify-content: center; }
-  .studio-actions-primary .studio-recommend { width: 100%; min-width: 0; }
   .studio-actions-modify button { flex: 1 1 auto; justify-content: center; }
   .studio-actions-finalize button { flex: 1 1 calc(50% - 4px); justify-content: center; }
-  .studio-actions-finalize .studio-wear-today { flex: 1 1 100%; }
+}
+
+/* ===== 手機搭配頁(≤640):主要兩顆鈕貼底、人台縮進第一屏、備份移到衣架後面(2026-10-02 F23) =====
+   舊版 iPhone 13(高 664)上「再推薦一套」在 y≈1026、衣架在 1417,每換一套要捲下去按、再捲上來看。
+   >640 的版面一律不動;這一段只在手機生效。 */
+@media (max-width: 640px) {
+  /* 人台欄拆掉(contents),裡面的區塊和衣架變成同一層:備份才能用 order 排到衣架後面,
+     貼底列也才能從人台一路貼到衣架。改用 flex 直排,sticky 在 flex 裡各家瀏覽器最穩。 */
+  .studio { display: flex; flex-direction: column; align-items: stretch; gap: 20px; padding-bottom: 0; }
+  .studio-stage-column { display: contents; }
+  .studio-rack { margin-top: 16px; }        /* 補回單欄時跟上面隔開的 36px */
+  .studio-stage-column > .studio-backup { order: 1; }
+  .studio-dock { order: 2; }
+
+  /* 人台用寬度縮,高度照 200:340 跟著變。不直接定 height:衣服是用百分比疊上去的,寬高各自定死會一起變形(F43)。
+     用 svh 不用 dvh:Safari 捲動時工具列收合,dvh 會變,人台會在捲動中跟著縮放;svh 固定是工具列展開時的高度。 */
+  .studio-stage {
+    width: min(100%, 380px, calc(55vh * 200 / 340));
+    width: min(100%, 380px, calc(55svh * 200 / 340));
+    isolation: isolate;   /* 衣服和選取框的 z-index(最高 95)關在人台裡,捲到貼底列下面時不會疊到列上 */
+  }
+
+  /* iOS 遇到小於 16px 的輸入框,聚焦時會放大整頁,收了鍵盤也不縮回,貼底列會跟著歪 */
+  .studio-occasion input { font-size: 16px; }
+
+  /* 底色、髮絲線、安全區跟入口的今日推薦長條(.landing-daily-strip)同一套,不加陰影或毛玻璃 */
+  .studio-dock {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;          /* 蓋過衣架格子;單品頁(20)、Look 卡(30)、新增(95)仍在它上面 */
+    display: flex;
+    flex-wrap: wrap;      /* 回饋那一行(.studio-dock-status)自己佔一整列,按鈕在下面 */
+    gap: 8px;
+    margin: 0 -20px;      /* 抵掉 .studio 左右的 20px 內距,底色貼到螢幕兩邊 */
+    padding: 10px 20px calc(10px + env(safe-area-inset-bottom));
+    background: var(--paper);
+    border-top: 1px solid var(--line);
+  }
+  .studio-dock.is-tucked { display: none; }   /* 指令框聚焦中(OutfitStudio 的 typing) */
+  /* 兩顆等寬;「已記錄,近幾天不再推薦」比較長,允許折兩行,min-height 讓折行前後列高不跳 */
+  .studio-dock button {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 48px;
+    justify-content: center;
+    padding: 8px 10px;
+    line-height: 1.3;
+    text-align: center;
+    text-wrap: balance;
+  }
+  .studio-dock .studio-recommend { min-width: 0; padding: 8px 10px; }
+  .studio-dock-status {
+    flex: 1 1 100%;
+    margin: 0;
+    display: -webkit-box;          /* 最多兩行:麥克風引導那種長句會把列撐高,蓋到指令框 */
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--muted);
+    text-align: center;
+  }
+  .studio-dock-status.is-error { color: var(--danger); }
 }
 
 /* ===== 入口導覽頁(圓環轉盤) ===== */
@@ -2037,7 +2114,10 @@ h1, h2, h3 {
   align-items: center;
   justify-content: space-between;
   padding: 22px 32px;
+  pointer-events: none;     /* 標題列蓋到圓環 12 點那張(訪客多一行說明時更明顯):只有按鈕接點擊,其他讓給底下的卡片 */
 }
+.landing-top nav,
+.landing-top button { pointer-events: auto; }
 
 .landing-top h1 {
   margin: 0;
@@ -2198,8 +2278,9 @@ h1, h2, h3 {
 
 .landing-info-close {
   position: absolute;
-  top: 10px; right: 10px;
-  width: 30px; height: 30px;
+  top: 4px; right: 4px;
+  z-index: 1;               /* 品類文字那行會蓋到它,點正中間沒反應 */
+  width: 44px; height: 44px;
   display: grid; place-items: center;
   border: 0; background: transparent;
   color: var(--paper); opacity: .6;

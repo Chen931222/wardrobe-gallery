@@ -23,7 +23,7 @@ function openDb() {
   });
 }
 
-async function tx(mode, run) {
+async function tx(mode, run, { fromSync = false } = {}) {
   const db = await openDb();
   try {
     return await new Promise((resolve, reject) => {
@@ -36,24 +36,42 @@ async function tx(mode, run) {
     });
   } finally {
     db.close();
-    // 給同步用:這台的衣服變了,過幾秒推上去(sync.js 監聽,同步自己寫入時會忽略)
-    if (mode === "readwrite" && typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));
+    // 給同步用:這台的衣服變了,過幾秒推上去。fromSync = 同步自己把別台的衣服寫進來,不算這台改的
+    if (mode === "readwrite" && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("wardrobe-local-change", { detail: { fromSync } }));
+    }
   }
 }
 
-/** 讀出全部本機衣物,轉成和伺服器格式一致的物件(image 為 object URL)。 */
+/* 圖的 object URL 依 id 重用:同步後會常常重讀,每次都新建網址的話,舊的一直不釋放、
+   格子和人台上的圖也會整批重新載入。圖換了(大小或格式不同)才換網址,不在清單裡的才釋放。 */
+const urlCache = new Map();   // id → { size, type, url }
+
+function urlFor(record) {
+  const hit = urlCache.get(record.id);
+  if (hit && hit.size === record.blob.size && hit.type === record.blob.type) return hit.url;
+  if (hit) URL.revokeObjectURL(hit.url);
+  const url = URL.createObjectURL(record.blob);
+  urlCache.set(record.id, { size: record.blob.size, type: record.blob.type, url });
+  return url;
+}
+
+/** 讀出全部本機衣物,轉成和伺服器格式一致的物件(image 為 object URL)。
+ *  讀不到回 null,不是 []:呼叫端要分得出「沒有衣服」和「這次讀不到」,不然會把畫面上的衣服清光。 */
 export async function loadLocalItems() {
   if (typeof indexedDB === "undefined") return [];
   try {
-    const records = await tx("readonly", (store) => store.getAll());
-    return (records || []).map((record) => ({
-      ...record,
-      image: URL.createObjectURL(record.blob),
-      thumbnail: URL.createObjectURL(record.blob),
-      isLocal: true,
-    }));
+    const records = (await tx("readonly", (store) => store.getAll())) || [];
+    const ids = new Set(records.map((record) => record.id));
+    for (const [id, hit] of urlCache) {
+      if (!ids.has(id)) { URL.revokeObjectURL(hit.url); urlCache.delete(id); }
+    }
+    return records.map((record) => {
+      const url = urlFor(record);
+      return { ...record, image: url, thumbnail: url, isLocal: true };
+    });
   } catch {
-    return [];
+    return null;
   }
 }
 
@@ -106,8 +124,13 @@ export async function updateLocalItem(id, patch) {
   if (record) await tx("readwrite", (store) => store.put({ ...record, ...patch }));
 }
 
-export async function deleteLocalItem(id) {
-  await tx("readwrite", (store) => store.delete(id));
+export async function deleteLocalItem(id, options) {
+  await tx("readwrite", (store) => store.delete(id), options);
+}
+
+/** 讀一件的原始 record(含 blob);沒有就 undefined。同步寫回前用來確認這件在同步途中有沒有被改過。 */
+export async function readLocalRecord(id) {
+  return tx("readonly", (store) => store.get(id));
 }
 
 /** 備份匯出用:讀原始 record(含 blob),不像 loadLocalItems 轉成 objectURL。 */
@@ -129,8 +152,8 @@ export async function readLocalRecords() {
 }
 
 /** 備份匯入用:把原始 record(含 blob)寫回 IndexedDB。 */
-export async function putLocalRecord(record) {
-  await tx("readwrite", (store) => store.put(record));
+export async function putLocalRecord(record, options) {
+  await tx("readwrite", (store) => store.put(record), options);
 }
 
 /* ---------- 影像處理:去背後的收尾 ---------- */

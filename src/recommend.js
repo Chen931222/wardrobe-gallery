@@ -50,6 +50,7 @@ export function recordWear(items) {
   const today = new Date().toLocaleDateString("sv");
   for (const item of items) log[item.id] = today;
   localStorage.setItem(WEARLOG_KEY, JSON.stringify(log));
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));   // 開了同步的話,5 秒後推上去
   return log;
 }
 

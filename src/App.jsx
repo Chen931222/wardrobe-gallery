@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Plus, Sparkle, Trash, X } from "@phosphor-icons/react";
 import { OptimizedImage } from "./OptimizedImage.jsx";
-import { OutfitStudio } from "./OutfitStudio.jsx";
+import { OutfitStudio, rememberWearing } from "./OutfitStudio.jsx";
 import { LandingRing } from "./LandingRing.jsx";
 import { AddGarment } from "./AddGarment.jsx";
 import { SyncPanel } from "./SyncPanel.jsx";
@@ -51,12 +51,14 @@ function persistEdit(item) {
     tags: item.tags || [],
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(edits));
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));   // 開了同步的話,5 秒後推上去
 }
 
 function removePersistedEdit(id) {
   const edits = readEdits();
   delete edits[id];
   localStorage.setItem(STORAGE_KEY, JSON.stringify(edits));
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));
 }
 
 function readDeletedItems() {
@@ -72,6 +74,7 @@ function persistDeletedItem(id) {
   const deleted = readDeletedItems();
   deleted.add(id);
   localStorage.setItem(DELETED_STORAGE_KEY, JSON.stringify([...deleted]));
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));
 }
 
 function rgbToHex(red, green, blue) {
@@ -404,7 +407,20 @@ function ReadOnlyDetails({ item, onWear }) {
 function WishLinkEditor({ item, onSetUrl }) {
   const [text, setText] = useState(item.sourceUrl || "");
   const [saved, setSaved] = useState(false);
-  useEffect(() => { setText(item.sourceUrl || ""); }, [item.id, item.sourceUrl]);
+  // 換了一件就重設;同一件的網址被別台改了,只有這台沒動過輸入框時才跟上,打到一半的字不蓋掉
+  const shownUrl = useRef(item.sourceUrl || "");
+  useEffect(() => {
+    shownUrl.current = item.sourceUrl || "";
+    setText(item.sourceUrl || "");
+  }, [item.id]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const before = shownUrl.current;
+    const next = item.sourceUrl || "";
+    if (before === next) return;
+    shownUrl.current = next;
+    setText((current) => (current === before ? next : current));
+    setSaved(false);   // 換成別台存的網址了,「已存。」講的不是這個
+  }, [item.sourceUrl]);
   useEffect(() => { setSaved(false); }, [item.id]);
   const problem = productUrlProblem(text);
   const changed = (cleanUrl(text) || "") !== (item.sourceUrl || "");
@@ -412,7 +428,10 @@ function WishLinkEditor({ item, onSetUrl }) {
   const submit = async (event) => {
     event.preventDefault();
     if (problem || !changed) return;
-    await onSetUrl(item.id, cleanUrl(text));
+    const url = cleanUrl(text);
+    await onSetUrl(item.id, url);
+    shownUrl.current = url || "";
+    setText(url || "");
     setSaved(true);
   };
 
@@ -442,8 +461,12 @@ const PART_NAME = { upperbody: "上衣", lowerbody: "下身", wholebody_up: "外
 
 /** 想買的那件:櫃裡有沒有很像的、跟已經有的能配出什麼。買之前看一眼用。 */
 function WishCheck({ item, owned, onOpen, onWearOutfit }) {
-  const similar = useMemo(() => findSimilar(item, owned), [item, owned]);
-  const plan = useMemo(() => wishOutfits(item, owned), [item, owned]);
+  // 只在這件或衣櫃清單真的變了才重算:三套是亂數配的,同步重讀衣櫃就換一組,使用者正要按「穿這套」
+  const keyOf = (piece) => [piece.id, piece.part, piece.name, piece.color, piece.secondaryColor, (piece.tags || []).join(",")].join(":");
+  const ownedKey = owned.map(keyOf).join("|");   // 名稱、標籤、副色都會影響「很像」和配色,要算進來
+  const itemKey = keyOf(item);
+  const similar = useMemo(() => findSimilar(item, owned), [itemKey, ownedKey]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const plan = useMemo(() => wishOutfits(item, owned), [itemKey, ownedKey]);     // eslint-disable-line react-hooks/exhaustive-deps
   const kind = kindLabel(item);
   const fit = fitOf(item);
   const sameFit = fit ? similar.filter((piece) => fitOf(piece) === fit).length : 0;
@@ -504,6 +527,20 @@ function WishCheck({ item, owned, onOpen, onWearOutfit }) {
   );
 }
 
+const DRAFT_FIELDS = ["name", "part", "color", "secondaryColor", "tags"];
+
+function draftOf(item) {
+  return { name: item.name || "", part: item.part, color: item.color || "#9a9286", secondaryColor: item.secondaryColor || null, tags: [...(item.tags || [])] };
+}
+
+/* 同一件換成新物件時(同步拉到別台的衣服、存檔):沒動過的欄位跟上新值,正在改的欄位保留。 */
+function rebaseDraft(draft, before, after) {
+  return Object.fromEntries(DRAFT_FIELDS.map((field) => [
+    field,
+    JSON.stringify(draft[field]) === JSON.stringify(before[field]) ? after[field] : draft[field],
+  ]));
+}
+
 function ItemViewer({ item, owned, onClose, onSave, onDelete, onWear, onBought, onSetUrl, onOpen, onWearOutfit }) {
   const closeButtonRef = useRef(null);
   const imageRef = useRef(null);
@@ -512,9 +549,25 @@ function ItemViewer({ item, owned, onClose, onSave, onDelete, onWear, onBought, 
   const [sampling, setSampling] = useState(null);
   const [sampleStatus, setSampleStatus] = useState("");
   const [palette, setPalette] = useState(item.palette || []);
-  const [draft, setDraft] = useState({ name: item.name || "", part: item.part, color: item.color || "#9a9286", secondaryColor: item.secondaryColor || null, tags: [...(item.tags || [])] });
+  const [draft, setDraft] = useState(() => draftOf(item));
   const [shaking, setShaking] = useState(false);
   const [closeBlocked, setCloseBlocked] = useState(false);
+
+  // item 換了:換成另一件就整個重設;同一件只是被 refresh 重建成新物件(同步拉到東西時每件都會),
+  // 打到一半的欄位不能被清掉。在 render 裡直接調整,不用 effect,免得先拿舊草稿畫一次、isDirty 閃一下。
+  const [draftBase, setDraftBase] = useState(item);
+  if (draftBase !== item) {
+    setDraftBase(item);
+    if (draftBase.id !== item.id) {
+      setSampling(null);
+      setSampleStatus("");
+      setPalette(item.palette || []);
+      setDraft(draftOf(item));
+    } else {
+      setDraft((current) => rebaseDraft(current, draftOf(draftBase), draftOf(item)));
+    }
+  }
+
   const type = TYPE_MAP[item.part]?.singular || "衣物";
   const hasModeledImage = Boolean(item.modeledImage);
   const pieceRotation = useMemo(() => {
@@ -564,7 +617,6 @@ function ItemViewer({ item, owned, onClose, onSave, onDelete, onWear, onBought, 
 
     document.addEventListener("keydown", onKeyDown);
     document.body.classList.add("viewer-open");
-    closeButtonRef.current?.focus({ preventScroll: true });
     return () => {
       document.removeEventListener("keydown", onKeyDown);
       document.body.classList.remove("viewer-open");
@@ -572,19 +624,22 @@ function ItemViewer({ item, owned, onClose, onSave, onDelete, onWear, onBought, 
     };
   }, [requestClose, sampling]);
 
+  // 焦點只在打開或換一件時放到關閉鈕;放在上面那個 effect 裡會跟著每次重新 render 搶焦點(同步重讀衣櫃時正在打字的欄位被搶走)
+  useEffect(() => {
+    closeButtonRef.current?.focus({ preventScroll: true });
+  }, [item.id]);
+
   useEffect(() => {
     if (!isDirty) setCloseBlocked(false);
   }, [isDirty]);
 
+  // 「已儲存。」只講剛剛那一次;存完又改了就拿掉,免得有沒存的修改時還寫著已儲存
   useEffect(() => {
-    setSampling(null);
-    setSampleStatus("");
-    setPalette(item.palette || []);
-    setDraft({ name: item.name || "", part: item.part, color: item.color || "#9a9286", secondaryColor: item.secondaryColor || null, tags: [...(item.tags || [])] });
-  }, [item]);
+    if (isDirty) setSampleStatus((status) => (status === "已儲存。" ? "" : status));
+  }, [isDirty]);
 
   const cancelEditing = () => {
-    setDraft({ name: item.name || "", part: item.part, color: item.color || "#9a9286", secondaryColor: item.secondaryColor || null, tags: [...(item.tags || [])] });
+    setDraft(draftOf(item));
     setSampling(null);
     setSampleStatus("");
     onClose();
@@ -731,20 +786,44 @@ export function App() {
   const [error, setError] = useState("");
   const [view, setView] = useState("landing");
   const [pendingOutfit, setPendingOutfit] = useState(null);   // 由入口頁的今日推薦帶進搭配頁
-  const [closetChoice, setClosetChoice] = useState(null);
-  const [syncOpen, setSyncOpen] = useState(false);     // 訪客手動選的衣櫃;null = 照有沒有自己的衣服決定
+  const [closetChoice, setClosetChoice] = useState(null);     // 訪客手動選的衣櫃;null = 照有沒有自己的衣服決定
+  const [syncOpen, setSyncOpen] = useState(false);
 
   // 衣櫃 = 離線流程匯入的(data/library.json)+ 使用者自己在網頁加的(IndexedDB)
+  // 同時有兩次 refresh 在跑時(同步拉到東西、剛存好),只採用最後發出的那次;edits 和隱藏名單在 await 之後才讀,
+  // 不然中間剛存的修改會被一份過期的值蓋回去,單品頁的草稿再跟著那份舊值走,下次存檔就把舊名字寫回去
+  const refreshSeq = useRef(0);      // 發出過幾次
+  const appliedSeq = useRef(0);      // 畫面上是第幾次的結果;比它舊的回來就丟掉
+  // 上一次成功讀到的站主衣櫃、本機衣服:這次抓不到(網路斷、IndexedDB 暫時打不開)就沿用,不讓畫面上的衣服消失,
+  // 人台和收藏也不會因此把它們當成被刪掉而拿掉
+  const servedRef = useRef(null);
+  const localRef = useRef(null);
+  const servedSeq = useRef(0);
+  const localSeq = useRef(0);
+  const appliedComplete = useRef(false);   // 畫面上那份兩邊都有讀到
   const refresh = useCallback(async () => {
-    const edits = readEdits();
-    const deleted = readDeletedItems();
+    const seq = ++refreshSeq.current;
+    let failed = null;
     const [served, local] = await Promise.all([
       fetch("/data/wardrobe.json", { cache: "no-store" })
         .then((response) => (response.ok ? response.json() : Promise.reject(new Error("衣櫃載入失敗。"))))
-        .catch((cause) => { setError(cause.message); return []; }),
+        .catch((cause) => { failed = cause; return null; }),
       loadLocalItems(),
     ]);
-    const merged = [...served, ...local].filter((item) => !deleted.has(item.id));
+    // 備用的上一份只收比較新的結果:較舊的 refresh 晚回來,不能把它換回刪除前的清單(之後讀不到時刪掉的會冒回來)
+    if (served && seq > servedSeq.current) { servedRef.current = served; servedSeq.current = seq; }
+    if (local && seq > localSeq.current) { localRef.current = local; localSeq.current = seq; }
+    if (seq <= appliedSeq.current) {
+      // 比較舊的結果被丟掉;但畫面上那份是靠沿用撐的、這份卻有讀到,就再讀一次補上
+      if (served && local && !appliedComplete.current) refresh();
+      return;
+    }
+    appliedSeq.current = seq;
+    appliedComplete.current = Boolean(served && local);
+    setError(!served && !servedRef.current ? (failed?.message || "衣櫃載入失敗。") : "");
+    const edits = readEdits();
+    const deleted = readDeletedItems();
+    const merged = [...(served || servedRef.current || []), ...(local || localRef.current || [])].filter((item) => !deleted.has(item.id));
     setItems(merged.map((item) => ({ ...item, ...(edits[item.id] || {}) })));
     setLoading(false);
   }, []);
@@ -752,19 +831,26 @@ export function App() {
   useEffect(() => { refresh(); }, [refresh]);
 
   // 同步:打開時、切回來時拉一次;離開(切到別的 app)前有改過就推;衣服一改,5 秒後推。
-  // 另一台改了穿著紀錄、收藏這類 localStorage 的,各元件只在載入時讀,所以整頁重新整理。
+  // 拿到別台的東西不整頁重新整理:衣服、編輯、隱藏由 refresh 重讀;收藏、微調、穿著紀錄由搭配頁自己聽同一個事件重讀。
+  // 這樣新增視窗、單品頁、打到一半的指令都不會被清掉。
   useEffect(() => {
     if (!CAN_EDIT) return undefined;
     const onSynced = (event) => {
       const { pendingDeletes } = event.detail;
+      // 背景時跳 confirm,瀏覽器可能不等人就回 false(會把剛刪的那件拿回來):先不問,回到前景的同步會再偵測一次
+      if (pendingDeletes && document.visibilityState === "hidden") return;
       if (pendingDeletes) {
         // 這台一次少了好幾件:問清楚是真的刪了,還是資料被瀏覽器清掉了
-        const push = window.confirm(`這台少了 ${pendingDeletes} 件自己加的衣服。\n\n按「確定」:其他裝置和雲端也一起刪掉。\n按「取消」:從雲端把這 ${pendingDeletes} 件拿回來。`);
+        const push = window.confirm(`這台少了 ${pendingDeletes} 件自己加的衣服(可能是你刪的,也可能是瀏覽器把資料清掉了)。\n\n按「確定」:其他裝置和雲端也一起刪掉。\n按「取消」:從雲端把這 ${pendingDeletes} 件拿回來。`);
         setTimeout(() => syncNow({ deletes: push ? "push" : "restore" }), 0);   // 等這一輪同步收尾
         return;
       }
-      if (event.detail.keysChanged) window.location.reload();
-      else if (event.detail.pulled) refresh();
+      // 只有衣服本身(拉到別台的衣服)、名稱顏色(edits)、隱藏(deleted)變了才重讀衣櫃。收藏、微調、穿著紀錄
+      // 由搭配頁自己重讀;要是也重讀衣櫃,入口的圓環和今日推薦會在使用者看的時候整個重洗。
+      // 單品頁開著時也要重讀:別台改的名稱、顏色不跟上的話(rebaseDraft),這台一存就用舊值蓋掉別台的修改。
+      // 同步半途失敗時也重讀一次:可能已經寫進一部分衣服。
+      const keys = event.detail.keys || [];
+      if (event.detail.pulled || keys.includes(STORAGE_KEY) || keys.includes(DELETED_STORAGE_KEY) || (event.detail.error && !event.detail.stopped)) refresh();
     };
     const onVisibility = () => {
       if (!syncCode()) return;
@@ -774,11 +860,15 @@ export function App() {
     window.addEventListener("wardrobe-synced", onSynced);
     window.addEventListener("wardrobe-local-change", scheduleSync);
     document.addEventListener("visibilitychange", onVisibility);
+    // iOS 從主畫面的 app 切回來,舊版有時不發 visibilitychange;從快取還原頁面時再補一次
+    const onPageShow = (event) => { if (event.persisted && syncCode()) syncNow(); };
+    window.addEventListener("pageshow", onPageShow);
     if (syncCode()) syncNow();
     return () => {
       window.removeEventListener("wardrobe-synced", onSynced);
       window.removeEventListener("wardrobe-local-change", scheduleSync);
       document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pageshow", onPageShow);
     };
   }, [refresh]);
 
@@ -819,10 +909,46 @@ export function App() {
     });
   }, [activeType, closetItems, ownedItems]);
 
+  // 帶進搭配頁的那套只用一次:離開搭配頁就清掉,不然回來時又被套回入口那套,蓋掉後來自己換的
+  useEffect(() => {
+    if (view !== "styling") setPendingOutfit(null);
+  }, [view]);
+
+  // 帶一套進搭配頁:先記成「身上這套」,進去後手動重新整理也穿得回來
+  const wearOutfit = (outfit) => {
+    rememberWearing(outfit);
+    setPendingOutfit(outfit);
+  };
+
   const chooseType = (typeId) => {
     setActiveType(typeId);
     setSelectedId(null);
   };
+
+  // 存進想買的、或從空狀態點過來:切到衣櫃的「想買的」。「全部」只列已經有的,不切過去會以為沒存成功。
+  const showWishlist = () => {
+    setView("closet");
+    setActiveType("wishlist");
+    setSelectedId(null);
+  };
+
+  // 亮著的分類一律露出來:手機上「想買的」在分類列最右邊要橫滑才看得到,
+  // 停在它上面卻看不到哪顆亮著,會以為衣服不見了(切去搭配再回來時分類列也會捲回最左邊)。
+  // 只動分類列自己的橫向捲動;不用 scrollIntoView,它會連整頁一起捲,在格子中間刪一件就被拉回頂端
+  const categoryNavRef = useRef(null);
+  useEffect(() => {
+    const nav = categoryNavRef.current;
+    const button = nav?.querySelector("button.active");
+    if (view !== "closet" || !button) return;
+    const left = button.offsetLeft - nav.offsetLeft;
+    if (left < nav.scrollLeft) nav.scrollLeft = left - 16;
+    else if (left + button.offsetWidth > nav.scrollLeft + nav.clientWidth) nav.scrollLeft = left + button.offsetWidth - nav.clientWidth + 16;
+  }, [view, activeType, wishCount]);
+
+  // 想買的全買了或刪光,那顆分類就消失了;停在上面會一片空白、沒有任何一顆亮著,退回「全部」
+  useEffect(() => {
+    if (!loading && activeType === "wishlist" && !wishCount) setActiveType("all");
+  }, [loading, activeType, wishCount]);
 
   const chooseCloset = (next) => {
     setClosetChoice(next);
@@ -866,6 +992,11 @@ export function App() {
     if (id.startsWith("local-")) {
       // 自己加的:直接從 IndexedDB 移除,不需要記到「已刪除」名單
       await deleteLocalItem(id);
+      appliedSeq.current = ++refreshSeq.current;   // 還在跑的 refresh 讀的是刪除前的本機清單,作廢,免得那件又冒出來
+      localSeq.current = appliedSeq.current;        // 它也不能拿來當備用清單
+      refresh();                                     // 再補一次讀刪除後的:作廢的那次如果帶著剛同步到的新衣服,不補就看不到
+      // 訪客刪掉自己唯一一件時留在「我的衣櫃」(空的那個),不要自動跳去示範衣櫃,像站主的衣服跑進來
+      if (!CAN_EDIT) setClosetChoice("mine");
       setItems((current) => current.filter((item) => item.id !== id));
       setSelectedId(null);
       return;
@@ -897,7 +1028,7 @@ export function App() {
             onSync={CAN_ADD ? () => setSyncOpen(true) : null}
             onOpen={setSelectedId}
             onEnter={setView}
-            onWearOutfit={(outfit) => { setPendingOutfit(outfit); setView("styling"); }}
+            onWearOutfit={(outfit) => { wearOutfit(outfit); setView("styling"); }}
           />
         )}
         {view === "landing" && loading && <p className="status">衣櫃載入中</p>}
@@ -923,7 +1054,11 @@ export function App() {
               {CAN_ADD && (
                 <AddGarment
                   existing={closet === "all" ? items : items.filter((item) => item.isLocal)}
-                  onAdded={() => { if (!CAN_EDIT) setClosetChoice("mine"); refresh(); }}
+                  onAdded={async (wishlist) => {
+                    if (!CAN_EDIT) { setClosetChoice("mine"); setPendingOutfit(null); }   // 換到我的衣櫃:示範衣櫃帶進來的那套不要跟過去
+                    await refresh();
+                    if (wishlist) showWishlist();
+                  }}
                 />
               )}
               <nav className="view-nav" aria-label="切換頁面">
@@ -935,7 +1070,7 @@ export function App() {
           </div>
           {closetSwitch}
           {view === "closet" && (
-            <nav className="category-nav" aria-label="依類型篩選衣櫃">
+            <nav className="category-nav" aria-label="依類型篩選衣櫃" ref={categoryNavRef}>
               {(wishCount ? [...TYPES, { id: "wishlist", label: `想買的 ${wishCount}` }] : TYPES).map((type) => (
                 <button
                   key={type.id}
@@ -954,14 +1089,23 @@ export function App() {
 
         {error && <p className="status error">{error}</p>}
         {view !== "landing" && !error && loading && <p className="status">衣櫃載入中</p>}
-        {!error && !loading && !ownedItems.length && (activeType !== "wishlist" || !wishCount) && (
-          <p className="status empty">
-            {CAN_ADD ? "你的衣櫃還是空的。按右上「新增」,貼 GU、UNIQLO 的商品連結,或拍一張平放的衣服。" : "這個衣櫃還沒有單品。"}
-          </p>
+        {/* 只看「想買的」分頁時它自己會列出來;入口、搭配、其他分頁仍要講,不然空白一片 */}
+        {!error && !loading && !ownedItems.length && !(view === "closet" && activeType === "wishlist" && wishCount) && (
+          wishCount ? (
+            <p className="status empty">
+              你加的 {wishCount} 件在「想買的」裡。還沒買的不算進衣櫃,買了以後點開那件按「已經買了」。
+              <br />
+              <button type="button" className="secondary-button" onClick={showWishlist}>看想買的</button>
+            </p>
+          ) : (
+            <p className="status empty">
+              {CAN_ADD ? "你的衣櫃還是空的。按右上「新增」,貼 GU、UNIQLO 的商品連結,或拍一張平放的衣服。" : "這個衣櫃還沒有單品。"}
+            </p>
+          )
         )}
 
         {view === "styling" && !loading && !!ownedItems.length && (
-          <OutfitStudio items={wearItems} initialOutfit={pendingOutfit} />
+          <OutfitStudio key={closet} items={wearItems} initialOutfit={pendingOutfit} />
         )}
 
         {view === "closet" && !!closetItems.length && (
@@ -984,11 +1128,11 @@ export function App() {
           item={selectedItem}
           owned={ownedItems}
           onOpen={setSelectedId}
-          onWearOutfit={(outfit) => { setPendingOutfit(outfit); setSelectedId(null); setView("styling"); }}
+          onWearOutfit={(outfit) => { wearOutfit(outfit); setSelectedId(null); setView("styling"); }}
           onClose={() => setSelectedId(null)}
           onSave={saveItem}
           onDelete={deleteItem}
-          onWear={(item) => { setPendingOutfit({ [item.part]: item }); setSelectedId(null); setView("styling"); }}
+          onWear={(item) => { wearOutfit({ [item.part]: item }); setSelectedId(null); setView("styling"); }}
           onBought={markBought}
           onSetUrl={setWishUrl}
         />

@@ -103,6 +103,7 @@ function ImagePicker({ images, onPick }) {
 }
 
 /**
+ * @param onAdded 存好之後叫,帶一個參數:這件是不是存進「想買的」
  * @param existing 這個衣櫃已經有的(含想買的),存檔前拿來比對有沒有重複;站主是全部,訪客只有自己加的
  */
 export function AddGarment({ onAdded, existing = [] }) {
@@ -191,7 +192,8 @@ export function AddGarment({ onAdded, existing = [] }) {
         // 長寬比猜分類一直猜錯(短褲→鞋、外套→下身),沒有品名可以看就留空讓人選
         part: link?.part || partFromName(link?.name) || "",
         color,
-        wishlist: true,
+        // 貼了商品連結才預設「還沒買」;從相簿選的多半是自己已經有的
+        wishlist: Boolean(link?.url),
         sourceUrl: link?.url || "",
       });
       setStage("review");
@@ -230,7 +232,7 @@ export function AddGarment({ onAdded, existing = [] }) {
       wishlist: draft.wishlist,
       sourceUrl: draft.wishlist ? cleanUrl(draft.sourceUrl) : null,
     });
-    onAdded();
+    onAdded(draft.wishlist);
     reset();
   };
 
@@ -411,7 +413,7 @@ export function AddGarment({ onAdded, existing = [] }) {
               </label>
             )}
 
-            {draft.wishlist && (
+            {draft.wishlist && link?.url && (
               <small className="add-hint">品牌的照片不會出現在公開的衣櫃;開了同步的話,雲端只存加密過的一份。</small>
             )}
 

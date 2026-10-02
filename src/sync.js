@@ -10,7 +10,7 @@
 // 兩邊都改過同一件時,剛輸入同步碼的那台讓雲端贏(加入別人的衣櫃),之後讓手上這台贏。
 // 編輯、隱藏這類一整包 JSON 的,再往下一層逐項合,兩台各改不同件時不會互相蓋掉。
 
-import { deleteLocalItem, putLocalRecord, readLocalRecords } from "./localWardrobe.js";
+import { deleteLocalItem, putLocalRecord, readLocalRecord, readLocalRecords } from "./localWardrobe.js";
 
 const CODE_KEY = "open-wardrobe-sync-code";
 const BASE_KEY = "open-wardrobe-sync-base-v2";     // v2 = 加密後;v1 的 base 用不同的圖編號,留著只會誤判
@@ -112,12 +112,17 @@ const stable = (value) => JSON.stringify(value, (key, inner) => (
 const same = (a, b) => stable(a ?? null) === stable(b ?? null);
 
 /** 這台現在的樣子。圖用 HMAC 編號代表,每次重算(換過圖就會不同,不靠記錄)。 */
+async function entryOf(keys, { blob, ...meta }) {
+  const img = blob ? hex(await crypto.subtle.sign("HMAC", keys.mac, await blob.arrayBuffer())) : null;
+  return { entry: { meta, img, type: blob?.type || null }, blob };
+}
+
 async function snapshot(keys) {
   const items = {}, blobs = {};
-  for (const { blob, ...meta } of await readLocalRecords()) {
-    const img = blob ? hex(await crypto.subtle.sign("HMAC", keys.mac, await blob.arrayBuffer())) : null;
-    items[meta.id] = { meta, img, type: blob?.type || null };
-    if (img) blobs[img] = blob;
+  for (const record of await readLocalRecords()) {
+    const { entry, blob } = await entryOf(keys, record);
+    items[record.id] = entry;
+    if (entry.img) blobs[entry.img] = blob;
   }
   const values = {};
   for (const key of SYNC_KEYS) {
@@ -127,8 +132,24 @@ async function snapshot(keys) {
   return { items, keys: values, blobs };
 }
 
-/* 兩邊都改過同一份 JSON 時往下一層合:物件逐欄、字串陣列取聯集再扣掉某一邊刪掉的。 */
-function mergeJsonText(local, base, remote) {
+/* 帶 id 的物件清單合併完,要照寫入那邊的規則排、截,不然下次存檔時兩邊對不上。
+   收藏的穿搭見 OutfitStudio.jsx 的 saveLook:id 是 look-<Date.now()>、新的放最前面、只留 30 筆。
+   沒列在這裡的清單照「手上這台的順序,再接雲端多出來的」,不截。 */
+const idTime = (id) => Number(String(id).match(/(\d+)$/)?.[1]) || 0;
+const LIST_RULES = {
+  "open-wardrobe-looks-v1": { order: (a, b) => idTime(b.id) - idTime(a.id), limit: 30 },
+};
+const hasId = (x) => Boolean(x) && typeof x === "object" && !Array.isArray(x)
+  && (typeof x.id === "string" || (typeof x.id === "number" && Number.isFinite(x.id)));
+const byId = (list) => {
+  const map = new Map();
+  for (const x of list) if (hasId(x) && !map.has(x.id)) map.set(x.id, x);
+  return map;
+};
+
+/* 兩邊都改過同一份 JSON 時往下一層合:物件逐欄、字串陣列取聯集再扣掉某一邊刪掉的,
+   帶 id 的物件陣列(收藏的穿搭)以 id 做同一件事。storageKey 是 localStorage 的鍵,拿來查 LIST_RULES。 */
+function mergeJsonText(local, base, remote, storageKey) {
   let l, b, r;
   try { l = JSON.parse(local); r = JSON.parse(remote); b = base == null ? null : JSON.parse(base); } catch { return local; }
   if (Array.isArray(l) && Array.isArray(r) && l.every((x) => typeof x !== "object") && r.every((x) => typeof x !== "object")) {
@@ -136,18 +157,45 @@ function mergeJsonText(local, base, remote) {
     const removed = new Set([...was].filter((x) => !l.includes(x) || !r.includes(x)));
     return JSON.stringify([...new Set([...l, ...r])].filter((x) => !removed.has(x)));
   }
-  if (l && r && typeof l === "object" && typeof r === "object" && !Array.isArray(l) && !Array.isArray(r)) {
-    const was = b && typeof b === "object" && !Array.isArray(b) ? b : {};
-    const out = {};
-    for (const name of new Set([...Object.keys(l), ...Object.keys(r), ...Object.keys(was)])) {
-      const pick = same(l[name], r[name]) ? l[name]
-        : same(l[name], was[name]) ? r[name]
-        : l[name];                                  // 這一欄兩邊都改了:手上這台贏
-      if (pick !== undefined) out[name] = pick;
+  // 以前這種整份取手上這台:兩台各「收藏這套」,後推的那台會把另一台那筆整個蓋掉,沒有任何提示。
+  // 現在跟字串陣列一樣:兩邊的都留,上次同步有、但某一邊已經拿掉的才算刪;
+  // 同一筆兩邊都改過就手上這台贏(跟下面物件逐欄一樣)。沒有 id 的物件陣列合不了,照舊取手上這台。
+  if (Array.isArray(l) && Array.isArray(r) && l.every(hasId) && r.every(hasId)) {
+    const mine = byId(l), theirs = byId(r);
+    const was = Array.isArray(b) ? byId(b) : new Map();
+    const out = [];
+    for (const id of new Set([...mine.keys(), ...theirs.keys()])) {
+      const lx = mine.get(id), rx = theirs.get(id), bx = was.get(id);
+      if (was.has(id) && (!lx || !rx)) continue;        // 某一邊刪了(含存滿 30 筆被擠掉的)
+      out.push(!lx ? rx : !rx ? lx
+        : same(lx, bx) ? rx                              // 只有雲端改過這一筆
+        : lx);
     }
-    return JSON.stringify(out);
+    const rule = LIST_RULES[storageKey];
+    if (!rule) return JSON.stringify(out);
+    return JSON.stringify(out.sort(rule.order).slice(0, rule.limit));   // sort 是穩定的,同一毫秒照上面的順序
   }
+  if (isPlain(l) && isPlain(r)) return JSON.stringify(mergeFields(l, isPlain(b) ? b : {}, r));
   return local;
+}
+
+const isPlain = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+/* 物件逐欄三方合併。同一欄兩邊都改了、而且兩邊都是物件時(edits 裡同一件衣服:一台改名、一台改顏色),
+   再往下一層逐欄合,不讓後存的那台整件蓋掉另一台;真的同一欄兩邊都改了才是手上這台贏。
+   限制:base 裡沒有這件(兩台都是第一次改它)時分不出誰改了哪一欄,仍是手上這台整件贏。 */
+function mergeFields(l, was, r) {
+  const out = {};
+  for (const name of new Set([...Object.keys(l), ...Object.keys(r), ...Object.keys(was)])) {
+    let pick;
+    if (same(l[name], r[name])) pick = l[name];
+    else if (same(l[name], was[name])) pick = r[name];
+    else if (same(r[name], was[name])) pick = l[name];
+    else if (isPlain(l[name]) && isPlain(r[name]) && isPlain(was[name])) pick = mergeFields(l[name], was[name], r[name]);
+    else pick = l[name];
+    if (pick !== undefined) out[name] = pick;
+  }
+  return out;
 }
 
 /** 三方合併一個表。回傳合併結果,以及哪些要寫回這台。 */
@@ -159,7 +207,7 @@ function merge3(local, base, remote, { remoteWins, deep }) {
     if (same(l, r)) pick = l;
     else if (same(l, b)) pick = r;
     else if (same(r, b)) pick = l;
-    else if (deep && l !== undefined && r !== undefined) pick = mergeJsonText(l, b, r);
+    else if (deep && l !== undefined && r !== undefined) pick = mergeJsonText(l, b, r, id);
     else pick = remoteWins ? r : l;
     if (pick !== undefined) result[id] = pick;
     if (!same(pick, l)) pull.push(id);
@@ -174,6 +222,13 @@ class SyncGone extends Error {}
 /* 一次同步裡,這台少了這麼多件「雲端還有」的衣服,就先停下來問:可能是真的刪了,
    也可能是瀏覽器把資料清掉了。問過才決定推刪除(push)還是從雲端拿回來(restore)。 */
 const MASS_DELETE = 3;
+/* 只看件數會漏掉小衣櫃:自己加的只有 1–2 件時,IndexedDB 被瀏覽器單獨清掉(空間不足被逐出、資料庫壞掉,
+   localStorage 和同步碼還在),少的件數不到門檻就不問,直接把「全刪」推到雲端和每一台,連圖一起救不回來。
+   所以「上次同步過的衣服,這台一件都不剩」卻要推出刪除,也一律先問。不只看「這台現在 0 件」:
+   清掉之後、第一次同步成功之前(例如離線)又加了一件,這台就不是 0 件,但同步過的還是全不見了。
+   代價是真的刪掉最後一件時會多問一次;問的時候按「取消」(或背景中瀏覽器直接回 false)
+   走的是從雲端拿回來,是安全的那一邊。 */
+const askBeforeDeleting = (leaving, syncedLeft) => leaving >= MASS_DELETE || (leaving > 0 && syncedLeft === 0);
 class MassDelete extends Error {
   constructor(count) {
     super(`這台少了 ${count} 件自己加的衣服,先不同步。`);
@@ -218,10 +273,11 @@ export async function hasLocalChanges() {
 
 let running = null;
 let timer = null;
+let changedWhileRunning = false;   // 同步跑的時候使用者又改了東西
 
 /**
- * 跑一次同步,跑完發 wardrobe-synced 事件(detail: { pulled, pushed, keysChanged, error, stopped, at }),
- * App 聽到就重新整理畫面;同一時間只跑一個,再叫一次會等前一個結束。
+ * 跑一次同步,跑完發 wardrobe-synced 事件(detail: { pulled, pushed, keysChanged, keys, error, stopped, at }),
+ * App 和搭配頁聽到就重讀各自的資料(不整頁重新整理);同一時間只跑一個,再叫一次會等前一個結束。
  */
 export function syncNow(options = {}) {
   if (!running) {
@@ -242,14 +298,19 @@ export function syncNow(options = {}) {
         window.dispatchEvent(new CustomEvent("wardrobe-synced", { detail: { ...result, at: lastSynced() } }));
         return result;
       })
-      .finally(() => { running = null; });
+      .finally(() => {
+        running = null;
+        if (changedWhileRunning) { changedWhileRunning = false; scheduleSync(); }
+      });
   }
   return running;
 }
 
 /** 衣服剛改過:等 5 秒再同步,連續改好幾件只傳一次。同步自己寫回這台時不算。 */
-export function scheduleSync() {
-  if (running || !syncCode()) return;
+export function scheduleSync(event) {
+  if (!syncCode() || event?.detail?.fromSync) return;   // 同步自己把別台的衣服寫進來,不算這台改的
+  // 同步中改的,等這一輪結束再排一次,不然要等下次切到背景才推得上去
+  if (running) { changedWhileRunning = true; return; }
   clearTimeout(timer);
   timer = setTimeout(() => { timer = null; syncNow(); }, 5000);
 }
@@ -318,7 +379,8 @@ async function runSync(options = {}) {
 
     // 上次同步還在、這台現在沒有、雲端也還有 = 這台要推出去的刪除
     const leaving = Object.keys(base.items).filter((id) => !mine.items[id] && remote.items?.[id]);
-    if (leaving.length >= MASS_DELETE && options.deletes !== "push") {
+    const syncedLeft = Object.keys(base.items).filter((id) => mine.items[id]).length;
+    if (askBeforeDeleting(leaving.length, syncedLeft) && options.deletes !== "push") {
       if (options.deletes !== "restore") throw new MassDelete(leaving.length);
       for (const id of leaving) delete base.items[id];   // 當作沒同步過這幾件:合併時雲端那份會被拿回來
     }
@@ -345,10 +407,16 @@ async function runSync(options = {}) {
       pushed += 1;
     }
 
-    // 2) 寫回這台
+    // 2) 寫回這台。寫入時帶 fromSync,發出的 wardrobe-local-change 才不會被當成這台改的。
+    //    寫之前先重讀這件:網路來回那幾秒裡這台改過或刪過它,就不寫回(不蓋掉剛做的),
+    //    上次同步的底留這台原本那份,下一輪三方合併再處理。
+    const skipped = [];
     for (const id of items.pull) {
       const entry = items.result[id];
-      if (!entry) { await deleteLocalItem(id); pulled += 1; continue; }
+      const current = await readLocalRecord(id).catch(() => { throw new Error("讀不到這台存的衣服,先不同步(免得把雲端當成全刪了)"); });
+      const now = current ? (await entryOf(keys, current)).entry : undefined;
+      if (!same(now, mine.items[id])) { skipped.push(id); changedWhileRunning = true; continue; }
+      if (!entry) { await deleteLocalItem(id, { fromSync: true }); pulled += 1; continue; }
       let blob = entry.img ? mine.blobs[entry.img] : null;
       if (entry.img && !blob) {
         const response = await api(code, { img: entry.img });
@@ -356,18 +424,31 @@ async function runSync(options = {}) {
         const plain = await open(keys, new Uint8Array(await response.arrayBuffer()));
         blob = new Blob([plain], { type: entry.type || "image/png" });
       }
-      await putLocalRecord({ ...entry.meta, blob });
+      await putLocalRecord({ ...entry.meta, blob }, { fromSync: true });
       pulled += 1;
     }
     for (const key of values.pull) {
-      storageSet(key, values.result[key] ?? null);
+      // 網路來回那幾秒裡這台又改了這個鍵(剛按收藏、今天穿這套、存了名稱):把剛改的跟合併結果再合一次,
+      // 直接寫回會把它蓋掉。下一次同步看到這台跟上次同步的不同,就會推上去。
+      const now = storageGet(key);
+      const before = mine.keys[key] ?? null;
+      const merged = values.result[key] ?? null;
+      storageSet(key, now === before || now === null || merged === null ? merged : mergeJsonText(now, before, merged, key));
       keysChanged = true;
     }
 
-    storageSet(BASE_KEY, JSON.stringify({ rev: savedRev, items: items.result, keys: values.result }));
+    const baseItems = { ...items.result };
+    for (const id of skipped) {
+      if (mine.items[id]) baseItems[id] = mine.items[id];
+      else delete baseItems[id];
+    }
+    storageSet(BASE_KEY, JSON.stringify({ rev: savedRev, items: baseItems, keys: values.result }));
     storageSet(OLD_BASE_KEY, null);
     storageSet(LAST_KEY, new Date().toISOString());
-    return { pulled, pushed, keysChanged };
+    return { pulled, pushed, keysChanged, keys: values.pull };
   }
   throw new Error("另一台一直在同步,等一下再試");
 }
+
+// 給 node 小測試用(合併規則和大量刪除的判斷是純函式,不用開瀏覽器就能測);App 不用這幾個。
+export { mergeJsonText as mergeJsonTextForTest, merge3 as merge3ForTest, askBeforeDeleting as askBeforeDeletingForTest };

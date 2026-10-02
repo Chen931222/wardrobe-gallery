@@ -66,6 +66,20 @@ function readFits() {
   }
 }
 
+// 斷點要影響「畫什麼」時用(純樣式的照舊放 CSS)。寫法同 LandingRing 的 phone。
+function useMedia(query) {
+  const [matches, setMatches] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const mq = window.matchMedia(query);
+    const on = () => setMatches(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, [query]);
+  return matches;
+}
+
 const clampScale = (value) => Math.min(SCALE_MAX, Math.max(SCALE_MIN, value));
 const deg = (rad) => (rad * 180) / Math.PI;
 
@@ -85,8 +99,16 @@ function Silhouette() {
   );
 }
 
+/** 帶一套進搭配頁之前先記成「身上這套」:進去之後手動重新整理,也穿得回來。 */
+export function rememberWearing(outfit) {
+  try {
+    const ids = Object.fromEntries(Object.entries(outfit || {}).filter(([, item]) => item).map(([slot, item]) => [slot, item.id]));
+    localStorage.setItem(WEARING_KEY, JSON.stringify(ids));
+  } catch { /* 私密模式等存不了就算了 */ }
+}
+
 export function OutfitStudio({ items, initialOutfit = null }) {
-  const [wearing, setWearing] = useState({});
+  const [wearing, setWearing] = useState(() => initialOutfit || {});   // 帶一套進來時一開始就穿著,寫回時才不會先寫出空的
   const [looks, setLooks] = useState(readLooks);
   const [stripType, setStripType] = useState("upperbody");
   const [occasion, setOccasion] = useState("");           // 「說個場合」輸入框
@@ -96,6 +118,19 @@ export function OutfitStudio({ items, initialOutfit = null }) {
   const dirtyRef = useRef(false);                         // 使用者真的動過穿搭才寫 localStorage,免得還原前先被空狀態蓋掉
   const pushHistory = (current) => setPast((stack) => [current, ...stack].slice(0, HISTORY_MAX));
   const [card, setCard] = useState(null);                 // Look 卡面板:{ outfit, caption } | null
+  // 版面:≤860 單欄(衣架在人台下面,提示要說「下面」);≤640 手機,主要兩顆鈕改成貼底的列
+  const stacked = useMedia("(max-width: 860px)");
+  const phone = useMedia("(max-width: 640px)");
+  const [typing, setTyping] = useState(false);            // 指令框聚焦中:手機把貼底列收起來,免得 iOS 鍵盤彈出時蓋住
+  // 失焦後晚一點才把貼底列放回來:點「照這句挑」時輸入框先失焦,列要是立刻冒出來會蓋住剛要點的按鈕,那一下就被吃掉
+  const untuckRef = useRef(null);
+  const focusOccasion = () => { clearTimeout(untuckRef.current); setTyping(true); };
+  const blurOccasion = () => { clearTimeout(untuckRef.current); untuckRef.current = setTimeout(() => setTyping(false), 250); };
+  useEffect(() => () => clearTimeout(untuckRef.current), []);
+
+
+  // 固定的關閉函式:LookCard 的聚焦 effect 依賴它,每次 render 給新的,同步一重讀焦點就被搶回關閉鈕
+  const closeCard = useCallback(() => setCard(null), []);
 
   // 開 Look 卡:把身上這套(或收藏的某套)連同日期/天氣/場合做成 caption,交給 LookCard 合成
   const openCard = (outfitMap, meta = {}) => {
@@ -123,7 +158,7 @@ export function OutfitStudio({ items, initialOutfit = null }) {
 
   // 入口頁按「穿這套」帶進來的推薦穿搭,直接套上人形
   useEffect(() => {
-    if (initialOutfit) { setWearing(initialOutfit); setAdjusting(null); }
+    if (initialOutfit) { dirtyRef.current = true; setWearing(initialOutfit); setAdjusting(null); }
   }, [initialOutfit]);
 
   // 記住身上這套:進頁面先從 localStorage 還原(入口頁帶進來的優先),之後只要使用者動過就存。
@@ -152,15 +187,18 @@ export function OutfitStudio({ items, initialOutfit = null }) {
 
   const fitOf = useCallback((item) => (item && fits[item.id]) || DEFAULT_FIT, [fits]);
 
+  // 收藏、微調寫入時一律拿 localStorage 的現值當底(read-modify-write),不拿 state:同步剛寫進來、還沒重讀,
+  // 或同一台開了兩個分頁時,state 可能比 localStorage 舊,直接寫回去會把別台的收藏、微調蓋掉,
+  // 下一次合併就被當成「這台刪了」。寫完通知同步(5 秒後推)。
   const writeFit = useCallback((itemId, patch) => {
-    setFits((current) => {
-      const base = current[itemId] || DEFAULT_FIT;
-      const merged = { ...DEFAULT_FIT, ...base, ...(typeof patch === "function" ? patch(base) : patch) };
-      const next = { ...current, [itemId]: merged };
-      if (merged.dx === 0 && merged.dy === 0 && merged.scale === 1 && merged.rot === 0) delete next[itemId];
-      localStorage.setItem(FIT_KEY, JSON.stringify(next));
-      return next;
-    });
+    const current = readFits();
+    const base = current[itemId] || DEFAULT_FIT;
+    const merged = { ...DEFAULT_FIT, ...base, ...(typeof patch === "function" ? patch(base) : patch) };
+    const next = { ...current, [itemId]: merged };
+    if (merged.dx === 0 && merged.dy === 0 && merged.scale === 1 && merged.rot === 0) delete next[itemId];
+    try { localStorage.setItem(FIT_KEY, JSON.stringify(next)); } catch { /* 存不了就只在這次畫面上生效 */ }
+    setFits(next);
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));
   }, []);
 
   const wardrobeByType = useMemo(() => {
@@ -322,12 +360,11 @@ export function OutfitStudio({ items, initialOutfit = null }) {
 
   const resetFit = (item) => {
     if (!item) return;
-    setFits((current) => {
-      const next = { ...current };
-      delete next[item.id];
-      localStorage.setItem(FIT_KEY, JSON.stringify(next));
-      return next;
-    });
+    const next = readFits();
+    delete next[item.id];
+    try { localStorage.setItem(FIT_KEY, JSON.stringify(next)); } catch { /* 同上 */ }
+    setFits(next);
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));
   };
 
   /* ---------- 穿脫 / 隨機 / 收藏 ---------- */
@@ -357,7 +394,75 @@ export function OutfitStudio({ items, initialOutfit = null }) {
   /* ---------- 今日推薦(天氣 + 規則引擎)與穿著紀錄 ---------- */
   const [daily, setDaily] = useState(null);      // { weather, reasons } | { error }
   const [dailyBusy, setDailyBusy] = useState(false);
-  const [recorded, setRecorded] = useState(false);
+  // 「已記錄」直接看穿著紀錄:身上每一件今天都記過才算。舊版是一個布林,只有今日推薦和「換成…」會清,
+  // 用隨機、衣架、復原、收藏、脫掉換了衣服,按鈕還卡在「已記錄」而且按不下去,真正穿出門的那套記不進去
+  // (2026-10-02 F14)。看紀錄而不是記在元件裡:重新整理、另一台記過、換頁再回來都對;隔天自然又能按。
+  const [wornDates, setWornDates] = useState(readWearLog);
+
+  // 衣櫃重讀過(別台刪掉、隱藏、改了名稱或分類):身上這套和復原紀錄逐件換成新的物件;
+  // 不見了或分類改了的拿掉,免得人台穿著已經刪掉的衣服,還被寫進收藏和穿著紀錄。沒變就不動 state。
+  useEffect(() => {
+    const byId = new Map(items.map((item) => [item.id, item]));
+    const remap = (outfit) => {
+      let changed = false;
+      const next = {};
+      for (const [slot, item] of Object.entries(outfit || {})) {
+        if (!item) continue;
+        const fresh = byId.get(item.id);
+        if (!fresh || fresh.part !== slot) { changed = true; continue; }
+        if (fresh !== item) changed = true;
+        next[slot] = fresh;
+      }
+      return changed ? next : outfit;
+    };
+    setWearing((current) => remap(current));
+    // Look 卡只在卡上的衣服不見了、分類改了或換了圖才換(別的衣服改名、同步重讀衣櫃不算),不然每次同步都重新合成、閃一下;
+    // 換了就連卡片上的品名一起重寫,下載的圖不會列出圖裡沒有的衣服。卡上的都沒了就關掉,不顯示「合成失敗」。
+    setCard((current) => {
+      if (!current) return current;
+      let changed = false;
+      const outfit = {};
+      for (const [slot, piece] of Object.entries(current.outfit || {})) {
+        if (!piece) continue;
+        const fresh = byId.get(piece.id);
+        if (!fresh || fresh.part !== slot) { changed = true; continue; }
+        if (fresh.image !== piece.image) changed = true;
+        outfit[slot] = fresh.image !== piece.image ? fresh : piece;
+      }
+      if (!changed) return current;
+      const names = Object.values(outfit).map((piece) => piece.name).filter(Boolean);
+      if (!names.length) return null;
+      return { ...current, outfit, caption: { ...current.caption, items: names.join(" · ") } };
+    });
+    setPast((stack) => {
+      const next = stack.map(remap);
+      return next.every((outfit, index) => outfit === stack[index]) ? stack : next;
+    });
+  }, [items]);
+  // 身上那格沒了:鎖和選取也跟著放掉
+  useEffect(() => {
+    setLocks((current) => {
+      const kept = Object.fromEntries(Object.entries(current).filter(([slot]) => wearing[slot]));
+      return Object.keys(kept).length === Object.keys(current).length ? current : kept;
+    });
+    setAdjusting((slot) => (slot && !wearing[slot] ? null : slot));
+  }, [wearing]);
+
+  // 別台的收藏、微調、穿著紀錄同步進來時,從 localStorage 重讀。舊版靠整頁重新整理,會把正在打的指令、
+  // 剛推薦的理由、人台上這套一起清掉,為了擋又疊了好幾層「忙碌時延後」,每層都帶出新的時序問題(2026-10-02)。
+  useEffect(() => {
+    const keep = (fresh) => (current) => (JSON.stringify(current) === JSON.stringify(fresh) ? current : fresh);
+    const onSynced = (event) => {
+      if (!event.detail?.keysChanged) return;
+      setLooks(keep(readLooks()));
+      setFits(keep(readFits()));
+      setWornDates(keep(readWearLog()));
+    };
+    window.addEventListener("wardrobe-synced", onSynced);
+    return () => window.removeEventListener("wardrobe-synced", onSynced);
+  }, []);
+  const today = new Date().toLocaleDateString("sv");
+  const recorded = wornItems.length > 0 && wornItems.every((item) => wornDates[item.id] === today);
   const weatherRef = useRef(null);               // 快取,同一次瀏覽不重抓
 
   // 今日推薦、「照場合挑」、「再正式一點」、「上衣留著其他重挑」全走這一條;差別只在帶進來的參數:
@@ -368,7 +473,6 @@ export function OutfitStudio({ items, initialOutfit = null }) {
   //   notes       要一起講給使用者聽的話(例如「已經最正式了」)
   const runRecommend = async (intent = null, pin = null, unknownRaw = null, useLocks = locks, notes = []) => {
     setDailyBusy(true);
-    setRecorded(false);
     try {
       if (!weatherRef.current) weatherRef.current = await fetchWeather();
       const weather = weatherRef.current;
@@ -469,7 +573,6 @@ export function OutfitStudio({ items, initialOutfit = null }) {
       if (!found) { setDaily({ understood: `換${label}`, reasons: [`櫃裡沒有${label}這一類的單品`] }); return; }
       const asked = `${req.color?.word ? `${req.color.word}色` : ""}${req.category || label}`;
       setAdjusting(null);
-      setRecorded(false);
       pushHistory(wearing); dirtyRef.current = true;
       setWearing((current) => ({ ...current, [req.slot]: found.item }));
       setDaily({
@@ -564,16 +667,16 @@ export function OutfitStudio({ items, initialOutfit = null }) {
 
   const wearToday = () => {
     if (!wornItems.length) return;
-    recordWear(wornItems);
-    setRecorded(true);
+    setWornDates(recordWear(wornItems));
   };
 
   const saveLook = () => {
     if (!wornItems.length) return;
     const look = { id: `look-${Date.now()}`, itemIds: wornItems.map((item) => item.id), savedAt: new Date().toISOString() };
-    const next = [look, ...looks].slice(0, 30);
+    const next = [look, ...readLooks()].slice(0, 30);
     setLooks(next);
     localStorage.setItem(LOOKS_KEY, JSON.stringify(next));
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));
   };
 
   const wearLook = (look) => {
@@ -588,9 +691,10 @@ export function OutfitStudio({ items, initialOutfit = null }) {
   };
 
   const deleteLook = (id) => {
-    const next = looks.filter((look) => look.id !== id);
+    const next = readLooks().filter((look) => look.id !== id);
     setLooks(next);
     localStorage.setItem(LOOKS_KEY, JSON.stringify(next));
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));
   };
 
   /* ---------- 選取框(在調整中的那件外圍) ---------- */
@@ -605,6 +709,24 @@ export function OutfitStudio({ items, initialOutfit = null }) {
       changed: !!fits[item.id],
     };
   })();
+
+  // 貼底列上方那一行:今日推薦講聽懂了什麼;指令(復原、換、鎖)沒有天氣,講結果,失敗的原因才看得到
+  const dockStatus = !daily ? ""
+    : daily.error ? daily.error
+    : daily.weather ? (daily.understood ? `聽你說的 ${daily.understood}` : "")
+    : [daily.understood, daily.reasons?.[0]].filter(Boolean).join(",");
+
+  // 主鈕和「今天穿這套」:桌機照舊分在第一層和第三層;手機搬進貼底的列(下面 studio-dock)
+  const recommendButton = (
+    <button type="button" className="studio-recommend" onClick={daily && !daily.error ? recommendAgain : recommendToday} disabled={dailyBusy}>
+      <Sparkle size={16} weight="regular" aria-hidden="true" /> {dailyBusy ? "推薦中…" : daily && !daily.error ? "再推薦一套" : "今日推薦"}
+    </button>
+  );
+  const wearTodayButton = (
+    <button type="button" className={`studio-wear-today${recorded ? " done" : ""}`} onClick={wearToday} disabled={!wornItems.length || recorded}>
+      <CalendarCheck size={15} weight="regular" aria-hidden="true" /> {recorded ? (phone ? "已記錄" : "已記錄,近幾天不再推薦") : "今天穿這套"}
+    </button>
+  );
 
   return (
     <div className="studio">
@@ -677,7 +799,9 @@ export function OutfitStudio({ items, initialOutfit = null }) {
             </div>
           )}
 
-          {!wornItems.length && <p className="studio-hint">從右邊點衣服穿上去</p>}
+          {/* 空人台的提示掛在框外緣下方(舊版疊在框底,剛好壓在雙腿上);不佔版面,下面的今日推薦不會被推出第一屏。
+              方向跟著排版:單欄時衣架在下面 */}
+          {!wornItems.length && <p className="studio-hint">{stacked ? "從下面點衣服穿上去" : "從右邊點衣服穿上去"}</p>}
         </div>
         {wearing.socks && <p className="studio-socks-note">襪子:{wearing.socks.name}</p>}
 
@@ -715,6 +839,8 @@ export function OutfitStudio({ items, initialOutfit = null }) {
             type="text"
             value={occasion}
             onChange={(event) => setOccasion(event.target.value)}
+            onFocus={focusOccasion}
+            onBlur={blurOccasion}
             placeholder="「約會」「換成黑色襯衫」「再正式一點」「上衣留著其他重挑」「上一步」"
             aria-label="輸入場合或指定要換的單品"
           />
@@ -776,13 +902,10 @@ export function OutfitStudio({ items, initialOutfit = null }) {
           </div>
         )}
 
-        {/* 動作分三層,只有「今日推薦」是 accent 實心:一眼看到主要下一步 */}
+        {/* 動作分三層,只有「今日推薦」是 accent 實心:一眼看到主要下一步。
+            手機上第一層和「今天穿這套」不在這裡,在最下面的貼底列。 */}
         <div className="studio-actions">
-          <div className="studio-actions-primary">
-            <button type="button" className="studio-recommend" onClick={daily && !daily.error ? recommendAgain : recommendToday} disabled={dailyBusy}>
-              <Sparkle size={16} weight="regular" aria-hidden="true" /> {dailyBusy ? "推薦中…" : daily && !daily.error ? "再推薦一套" : "今日推薦"}
-            </button>
-          </div>
+          {!phone && <div className="studio-actions-primary">{recommendButton}</div>}
           <div className="studio-actions-modify" role="group" aria-label="調整這套">
             <button type="button" onClick={randomize}>
               <ArrowsClockwise size={15} weight="regular" aria-hidden="true" /> 隨機一套
@@ -801,9 +924,7 @@ export function OutfitStudio({ items, initialOutfit = null }) {
             <button type="button" onClick={() => openCard(wearing, { understood: daily?.understood, weather: daily?.weather })} disabled={!wornItems.length} title="做成一張可分享的圖(不上傳)">
               <Export size={15} weight="regular" aria-hidden="true" /> 匯出這套
             </button>
-            <button type="button" className={`studio-wear-today${recorded ? " done" : ""}`} onClick={wearToday} disabled={!wornItems.length || recorded}>
-              <CalendarCheck size={15} weight="regular" aria-hidden="true" /> {recorded ? "已記錄,近幾天不再推薦" : "今天穿這套"}
-            </button>
+            {!phone && wearTodayButton}
           </div>
         </div>
 
@@ -890,13 +1011,25 @@ export function OutfitStudio({ items, initialOutfit = null }) {
         </div>
       </aside>
 
+      {/* 手機:貼在畫面底部的列。舊版這兩顆在人台下面一屏多,每換一套要捲下去按、再捲上來看(F23)。
+          放在 .studio 最後,sticky 才能從人台一路貼到衣架;打字時收起來,不跟 iOS 鍵盤搶位置。 */}
+      {phone && (
+        <div className={`studio-dock${typing ? " is-tucked" : ""}`} role="group" aria-label="推薦和記錄這套">
+          {/* 推薦的回饋(天氣抓不到、聽懂了什麼、復原或換衣服沒做到的原因)原本在指令框下面,手機上剛好被這一列蓋住,
+              按了像沒反應。推薦中照樣留著上一句,免得列高跳動。螢幕閱讀器念上面那份(.studio-daily),這裡藏起來不重念。 */}
+          {dockStatus && <p className={`studio-dock-status${daily?.error ? " is-error" : ""}`} aria-hidden="true">{dockStatus}</p>}
+          {recommendButton}
+          {wearTodayButton}
+        </div>
+      )}
+
       {card && (
         <LookCard
           outfit={card.outfit}
           caption={card.caption}
           fits={fits}
           slotStyle={SLOT_STYLE}
-          onClose={() => setCard(null)}
+          onClose={closeCard}
         />
       )}
     </div>

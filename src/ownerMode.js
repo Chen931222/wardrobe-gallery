@@ -31,7 +31,7 @@ export const CAN_EDIT = computeCanEdit();
    ?public 是「看訪客第一眼」的預覽,連新增也收起來。 */
 export const CAN_ADD = typeof window === "undefined" ? false : !new URLSearchParams(window.location.search).has("public");
 
-/** 輸入了站主的同步碼 = 站主的另一台裝置:記成擁有者模式,重新整理後看到跟另一台一樣的衣櫃。 */
+/** 輸入了站主的同步碼 = 站主的另一台裝置:記成擁有者模式;加入後重新載入一次,看到跟另一台一樣的衣櫃。 */
 export function becomeOwner() {
   remember(true);
 }
