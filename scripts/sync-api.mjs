@@ -1,6 +1,6 @@
 // [本 fork 新增] 開發伺服器上的 /api/sync,和線上共用 functions/_sync-core.mjs;資料放本機 .sync-dev/,不碰雲端。
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, join, relative } from "node:path";
 import { handleSync } from "../functions/_sync-core.mjs";
 
 const ROOT = join(process.cwd(), ".sync-dev");
@@ -15,6 +15,16 @@ const fileStore = {
   },
   async remove(paths) {
     await Promise.all(paths.map((path) => rm(join(ROOT, path), { force: true })));
+  },
+  async list(prefix) {
+    try {
+      const entries = await readdir(ROOT, { recursive: true, withFileTypes: true });
+      return entries.filter((entry) => entry.isFile())
+        .map((entry) => relative(ROOT, join(entry.parentPath, entry.name)).split("\\").join("/"))
+        .filter((path) => path.startsWith(prefix));
+    } catch {
+      return [];
+    }
   },
 };
 

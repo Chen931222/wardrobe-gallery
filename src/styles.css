@@ -1911,6 +1911,8 @@ h1, h2, h3 {
   color: var(--ink);
   user-select: all;
 }
+.studio-sync-manage { margin-top: 4px; }
+.studio-sync-manage .studio-backup-controls { margin-top: 10px; }
 
 /* 「說個場合」輸入 —— 沿用方形無圓角、--line/--surface/--ink 的設計系統 */
 .studio-occasion {

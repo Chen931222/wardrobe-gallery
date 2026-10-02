@@ -1,8 +1,8 @@
 // [本 fork 新增] /api/sync 的 Vercel function 入口:規則在 _sync-core.mjs,這裡只接上私有 Vercel Blob。
 // 線上由 tools/export-static.mjs 複製到 wardrobe-gallery/api/(底線開頭的 _sync-core 不會變成路由)。
-// 認證走 Vercel 自動給的 OIDC,程式碼和設定檔裡都沒有金鑰。
+// 認證由 Vercel 自動注入(連結空間時加的環境變數),程式碼和設定檔裡都沒有金鑰。
 
-import { del, get, put } from "@vercel/blob";
+import { del, get, list, put } from "@vercel/blob";
 import { handleSync } from "./_sync-core.mjs";
 
 const blobStore = {
@@ -22,7 +22,17 @@ const blobStore = {
     });
   },
   async remove(paths) {
-    await del(paths);
+    if (paths.length) await del(paths);
+  },
+  async list(prefix) {
+    const paths = [];
+    let cursor;
+    do {
+      const page = await list({ prefix, cursor, limit: 1000 });
+      paths.push(...page.blobs.map((blob) => blob.pathname));
+      cursor = page.hasMore ? page.cursor : undefined;
+    } while (cursor);
+    return paths;
   },
 };
 
@@ -36,3 +46,5 @@ const run = async (request) => {
 
 export const GET = run;
 export const PUT = run;
+export const POST = run;
+export const DELETE = run;
