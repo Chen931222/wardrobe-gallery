@@ -17,3 +17,6 @@ _insp.mjs
 
 # impeccable 設計審查快取(工具產物,不進版控)
 .impeccable/
+
+# 同步的開發用假雲端(scripts/sync-api.mjs)
+.sync-dev/

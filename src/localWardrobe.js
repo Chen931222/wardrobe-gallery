@@ -36,6 +36,8 @@ async function tx(mode, run) {
     });
   } finally {
     db.close();
+    // 給同步用:這台的衣服變了,過幾秒推上去(sync.js 監聽,同步自己寫入時會忽略)
+    if (mode === "readwrite" && typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));
   }
 }
 

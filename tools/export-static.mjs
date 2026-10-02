@@ -6,7 +6,7 @@
 // 用法:npx vite build && node tools/export-static.mjs → 產出 wardrobe-gallery/
 // 上線只能從 wardrobe-gallery/ 用 CLI 部署。repo 沒有 data/,Git 建置出來的站是空的,
 // 所以 vercel.json 關掉了 Git 自動部署(2026-09 線上版兩次被 push 觸發的建置蓋掉)。
-import { cp, mkdir, rm, readdir, readFile, copyFile } from "node:fs/promises";
+import { cp, mkdir, rm, readdir, readFile, copyFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -54,6 +54,12 @@ await cp(join(ROOT, "dist"), OUT, { recursive: true });
 // 唯一的 Vercel function:貼 GU／UNIQLO 連結時查品名(瀏覽器被對方 CORS 擋,只能從伺服器問)
 await mkdir(join(OUT, "api"), { recursive: true });
 await copyFile(join(ROOT, "functions", "brand-product.mjs"), join(OUT, "api", "brand-product.mjs"));
+// 同步:sync.mjs 是路由,_sync-core.mjs 底線開頭不會變成路由。function 要用 @vercel/blob,
+// 所以輸出資料夾放一份只列這個套件的 package.json,Vercel 部署時會自己裝。
+await copyFile(join(ROOT, "functions", "sync.mjs"), join(OUT, "api", "sync.mjs"));
+await copyFile(join(ROOT, "functions", "_sync-core.mjs"), join(OUT, "api", "_sync-core.mjs"));
+const blobVersion = JSON.parse(await readFile(join(ROOT, "node_modules", "@vercel", "blob", "package.json"), "utf8")).version;
+await writeFile(join(OUT, "package.json"), JSON.stringify({ private: true, type: "module", dependencies: { "@vercel/blob": blobVersion } }, null, 2) + "\n");
 
 const dataDir = join(OUT, "data");
 await mkdir(join(dataDir, "library"), { recursive: true });

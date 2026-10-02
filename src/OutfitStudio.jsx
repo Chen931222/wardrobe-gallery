@@ -4,6 +4,8 @@ import { ArrowCounterClockwise, ArrowsClockwise, CalendarCheck, Export, FloppyDi
 import { adjustIntent, fetchWeather, findItemForSwap, parseRequest, readWearLog, recommendOutfit, recordWear } from "./recommend.js";
 import { buildBackup, downloadBackup, restoreBackup } from "./backup.js";
 import { LookCard } from "./LookCard.jsx";
+import { SyncPanel } from "./SyncPanel.jsx";
+import { CAN_EDIT } from "./ownerMode.js";
 
 // 搭配工作室:把去背衣物疊在人形上組穿搭。
 //
@@ -844,6 +846,9 @@ export function OutfitStudio({ items, initialOutfit = null }) {
           </div>
         )}
 
+        {/* 同步只給站主:用的是站主的免費雲端額度 */}
+        {CAN_EDIT && <SyncPanel />}
+
         {/* 紀錄備份:資料 local-first,換裝置或防 iOS 清 storage 前先匯出,到新裝置匯入。全程本機。 */}
         <div className="studio-backup">
           <div className="studio-backup-controls">
@@ -853,7 +858,7 @@ export function OutfitStudio({ items, initialOutfit = null }) {
             <input ref={backupFileRef} type="file" accept="application/json,.json" onChange={importBackup} hidden />
           </div>
           {backupMsg && <p className="studio-backup-msg" role="status">{backupMsg}</p>}
-          <p className="studio-backup-note">穿著紀錄、收藏、微調都只存在這台瀏覽器。換裝置或清資料前先「匯出」,到新裝置「匯入」。全程本機,不上傳。</p>
+          <p className="studio-backup-note">備份檔存在你自己手上,不經過雲端。沒開同步的話,穿著紀錄、收藏、微調只在這台瀏覽器,換裝置或清資料前先「匯出」,到新裝置「匯入」。同步碼不會寫進備份檔。</p>
         </div>
       </div>
 

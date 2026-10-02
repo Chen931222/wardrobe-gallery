@@ -1,0 +1,233 @@
+// [本 fork 新增] 用同步碼讓手機、平板、電腦看到同一個衣櫃。
+//
+// 同步的是「自己加的」:IndexedDB 裡的衣服(含想買的、去背圖)和下面 SYNC_KEYS 那幾份 localStorage
+// (穿著紀錄、收藏、微調、正在穿、對 104 件的編輯與隱藏)。站主那 104 件本來就在網站上,不用同步。
+//
+// 合併是三方的:手上這台、雲端、上次同步完的樣子(存在 BASE_KEY)。只有一邊改過就取那一邊;
+// 兩邊都改過同一件時,剛輸入同步碼的那台讓雲端贏(加入別人的衣櫃),之後讓手上這台贏。
+// 編輯、隱藏這類一整包 JSON 的,再往下一層逐項合,兩台各改不同件時不會互相蓋掉。
+
+import { deleteLocalItem, dumpLocalRecords, putLocalRecord } from "./localWardrobe.js";
+
+const CODE_KEY = "open-wardrobe-sync-code";
+const BASE_KEY = "open-wardrobe-sync-base";
+const LAST_KEY = "open-wardrobe-sync-last";
+const SYNC_KEYS = [
+  "open-wardrobe-wearlog-v1", "open-wardrobe-looks-v1", "open-wardrobe-fit-v1",
+  "open-wardrobe-edits-v1", "open-wardrobe-deleted-v1",
+];
+// 不同步「身上這套」(open-wardrobe-wearing-v1):搭配頁每換一件就寫一次,同步它會把免費寫入額度
+// (每月 2,000 次)燒在試穿上,而且兩台各自試穿本來就不該互相干擾。
+const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+function storageGet(key) {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function storageSet(key, value) {
+  try { value === null ? localStorage.removeItem(key) : localStorage.setItem(key, value); } catch { /* 私密瀏覽 */ }
+}
+
+export function newSyncCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return [...bytes].map((byte) => ALPHABET[byte % 32]).join("");
+}
+export const normalizeCode = (text) => String(text || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+export const formatCode = (code) => (code.match(/.{1,4}/g) || []).join("-");
+export const isValidCode = (code) => /^[A-HJ-NP-Z2-9]{16}$/.test(code);
+
+export const syncCode = () => storageGet(CODE_KEY);
+export const lastSynced = () => storageGet(LAST_KEY);
+
+export function setSyncCode(code) {
+  storageSet(CODE_KEY, code);
+  storageSet(BASE_KEY, null);       // 換一組碼 = 重新加入,沒有「上次同步」可比
+  storageSet(LAST_KEY, null);
+}
+export function stopSync() {
+  setSyncCode(null);
+}
+
+/* ---------- 比對工具 ---------- */
+
+const stable = (value) => JSON.stringify(value, (key, inner) => (
+  inner && typeof inner === "object" && !Array.isArray(inner)
+    ? Object.fromEntries(Object.keys(inner).sort().map((name) => [name, inner[name]]))
+    : inner
+));
+const same = (a, b) => stable(a ?? null) === stable(b ?? null);
+
+async function sha256(blob) {
+  const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** 這台現在的樣子。圖用內容雜湊代表,每次重算(換過圖就會不同,不靠記錄)。 */
+async function snapshot() {
+  const items = {}, blobs = {};
+  for (const { blob, ...meta } of await dumpLocalRecords()) {
+    const img = blob ? await sha256(blob) : null;
+    items[meta.id] = { meta, img };
+    if (img) blobs[img] = blob;
+  }
+  const keys = {};
+  for (const key of SYNC_KEYS) {
+    const value = storageGet(key);
+    if (value !== null) keys[key] = value;
+  }
+  return { items, keys, blobs };
+}
+
+/* 兩邊都改過同一份 JSON 時往下一層合:物件逐欄、字串陣列取聯集再扣掉某一邊刪掉的。 */
+function mergeJsonText(local, base, remote) {
+  let l, b, r;
+  try { l = JSON.parse(local); r = JSON.parse(remote); b = base == null ? null : JSON.parse(base); } catch { return local; }
+  if (Array.isArray(l) && Array.isArray(r) && l.every((x) => typeof x !== "object") && r.every((x) => typeof x !== "object")) {
+    const was = new Set(Array.isArray(b) ? b : []);
+    const removed = new Set([...was].filter((x) => !l.includes(x) || !r.includes(x)));
+    return JSON.stringify([...new Set([...l, ...r])].filter((x) => !removed.has(x)));
+  }
+  if (l && r && typeof l === "object" && typeof r === "object" && !Array.isArray(l) && !Array.isArray(r)) {
+    const was = b && typeof b === "object" && !Array.isArray(b) ? b : {};
+    const out = {};
+    for (const name of new Set([...Object.keys(l), ...Object.keys(r), ...Object.keys(was)])) {
+      const pick = same(l[name], r[name]) ? l[name]
+        : same(l[name], was[name]) ? r[name]
+        : l[name];                                  // 這一欄兩邊都改了:手上這台贏
+      if (pick !== undefined) out[name] = pick;
+    }
+    return JSON.stringify(out);
+  }
+  return local;
+}
+
+/** 三方合併一個表。回傳合併結果,以及哪些要寫回這台。 */
+function merge3(local, base, remote, { remoteWins, deep }) {
+  const result = {}, pull = [];
+  for (const id of new Set([...Object.keys(local), ...Object.keys(base), ...Object.keys(remote)])) {
+    const l = local[id], b = base[id], r = remote[id];
+    let pick;
+    if (same(l, r)) pick = l;
+    else if (same(l, b)) pick = r;
+    else if (same(r, b)) pick = l;
+    else if (deep && l !== undefined && r !== undefined) pick = mergeJsonText(l, b, r);
+    else pick = remoteWins ? r : l;
+    if (pick !== undefined) result[id] = pick;
+    if (!same(pick, l)) pull.push(id);
+  }
+  return { result, pull };
+}
+
+/* ---------- 網路 ---------- */
+
+async function api(code, { method = "GET", img, body, type } = {}) {
+  const url = img ? `/api/sync?img=${img}` : "/api/sync";
+  const response = await fetch(url, {
+    method,
+    headers: { "X-Sync-Code": code, ...(type ? { "Content-Type": type } : {}) },
+    body,
+    signal: AbortSignal.timeout(20000),
+  });
+  return response;
+}
+
+async function readJson(response) {
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok && response.status !== 409) throw new Error(data.error || `同步服務回 ${response.status}`);
+  return data;
+}
+
+/** 這台跟上次同步比有沒有改過(不連網,用來決定要不要上傳)。 */
+export async function hasLocalChanges() {
+  const base = JSON.parse(storageGet(BASE_KEY) || "null");
+  if (!base) return true;
+  const { items, keys } = await snapshot();
+  return !same(items, base.items) || !same(keys, base.keys);
+}
+
+let running = null;
+let timer = null;
+
+/**
+ * 跑一次同步,跑完發 wardrobe-synced 事件(detail: { pulled, pushed, keysChanged, error, at }),
+ * App 聽到就重新整理畫面;同一時間只跑一個,再叫一次會等前一個結束。
+ */
+export function syncNow() {
+  if (!running) {
+    running = runSync()
+      .then((result) => ({ ...result, error: null }))
+      .catch((error) => ({ pulled: 0, pushed: 0, keysChanged: false, error: error?.message || String(error) }))
+      .then((result) => {
+        window.dispatchEvent(new CustomEvent("wardrobe-synced", { detail: { ...result, at: lastSynced() } }));
+        return result;
+      })
+      .finally(() => { running = null; });
+  }
+  return running;
+}
+
+/** 衣服剛改過:等 5 秒再同步,連續改好幾件只傳一次。同步自己寫回這台時不算。 */
+export function scheduleSync() {
+  if (running || !syncCode()) return;
+  clearTimeout(timer);
+  timer = setTimeout(() => { timer = null; syncNow(); }, 5000);
+}
+
+async function runSync() {
+  const code = syncCode();
+  if (!code) return { pulled: 0, pushed: 0, keysChanged: false };
+  let pulled = 0, pushed = 0, keysChanged = false;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const saved = JSON.parse(storageGet(BASE_KEY) || "null");
+    const joining = !saved;
+    const base = saved || { items: {}, keys: {} };
+    const remote = await readJson(await api(code));
+    const mine = await snapshot();
+
+    const items = merge3(mine.items, base.items, remote.items || {}, { remoteWins: joining });
+    const keys = merge3(mine.keys, base.keys, remote.keys || {}, { remoteWins: joining, deep: true });
+
+    // 1) 先把要上傳的圖傳上去,清單才不會指到雲端沒有的圖
+    const cloudImages = new Set(Object.values(remote.items || {}).map((entry) => entry.img));
+    const needUpload = !same(items.result, remote.items || {}) || !same(keys.result, remote.keys || {});
+    if (needUpload) {
+      for (const entry of Object.values(items.result)) {
+        if (!entry.img || cloudImages.has(entry.img) || !mine.blobs[entry.img]) continue;
+        const response = await api(code, { method: "PUT", img: entry.img, body: mine.blobs[entry.img], type: "image/png" });
+        await readJson(response);
+        cloudImages.add(entry.img);
+      }
+      const response = await api(code, {
+        method: "PUT", type: "application/json",
+        body: JSON.stringify({ baseRev: remote.rev || 0, items: items.result, keys: keys.result }),
+      });
+      if (response.status === 409) continue;          // 另一台剛寫過:用新的雲端重新合一次
+      const { rev } = await readJson(response);
+      remote.rev = rev;
+      pushed += 1;
+    }
+
+    // 2) 寫回這台
+    for (const id of items.pull) {
+      const entry = items.result[id];
+      if (!entry) { await deleteLocalItem(id); pulled += 1; continue; }
+      let blob = entry.img ? mine.blobs[entry.img] : null;
+      if (entry.img && !blob) {
+        const response = await api(code, { img: entry.img });
+        if (!response.ok) throw new Error(`下載「${entry.meta.name || id}」的圖失敗`);
+        blob = await response.blob();
+      }
+      await putLocalRecord({ ...entry.meta, blob });
+      pulled += 1;
+    }
+    for (const key of keys.pull) {
+      storageSet(key, keys.result[key] ?? null);
+      keysChanged = true;
+    }
+
+    storageSet(BASE_KEY, JSON.stringify({ rev: remote.rev || 0, items: items.result, keys: keys.result }));
+    storageSet(LAST_KEY, new Date().toISOString());
+    return { pulled, pushed, keysChanged };
+  }
+  throw new Error("另一台一直在同步,等一下再試");
+}

@@ -7,6 +7,7 @@ import { LandingRing } from "./LandingRing.jsx";
 import { AddGarment } from "./AddGarment.jsx";
 import { cleanUrl, deleteLocalItem, loadLocalItems, productUrlProblem, updateLocalItem } from "./localWardrobe.js";
 import { CAN_ADD, CAN_EDIT, canEditItem } from "./ownerMode.js";
+import { hasLocalChanges, scheduleSync, syncCode, syncNow } from "./sync.js";
 import { findSimilar, fitOf, guessWarmth, kindLabel, wishOutfits } from "./wishCheck.js";
 
 const STORAGE_KEY = "open-wardrobe-edits-v1";
@@ -746,6 +747,30 @@ export function App() {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // 同步:打開時、切回來時拉一次;離開(切到別的 app)前有改過就推;衣服一改,5 秒後推。
+  // 另一台改了穿著紀錄、收藏這類 localStorage 的,各元件只在載入時讀,所以整頁重新整理。
+  useEffect(() => {
+    if (!CAN_EDIT) return undefined;
+    const onSynced = (event) => {
+      if (event.detail.keysChanged) window.location.reload();
+      else if (event.detail.pulled) refresh();
+    };
+    const onVisibility = () => {
+      if (!syncCode()) return;
+      if (document.visibilityState === "visible") syncNow();
+      else hasLocalChanges().then((dirty) => { if (dirty) syncNow(); }).catch(() => {});
+    };
+    window.addEventListener("wardrobe-synced", onSynced);
+    window.addEventListener("wardrobe-local-change", scheduleSync);
+    document.addEventListener("visibilitychange", onVisibility);
+    if (syncCode()) syncNow();
+    return () => {
+      window.removeEventListener("wardrobe-synced", onSynced);
+      window.removeEventListener("wardrobe-local-change", scheduleSync);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [refresh]);
 
   const selectedItem = items.find((item) => item.id === selectedId) || null;
   // 自己加、按了「已經買了」的衣服沒有保暖度,推薦引擎會整件跳過;從品名補一個。想買的不補,免得被當成已經有的拿去配

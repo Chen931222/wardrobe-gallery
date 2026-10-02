@@ -5,6 +5,7 @@ import { dumpLocalRecords, putLocalRecord } from "./localWardrobe.js";
 
 const FORMAT = "open-wardrobe-backup";
 const LS_PREFIX = "open-wardrobe-";
+const SYNC_PREFIX = "open-wardrobe-sync-";
 
 function blobToDataUrl(blob) {
   return new Promise((resolve, reject) => {
@@ -20,7 +21,8 @@ export async function buildBackup() {
   const local = {};
   for (let i = 0; i < localStorage.length; i += 1) {
     const key = localStorage.key(i);
-    if (key && key.startsWith(LS_PREFIX)) local[key] = localStorage.getItem(key);
+    // 同步碼不進備份檔:檔案傳來傳去,碼跟著外流就等於把衣櫃交出去
+    if (key && key.startsWith(LS_PREFIX) && !key.startsWith(SYNC_PREFIX)) local[key] = localStorage.getItem(key);
   }
   const records = await dumpLocalRecords();
   const items = await Promise.all(records.map(async ({ blob, ...rest }) => ({
@@ -46,7 +48,7 @@ export async function restoreBackup(backup) {
   if (!backup || backup.format !== FORMAT) throw new Error("這不是衣櫃備份檔");
   if (backup.local && typeof backup.local === "object") {
     for (const [key, value] of Object.entries(backup.local)) {
-      if (key.startsWith(LS_PREFIX) && typeof value === "string") localStorage.setItem(key, value);
+      if (key.startsWith(LS_PREFIX) && !key.startsWith(SYNC_PREFIX) && typeof value === "string") localStorage.setItem(key, value);
     }
   }
   for (const item of backup.items || []) {
