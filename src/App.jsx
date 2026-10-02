@@ -798,6 +798,12 @@ export function App() {
       : activeType === "wishlist" ? closetItems.filter((item) => item.wishlist)
       : closetItems.filter((item) => item.part === activeType);
     return [...filtered].sort((a, b) => {
+      // 自己加的排最前面,越新越前面;站主那批沒有建立時間,接在後面照原本的類型順序
+      if (a.createdAt || b.createdAt) {
+        if (!a.createdAt) return 1;
+        if (!b.createdAt) return -1;
+        return b.createdAt.localeCompare(a.createdAt);
+      }
       if (activeType === "all" || activeType === "wishlist") {
         const typeDifference = (TYPE_ORDER[a.part] ?? 99) - (TYPE_ORDER[b.part] ?? 99);
         if (typeDifference) return typeDifference;
