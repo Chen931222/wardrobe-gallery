@@ -21,6 +21,22 @@ function kindOf(item) {
   return null;
 }
 
+/* 版型,從品名和英文標籤猜。只有衣服、褲子、外套才分;兩件都認得出又不一樣,就不算像
+   (寬版牛仔褲跟直筒牛仔褲穿起來是兩回事)。「鬆緊」是褲頭、「鬆餅」是布紋,都不算寬。 */
+const FITS = [
+  ["寬版", /寬|oversize|落肩|廓形|垂墜|baggy|wide-leg|relaxed/i],
+  ["直筒", /直筒|straight/i],
+  ["合身", /合身|修身|窄|緊身|錐形|束口|slim|skinny|tapered|jogger/i],
+];
+const FIT_PARTS = ["upperbody", "lowerbody", "wholebody_up"];
+
+export function fitOf(item) {
+  if (!FIT_PARTS.includes(item.part)) return null;
+  const text = `${item.name || ""} ${(item.tags || []).join(" ")}`;
+  for (const [fit, pattern] of FITS) if (pattern.test(text)) return fit;
+  return null;
+}
+
 /* sRGB → CIELAB,用 ΔE 比兩個顏色:比 RGB 直接相減更接近眼睛看到的差別。 */
 function lab(hex) {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
@@ -47,18 +63,20 @@ function colorGap(a, b) {
    黑對深藍 12.6–13.6、白對米色 21.9 不算(畫面上寫的是「同色」,不能把深藍說成黑)。 */
 const SIMILAR_GAP = 10;
 
-/** 櫃裡同分類、同款式(認得出的話)、主色接近的,越像排越前面。 */
+/** 櫃裡同分類、同款式、同版型(認得出的話)、主色接近的。版型確定一樣的排前面,其次看顏色多近。 */
 export function findSimilar(wish, owned) {
   const wishKind = kindOf(wish);
+  const wishFit = fitOf(wish);
   return owned
     .filter((item) => item.part === wish.part)
     .filter((item) => {
       const kind = kindOf(item);
       return !wishKind || !kind || kind === wishKind;
     })
-    .map((item) => ({ item, gap: colorGap(wish.color, item.color) }))
+    .map((item) => ({ item, fit: fitOf(item), gap: colorGap(wish.color, item.color) }))
+    .filter(({ fit }) => !wishFit || !fit || fit === wishFit)
     .filter(({ gap }) => gap <= SIMILAR_GAP)
-    .sort((a, b) => a.gap - b.gap)
+    .sort((a, b) => Number(Boolean(wishFit) && b.fit === wishFit) - Number(Boolean(wishFit) && a.fit === wishFit) || a.gap - b.gap)
     .map(({ item }) => item);
 }
 
@@ -66,8 +84,8 @@ export function kindLabel(item) {
   return kindOf(item) || { upperbody: "上衣", lowerbody: "下身", wholebody_up: "外套", shoes: "鞋", bag: "包", socks: "襪子", eyewear: "眼鏡", wrist: "錶" }[item.part] || "單品";
 }
 
-/* 想買的衣服沒有保暖度(那是離線流程替衣櫃補的),從品名猜。1 最薄、5 最厚,跟衣櫃同一把尺。 */
-function guessWarmth(item) {
+/* 自己加的衣服(想買的、按了「已經買了」的)沒有保暖度(那是離線流程替衣櫃補的),從品名猜。1 最薄、5 最厚,跟衣櫃同一把尺。 */
+export function guessWarmth(item) {
   const name = item.name || "";
   switch (item.part) {
     case "wholebody_up":

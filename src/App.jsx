@@ -7,7 +7,7 @@ import { LandingRing } from "./LandingRing.jsx";
 import { AddGarment } from "./AddGarment.jsx";
 import { cleanUrl, deleteLocalItem, loadLocalItems, productUrlProblem, updateLocalItem } from "./localWardrobe.js";
 import { CAN_EDIT } from "./ownerMode.js";
-import { findSimilar, kindLabel, wishOutfits } from "./wishCheck.js";
+import { findSimilar, fitOf, guessWarmth, kindLabel, wishOutfits } from "./wishCheck.js";
 
 const STORAGE_KEY = "open-wardrobe-edits-v1";
 const DELETED_STORAGE_KEY = "open-wardrobe-deleted-v1";
@@ -443,6 +443,8 @@ function WishCheck({ item, owned, onOpen, onWearOutfit }) {
   const similar = useMemo(() => findSimilar(item, owned), [item, owned]);
   const plan = useMemo(() => wishOutfits(item, owned), [item, owned]);
   const kind = kindLabel(item);
+  const fit = fitOf(item);
+  const sameFit = fit ? similar.filter((piece) => fitOf(piece) === fit).length : 0;
 
   return (
     <div className="wish-check">
@@ -450,7 +452,10 @@ function WishCheck({ item, owned, onOpen, onWearOutfit }) {
         <h3 id={`wish-similar-${item.id}`}>櫃裡很像的</h3>
         {similar.length ? (
           <>
-            <p>已經有 {similar.length} 件同色的{kind}。</p>
+            <p>
+              已經有 {similar.length} 件同色的{kind}
+              {fit && (sameFit === similar.length ? `,都是${fit}` : sameFit ? `,其中 ${sameFit} 件也是${fit}` : `,版型看不出是不是${fit}`)}。
+            </p>
             <div className="wish-thumbs">
               {similar.slice(0, 4).map((piece) => (
                 <button key={piece.id} type="button" onClick={() => onOpen(piece.id)} aria-label={`查看${piece.name}`} title={piece.name}>
@@ -461,7 +466,7 @@ function WishCheck({ item, owned, onOpen, onWearOutfit }) {
             </div>
           </>
         ) : (
-          <p>櫃裡沒有同色的{kind},這件不重複。</p>
+          <p>櫃裡沒有同色{fit ? `、同樣${fit}` : ""}的{kind},這件不重複。</p>
         )}
       </section>
 
@@ -743,7 +748,9 @@ export function App() {
   useEffect(() => { refresh(); }, [refresh]);
 
   const selectedItem = items.find((item) => item.id === selectedId) || null;
-  const ownedItems = useMemo(() => items.filter((item) => !item.wishlist), [items]);
+  // 自己加、按了「已經買了」的衣服沒有保暖度,推薦引擎會整件跳過;從品名補一個。想買的不補,免得被當成已經有的拿去配
+  const wearItems = useMemo(() => items.map((item) => !item.wishlist && item.warmth === undefined ? { ...item, warmth: guessWarmth(item) } : item), [items]);
+  const ownedItems = useMemo(() => wearItems.filter((item) => !item.wishlist), [wearItems]);
   const wishCount = items.length - ownedItems.length;
 
   const visibleItems = useMemo(() => {
@@ -852,7 +859,7 @@ export function App() {
         )}
 
         {view === "styling" && !loading && !!items.length && (
-          <OutfitStudio items={items} initialOutfit={pendingOutfit} />
+          <OutfitStudio items={wearItems} initialOutfit={pendingOutfit} />
         )}
 
         {view === "closet" && !!items.length && (
