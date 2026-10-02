@@ -1471,6 +1471,16 @@ h1, h2, h3 {
   outline: 2px solid var(--accent); outline-offset: 1px;
 }
 
+/* 存檔前的重複提醒:不擋,只是把已經有的擺出來給你看 */
+.add-dupe {
+  padding: 12px;
+  border: 1px solid var(--accent);
+  background: var(--paper);
+}
+.add-panel .add-dupe p { font-size: 13px; line-height: 1.6; color: var(--ink); }
+.add-dupe-thumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.add-dupe-thumbs img { width: 52px; height: 52px; object-fit: contain; background: var(--surface); border: 1px solid var(--line); }
+.add-dupe-thumbs span { font-size: 12px; color: var(--muted); }
 .add-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .add-actions .primary-button:disabled { opacity: .45; cursor: default; }
 

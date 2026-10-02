@@ -909,7 +909,12 @@ export function App() {
           <div className="gallery-meta-row">
             <p className="piece-count">{ownedItems.length} 件單品{wishCount > 0 && <span className="piece-count-wish"> · 想買 {wishCount}</span>}</p>
             <div className="header-tools">
-              {CAN_ADD && <AddGarment onAdded={() => { if (!CAN_EDIT) setClosetChoice("mine"); refresh(); }} />}
+              {CAN_ADD && (
+                <AddGarment
+                  existing={closet === "all" ? items : items.filter((item) => item.isLocal)}
+                  onAdded={() => { if (!CAN_EDIT) setClosetChoice("mine"); refresh(); }}
+                />
+              )}
               <nav className="view-nav" aria-label="切換頁面">
                 <button type="button" onClick={() => setView("landing")}>入口</button>
                 <button type="button" className={view === "closet" ? "active" : ""} onClick={() => setView("closet")}>衣櫃</button>

@@ -1,8 +1,9 @@
 // [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Plus, SpinnerGap, X } from "@phosphor-icons/react";
 import { cleanUrl, cropBlob, deleteLocalItem, dominantColor, productUrlProblem, refillGaps, saveLocalItem, trimTransparent } from "./localWardrobe.js";
 import { fetchBrandProduct, parseBrandLink, partFromName, partFromProduct } from "./brandLink.js";
+import { findSimilar, kindLabel } from "./wishCheck.js";
 
 const PARTS = [
   { id: "upperbody", label: "上衣" },
@@ -101,7 +102,10 @@ function ImagePicker({ images, onPick }) {
   );
 }
 
-export function AddGarment({ onAdded }) {
+/**
+ * @param existing 這個衣櫃已經有的(含想買的),存檔前拿來比對有沒有重複;站主是全部,訪客只有自己加的
+ */
+export function AddGarment({ onAdded, existing = [] }) {
   const inputRef = useRef(null);
   const [stage, setStage] = useState("idle"); // idle | source | pick | crop | working | review
   const [status, setStatus] = useState("");
@@ -202,6 +206,18 @@ export function AddGarment({ onAdded }) {
   const tooSmall = box.w < 0.05 || box.h < 0.05;
   const urlError = draft ? productUrlProblem(draft.sourceUrl) : "";
   const urlInvalid = Boolean(urlError);
+
+  // 防呆:同一個商品連結貼第二次,或櫃裡已經有同款同色的,存之前先講(不擋,按鈕改成「還是要存」)
+  const draftUrl = draft?.wishlist ? cleanUrl(draft.sourceUrl) : null;
+  const sameLink = useMemo(
+    () => (draftUrl ? existing.find((item) => item.sourceUrl && cleanUrl(item.sourceUrl) === draftUrl) : null),
+    [draftUrl, existing],
+  );
+  const similar = useMemo(
+    () => (draft?.part ? findSimilar({ part: draft.part, name: draft.name, color: draft.color }, existing) : []),
+    [draft?.part, draft?.name, draft?.color, existing],
+  );
+  const dupes = sameLink ? [sameLink] : similar;
 
   const save = async () => {
     await saveLocalItem({
@@ -396,13 +412,29 @@ export function AddGarment({ onAdded }) {
             )}
 
             {draft.wishlist && (
-              <small className="add-hint">品牌的照片只存在這台裝置,不會出現在公開的衣櫃。</small>
+              <small className="add-hint">品牌的照片不會出現在公開的衣櫃;開了同步的話,雲端只存加密過的一份。</small>
+            )}
+
+            {dupes.length > 0 && (
+              <div className="add-dupe" role="status">
+                <p>
+                  {sameLink
+                    ? `這個連結已經加過了:「${sameLink.name}」${sameLink.wishlist ? ",在想買的裡" : ""}。`
+                    : `櫃裡已經有 ${similar.length} 件同色的${kindLabel({ part: draft.part, name: draft.name })},確定還要再加?`}
+                </p>
+                <div className="add-dupe-thumbs">
+                  {dupes.slice(0, 4).map((item) => (
+                    <img key={item.id} src={item.thumbnail || item.image} alt={item.name} title={item.name} />
+                  ))}
+                  {dupes.length > 4 && <span>還有 {dupes.length - 4} 件</span>}
+                </div>
+              </div>
             )}
 
             <div className="add-actions">
               <button type="button" className="secondary-button" onClick={reset}>取消</button>
               <button type="button" className="primary-button" onClick={save} disabled={urlInvalid || !draft.part}>
-                {draft.wishlist ? "放進想買的" : "加入衣櫃"}
+                {dupes.length ? "還是要存" : draft.wishlist ? "放進想買的" : "加入衣櫃"}
               </button>
             </div>
           </div>
