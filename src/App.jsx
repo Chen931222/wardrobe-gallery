@@ -6,7 +6,7 @@ import { OutfitStudio } from "./OutfitStudio.jsx";
 import { LandingRing } from "./LandingRing.jsx";
 import { AddGarment } from "./AddGarment.jsx";
 import { cleanUrl, deleteLocalItem, loadLocalItems, productUrlProblem, updateLocalItem } from "./localWardrobe.js";
-import { CAN_EDIT } from "./ownerMode.js";
+import { CAN_ADD, CAN_EDIT, canEditItem } from "./ownerMode.js";
 import { findSimilar, fitOf, guessWarmth, kindLabel, wishOutfits } from "./wishCheck.js";
 
 const STORAGE_KEY = "open-wardrobe-edits-v1";
@@ -186,7 +186,7 @@ function GalleryItem({ item, selected, onOpen, onDelete }) {
         />
         {item.wishlist && <span className="wish-badge">想買</span>}
       </button>
-      {CAN_EDIT && (
+      {canEditItem(item) && (
         <button
           className="gallery-delete"
           type="button"
@@ -687,7 +687,7 @@ function ItemViewer({ item, owned, onClose, onSave, onDelete, onWear, onBought, 
             <WishCheck item={item} owned={owned} onOpen={onOpen} onWearOutfit={onWearOutfit} />
           </div>
         )}
-        {CAN_EDIT ? (
+        {canEditItem(item) ? (
           <>
             <ItemEditor
               draft={draft}
@@ -826,7 +826,7 @@ export function App() {
           <div className="gallery-meta-row">
             <p className="piece-count">{ownedItems.length} 件單品{wishCount > 0 && <span className="piece-count-wish"> · 想買 {wishCount}</span>}</p>
             <div className="header-tools">
-              {CAN_EDIT && <AddGarment onAdded={refresh} />}
+              {CAN_ADD && <AddGarment onAdded={refresh} />}
               <nav className="view-nav" aria-label="切換頁面">
                 <button type="button" onClick={() => setView("landing")}>入口</button>
                 <button type="button" className={view === "closet" ? "active" : ""} onClick={() => setView("closet")}>衣櫃</button>
@@ -855,7 +855,7 @@ export function App() {
         {error && <p className="status error">{error}</p>}
         {view !== "landing" && !error && loading && <p className="status">衣櫃載入中</p>}
         {!error && !loading && !items.length && (
-          <p className="status empty">{CAN_EDIT ? "拖曳、貼上或新增照片,匯入你的第一件衣服。" : "這個衣櫃還沒有單品。"}</p>
+          <p className="status empty">{CAN_ADD ? "拖曳、貼上或新增照片,匯入你的第一件衣服。" : "這個衣櫃還沒有單品。"}</p>
         )}
 
         {view === "styling" && !loading && !!items.length && (
