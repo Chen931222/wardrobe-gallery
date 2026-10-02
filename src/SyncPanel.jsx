@@ -1,5 +1,8 @@
-// [本 fork 新增] 搭配頁底下的「同步」:開通、加入、換新碼、刪除雲端。規則在 sync.js。
+// [本 fork 新增] 入口右上「同步」打開的面板:開通、加入、換新碼、刪除雲端。規則在 sync.js。
+// 訪客(canStart=false)只能「輸入同步碼」:開通只給站主,不然陌生人先按就把唯一的開通名額拿走了。
+// 訪客輸入站主的碼 = 站主的另一台,加入後切成擁有者模式並重新整理,看到跟另一台一樣的衣櫃。
 import { useEffect, useState } from "react";
+import { becomeOwner } from "./ownerMode.js";
 import {
   deleteCloud, formatCode, isValidCode, joinSync, lastSynced, normalizeCode, rotateCode,
   startSync, stopSync, syncCode, syncNotice, syncNow,
@@ -13,11 +16,11 @@ const timeText = (iso) => {
     : date.toLocaleString("zh-TW", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 };
 
-export function SyncPanel() {
+export function SyncPanel({ canStart = true }) {
   const [code, setCode] = useState(syncCode);
   const [status, setStatus] = useState(() => (syncNotice() ? { error: syncNotice() } : lastSynced() ? { at: lastSynced() } : null));
   const [busy, setBusy] = useState("");
-  const [joining, setJoining] = useState(false);
+  const [joining, setJoining] = useState(!canStart);
   const [typed, setTyped] = useState("");
   const [showCode, setShowCode] = useState(false);
 
@@ -50,7 +53,11 @@ export function SyncPanel() {
     if (!isValidCode(next)) { setStatus({ error: "同步碼是 16 個英文字母和數字,再對一次" }); return; }
     act("加入中…", async () => {
       const result = await joinSync(next);
-      if (!result.error) { setJoining(false); setTyped(""); }
+      if (!result.error) {
+        setJoining(false);
+        setTyped("");
+        if (!canStart) { becomeOwner(); window.location.replace(window.location.pathname); }   // 拿掉 ?edit=off、?public 這類參數,不然又被切回訪客
+      }
       return result;
     });
   };
@@ -75,8 +82,8 @@ export function SyncPanel() {
 
   return (
     <div className="studio-sync">
+      {(code || canStart) && (
       <div className="studio-backup-controls">
-        <span className="studio-backup-label">同步</span>
         {code ? (
           <>
             <button type="button" disabled={Boolean(busy)} onClick={() => act("同步中…", syncNow)}>{busy || "立即同步"}</button>
@@ -84,12 +91,15 @@ export function SyncPanel() {
             <button type="button" disabled={Boolean(busy)} onClick={stop}>停止</button>
           </>
         ) : (
-          <>
-            <button type="button" disabled={Boolean(busy)} onClick={() => act("開通中…", startSync)}>{busy && !joining ? busy : "開始同步"}</button>
-            <button type="button" onClick={() => setJoining((on) => !on)}>輸入同步碼</button>
-          </>
+          canStart && (
+            <>
+              <button type="button" disabled={Boolean(busy)} onClick={() => act("開通中…", startSync)}>{busy && !joining ? busy : "開始同步"}</button>
+              <button type="button" onClick={() => setJoining((on) => !on)}>輸入同步碼</button>
+            </>
+          )
         )}
       </div>
+      )}
 
       {joining && !code && (
         <form className="studio-sync-join" onSubmit={join}>
@@ -129,8 +139,10 @@ export function SyncPanel() {
 
       <p className="studio-backup-note">
         {code
-          ? "在另一台按「輸入同步碼」,打這組碼就會看到同一個衣櫃。拿到碼的人都看得到、改得到,不要貼到公開的地方。"
-          : "自己加的衣服、想買的、穿著紀錄和收藏會加密後存到雲端,只有輸入同步碼的裝置解得開,手機和平板就會一樣。"}
+          ? "另一台打開入口右上「同步」,輸入這組碼就會看到同一個衣櫃。拿到碼的人都看得到、改得到,不要貼到公開的地方。"
+          : canStart
+            ? "自己加的衣服、想買的、穿著紀錄和收藏會加密後存到雲端,只有輸入同步碼的裝置解得開,手機和平板就會一樣。"
+            : "同步碼在已經開始同步的那台:入口右上「同步」→「看同步碼」。加入後這台會看到一樣的衣櫃。"}
       </p>
     </div>
   );

@@ -5,6 +5,7 @@ import { OptimizedImage } from "./OptimizedImage.jsx";
 import { OutfitStudio } from "./OutfitStudio.jsx";
 import { LandingRing } from "./LandingRing.jsx";
 import { AddGarment } from "./AddGarment.jsx";
+import { SyncPanel } from "./SyncPanel.jsx";
 import { cleanUrl, deleteLocalItem, loadLocalItems, productUrlProblem, updateLocalItem } from "./localWardrobe.js";
 import { CAN_ADD, CAN_EDIT, canEditItem } from "./ownerMode.js";
 import { hasLocalChanges, scheduleSync, syncCode, syncNow } from "./sync.js";
@@ -730,7 +731,8 @@ export function App() {
   const [error, setError] = useState("");
   const [view, setView] = useState("landing");
   const [pendingOutfit, setPendingOutfit] = useState(null);   // 由入口頁的今日推薦帶進搭配頁
-  const [closetChoice, setClosetChoice] = useState(null);     // 訪客手動選的衣櫃;null = 照有沒有自己的衣服決定
+  const [closetChoice, setClosetChoice] = useState(null);
+  const [syncOpen, setSyncOpen] = useState(false);     // 訪客手動選的衣櫃;null = 照有沒有自己的衣服決定
 
   // 衣櫃 = 離線流程匯入的(data/library.json)+ 使用者自己在網頁加的(IndexedDB)
   const refresh = useCallback(async () => {
@@ -875,12 +877,26 @@ export function App() {
               <>這是站主自己的衣櫃,先拿來示範。<button type="button" onClick={() => { chooseCloset("mine"); setView("closet"); }}>{mineCount ? "回我的衣櫃" : "建立我的衣櫃"}</button></>
             ) : null}
             items={ownedItems}
+            onSync={CAN_ADD ? () => setSyncOpen(true) : null}
             onOpen={setSelectedId}
             onEnter={setView}
             onWearOutfit={(outfit) => { setPendingOutfit(outfit); setView("styling"); }}
           />
         )}
         {view === "landing" && loading && <p className="status">衣櫃載入中</p>}
+
+        {/* 同步放在入口:手機第一眼就找得到。?public 不出現 */}
+        {syncOpen && (
+          <div className="add-overlay" role="dialog" aria-modal="true" aria-label="同步" onClick={(event) => { if (event.target === event.currentTarget) setSyncOpen(false); }}>
+            <div className="sync-sheet">
+              <button type="button" className="add-close" onClick={() => setSyncOpen(false)} aria-label="關閉">
+                <X size={20} weight="light" aria-hidden="true" />
+              </button>
+              <h2>同步</h2>
+              <SyncPanel canStart={CAN_EDIT} />
+            </div>
+          </div>
+        )}
 
         {(view !== "landing" || (!loading && !ownedItems.length)) && (
         <header className="gallery-header">

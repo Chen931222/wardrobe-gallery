@@ -4,8 +4,6 @@ import { ArrowCounterClockwise, ArrowsClockwise, CalendarCheck, Export, FloppyDi
 import { adjustIntent, fetchWeather, findItemForSwap, parseRequest, readWearLog, recommendOutfit, recordWear } from "./recommend.js";
 import { buildBackup, downloadBackup, restoreBackup } from "./backup.js";
 import { LookCard } from "./LookCard.jsx";
-import { SyncPanel } from "./SyncPanel.jsx";
-import { CAN_EDIT } from "./ownerMode.js";
 
 // 搭配工作室:把去背衣物疊在人形上組穿搭。
 //
@@ -845,9 +843,6 @@ export function OutfitStudio({ items, initialOutfit = null }) {
             </ul>
           </div>
         )}
-
-        {/* 同步只給站主:用的是站主的免費雲端額度 */}
-        {CAN_EDIT && <SyncPanel />}
 
         {/* 紀錄備份:資料 local-first,換裝置或防 iOS 清 storage 前先匯出,到新裝置匯入。全程本機。 */}
         <div className="studio-backup">

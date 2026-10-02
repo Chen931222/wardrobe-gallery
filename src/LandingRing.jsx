@@ -59,7 +59,7 @@ function pickVaried(items, count) {
   return shuffle(picked);
 }
 
-export function LandingRing({ items, onOpen, onEnter, onWearOutfit, title = "我的衣櫃", note = null }) {
+export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = null, title = "我的衣櫃", note = null }) {
   // 手機(<640)重排:少放幾件圓環卡才夠大可點,今日推薦從環心移到環下方長條,不再壓卡片
   const [phone, setPhone] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches);
   useEffect(() => {
@@ -263,6 +263,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, title = "我
         <nav>
           <button type="button" onClick={() => onEnter("closet")}>衣櫃</button>
           <button type="button" onClick={() => onEnter("styling")}>搭配</button>
+          {onSync && <button type="button" onClick={onSync}>同步</button>}
         </nav>
       </header>
 

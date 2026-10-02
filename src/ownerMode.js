@@ -31,5 +31,10 @@ export const CAN_EDIT = computeCanEdit();
    ?public 是「看訪客第一眼」的預覽,連新增也收起來。 */
 export const CAN_ADD = typeof window === "undefined" ? false : !new URLSearchParams(window.location.search).has("public");
 
+/** 輸入了站主的同步碼 = 站主的另一台裝置:記成擁有者模式,重新整理後看到跟另一台一樣的衣櫃。 */
+export function becomeOwner() {
+  remember(true);
+}
+
 /** 這件能不能改、能不能刪:擁有者什麼都能動;訪客只能動自己加的。 */
 export const canEditItem = (item) => CAN_EDIT || Boolean(item?.isLocal);
