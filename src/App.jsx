@@ -451,8 +451,9 @@ function WishLinkEditor({ item, onSetUrl, disabled = false }) {
       <div className="viewer-wish-link-row">
         <input
           id={`wish-url-${item.id}`}
-          type="url"
+          type="text"
           inputMode="url"
+          autoComplete="off"
           value={text}
           onChange={(event) => { setText(event.target.value); setSaved(false); }}
           placeholder="https://"

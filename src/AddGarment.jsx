@@ -269,9 +269,12 @@ export function AddGarment({ onAdded, existing = [] }) {
             <p className="add-step">新增一件</p>
             <label className="add-field">
               <span>貼商品連結</span>
+              {/* type="text" 不是 "url":App「分享」拷出來的是「快來看看【品名】… https://…」整段,
+                  type="url" 會被瀏覽器當成不合法網址擋下來,按了沒反應(2026-10-03 WebKit 實測)。網址在 findUrl 裡挑出來 */}
               <input
-                type="url"
+                type="text"
                 inputMode="url"
+                autoComplete="off"
                 value={linkText}
                 onChange={(event) => setLinkText(event.target.value)}
                 placeholder="https://"
@@ -402,8 +405,9 @@ export function AddGarment({ onAdded, existing = [] }) {
               <label className="add-field">
                 <span>商品網址(選填,之後點得回去買)</span>
                 <input
-                  type="url"
+                  type="text"
                   inputMode="url"
+                  autoComplete="off"
                   value={draft.sourceUrl}
                   onChange={(event) => setDraft((current) => ({ ...current, sourceUrl: event.target.value }))}
                   placeholder="https://"

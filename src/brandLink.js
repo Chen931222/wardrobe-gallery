@@ -17,14 +17,27 @@ const HMALL = {
 
 const MAX_IMAGES = 15;
 
+/* 分享文字裡的品名,品名 API 失敗或還沒回來時先填。GU App 的分享長這樣(2026-10-03 本人貼的):
+   「快來看看【男裝 男女適穿 Puffy蓬鬆柔軟V領開襟外套CL 361759】。在GU台灣網路商店查看更多…。 https://m.gu-global.com/tw/product?pid=…」
+   有【】就只取裡面,去掉開頭的「男裝/女裝」和結尾的貨號;沒有就拿網址以外、第一個句號前的那段。 */
+function nameFromShare(text) {
+  const raw = String(text || "");
+  const tidy = (part) => part
+    .replace(/^\s*(男裝|女裝|童裝|嬰幼兒|男童|女童)\s+/, "")
+    .replace(/\s+\d{5,7}\s*$/, "")
+    .replace(/[[\]「」【】]/g, " ").replace(/\b(GU|UNIQLO)\b/gi, "").replace(/\s+/g, " ").trim();
+  // 【】裡只有品牌名(「【GU】寬版牛仔褲 https://…」)就改拿括號外面那段
+  const bracket = tidy((raw.match(/【([^】]+)】/) || [])[1] || "");
+  const outside = tidy(raw.replace(/(?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,}\/\S*/gi, " ").split(/[。!！]/)[0]);
+  return (bracket || outside).slice(0, 60);
+}
+
 /** 認不出來回 null。text 可以是網址,也可以是 App「分享」拷出來的整段文字。 */
 export function parseBrandLink(text) {
   const href = findUrl(text);
   if (!href) return null;
   const url = new URL(href);
-  // 分享文字裡網址以外的那段常常是品名(「【GU】寬版牛仔褲 https://…」);品名 API 失敗時拿來先填
-  const nameHint = String(text || "").replace(/(?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,}\/\S*/gi, "").replace(/[【】\[\]「」]/g, " ")
-    .replace(/\b(GU|UNIQLO)\b/gi, "").replace(/\s+/g, " ").trim().slice(0, 60);
+  const nameHint = nameFromShare(text);
 
   const hmall = HMALL[url.host.replace(/^(www|m)\./, "")];
   const code = url.searchParams.get("productCode") || url.searchParams.get("pid") || (href.match(/u\d{9,}/) || [])[0];
