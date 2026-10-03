@@ -69,6 +69,16 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
     mq.addEventListener("change", on);
     return () => mq.removeEventListener("change", on);
   }, []);
+  // 提示文案看輸入方式,不看寬度:iPad 也是觸控,沒有滾輪(審查 F45)。用 hover: none 而不是 pointer: coarse,
+  // 因為 iPad 接了觸控板就能 hover、也真的會送滾輪事件,那時講滾輪才對
+  const [touch, setTouch] = useState(() => typeof window !== "undefined" && window.matchMedia("(hover: none)").matches);
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const mq = window.matchMedia("(hover: none)");
+    const on = () => setTouch(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
   // 只在衣服清單(id)真的變了才重抽;同步重讀衣櫃會產生新物件,不能因此把使用者正在看的圓環整圈重洗。
   // 抽到的 id 每次 render 換回最新的物件,改名、改圖才跟得上。
   // 清單變了(別台新增、隱藏)時,上一輪抽到、現在還在的那幾件留在原位,只補缺的;不然整圈換掉,正在看的那件也被收掉。
@@ -201,7 +211,9 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
   const metrics = useMemo(() => {
     if (!dims) return null;
     const { w, h } = dims;
-    const wide = w >= 800;
+    // 直向平板(iPad 810×1080)也有 800 寬,但套桌機公式圓環只剩 314px、最小的卡 14px(審查 F44);
+    // 要橫的才算寬,直向走平板公式(跟 iPad mini 744 一樣)
+    const wide = w >= 800 && w > h * 1.05;
     // 手機:環往上收、半徑小一點,把畫面下半讓給今日推薦長條;平板(640–800)與桌機維持原本
     const ringR = wide ? Math.min(w * 0.168, h * 0.295) : phone ? Math.min(w * 0.36, h * 0.26) : w * 0.32;
     const GAP = 6;                                            // 卡與卡之間至少留白(px)
@@ -418,8 +430,8 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
       {!(phone && focusIdx === null) && (
         <p className="landing-hint">
           {focusIdx === null
-            ? "滾輪轉動 · 點一件聚焦"
-            : phone ? "上下滑看下一件 · 再點看細節 · 點空白返回" : "滾輪瀏覽下一件 · 再點一下看細節 · 點空白處返回"}
+            ? (touch ? "上下滑轉一件 · 點一件聚焦" : "滾輪轉動 · 點一件聚焦")
+            : touch ? "上下滑看下一件 · 再點看細節 · 點空白返回" : "滾輪瀏覽下一件 · 再點一下看細節 · 點空白處返回"}
         </p>
       )}
     </section>

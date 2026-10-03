@@ -1881,6 +1881,27 @@ h1, h2, h3 {
 .studio-daily-error { margin: 0; font-size: 13px; color: var(--danger); }
 .studio-daily-understood { margin: 0 0 4px; font-size: 12px; letter-spacing: .06em; color: var(--accent); }
 
+/* 場合標籤後面的 ✕:畫出來小,點的範圍 32px(手機 44px,見 pointer: coarse) */
+.studio-intent-clear {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin: -9px -8px -9px 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  vertical-align: middle;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.studio-intent-clear:hover { color: var(--ink); }
+.studio-intent-clear:focus-visible { outline: 1px solid var(--accent); outline-offset: -6px; }
+@media (pointer: coarse) {
+  .studio-intent-clear { width: 44px; height: 44px; margin: -15px -14px -15px -4px; }
+}
+
 /* 紀錄備份:低調的頁尾,不搶戲但找得到 */
 .studio-sync,
 .studio-backup {
@@ -2110,6 +2131,24 @@ h1, h2, h3 {
     text-align: center;
   }
   .studio-dock-status.is-error { color: var(--danger); }
+  /* 有場合標籤時這行帶一顆 ✕:改成一列置中、不截行(截行的 overflow 會把按鈕的點擊範圍一起切掉) */
+  .studio-dock-status.has-clear {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+  }
+  .studio-dock .studio-intent-clear {
+    flex: none;
+    width: 44px;
+    height: 32px;
+    min-height: 0;
+    margin: -7px -12px -7px 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--muted);
+  }
 }
 
 /* ===== 入口導覽頁(圓環轉盤) ===== */

@@ -529,7 +529,11 @@ export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null })
       setAdjusting(null);
       pushHistory(wearing); dirtyRef.current = true;
       setWearing(result.outfit);
-      setDaily({ weather, reasons: result.reasons, understood: unknownRaw ? `沒學過「${unknownRaw}」,先照天氣挑` : (intent?.understood || null) });
+      setDaily({
+        weather, reasons: result.reasons,
+        understood: unknownRaw ? `沒學過「${unknownRaw}」,先照天氣挑` : (intent?.understood || null),
+        sticky: Boolean(intent?.understood),   // 這個場合會被「再推薦一套」沿用,所以給一個 ✕ 可以清掉
+      });
     } catch (cause) {
       console.warn("weather failed", cause);
       setDaily({ error: "抓不到天氣資料,檢查一下網路再試" });
@@ -540,6 +544,16 @@ export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null })
 
   const recommendToday = () => runRecommend(null);
   const recommendAgain = () => runRecommend(lastIntentRef.current);   // 「再推薦一套」要記得上次的場合,不能弄丟
+  // 說過「面試」之後想回到純看天氣:點場合標籤的 ✕。身上這套和鎖住的都不動,只是下一套不再沿用(審查 F26)
+  const clearIntent = () => {
+    lastIntentRef.current = null;
+    setDaily((current) => current && { ...current, understood: "場合清掉了,下一套照天氣挑", sticky: false });
+  };
+  const clearIntentButton = (
+    <button type="button" className="studio-intent-clear" onClick={clearIntent} aria-label="清掉這個場合,下一套照天氣挑" title="清掉這個場合,下一套照天氣挑">
+      <X size={12} weight="bold" aria-hidden="true" />
+    </button>
+  );
 
   const undo = () => {
     if (!past.length) { setDaily({ understood: "復原", reasons: ["沒有上一步了"] }); return; }
@@ -742,7 +756,7 @@ export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null })
   // 貼底列上方那一行:今日推薦講聽懂了什麼;指令(復原、換、鎖)沒有天氣,講結果,失敗的原因才看得到
   const dockStatus = !daily ? ""
     : daily.error ? daily.error
-    : daily.weather ? (daily.understood ? `聽你說的 ${daily.understood}` : "")
+    : daily.weather ? (daily.sticky ? `聽你說的 ${daily.understood}` : daily.understood || "")
     : [daily.understood, daily.reasons?.[0]].filter(Boolean).join(",");
 
   // 主鈕和「今天穿這套」:桌機照舊分在第一層和第三層;手機搬進貼底的列(下面 studio-dock)
@@ -902,7 +916,8 @@ export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null })
               <>
                 {daily.understood && (
                   <p className="studio-daily-understood">
-                    <span className="studio-daily-label">聽你說的</span>{daily.understood}
+                    {(daily.sticky || !daily.weather) && <span className="studio-daily-label">聽你說的</span>}{daily.understood}
+                    {daily.sticky && clearIntentButton}
                   </p>
                 )}
                 {daily.weather && (
@@ -1047,7 +1062,9 @@ export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null })
         <div className={`studio-dock${typing ? " is-tucked" : ""}`} role="group" aria-label="推薦和記錄這套">
           {/* 推薦的回饋(天氣抓不到、聽懂了什麼、復原或換衣服沒做到的原因)原本在指令框下面,手機上剛好被這一列蓋住,
               按了像沒反應。推薦中照樣留著上一句,免得列高跳動。螢幕閱讀器念上面那份(.studio-daily),這裡藏起來不重念。 */}
-          {dockStatus && <p className={`studio-dock-status${daily?.error ? " is-error" : ""}`} aria-hidden="true">{dockStatus}</p>}
+          {daily?.sticky ? (
+            <p className="studio-dock-status has-clear">{dockStatus}{clearIntentButton}</p>
+          ) : dockStatus && <p className={`studio-dock-status${daily?.error ? " is-error" : ""}`} aria-hidden="true">{dockStatus}</p>}
           {recommendButton}
           {wearTodayButton}
         </div>
