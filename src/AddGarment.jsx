@@ -113,6 +113,12 @@ function CropBox({ src, box, onChange }) {
         onPointerUp={up}
         onPointerCancel={up}
       >
+        {/* 框外變暗用四塊長方形鋪在照片上。舊版用框的大陰影(9999px),iPhone 上會蓋出照片、把整個視窗和
+            「去背框起來的」一起蓋暗,框好了按鈕看起來還是灰的(2026-10-04 本人 iPhone 截圖) */}
+        <div className="crop-dim" style={{ left: 0, top: 0, width: "100%", height: `${box.y * 100}%` }} />
+        <div className="crop-dim" style={{ left: 0, top: `${(box.y + box.h) * 100}%`, width: "100%", bottom: 0 }} />
+        <div className="crop-dim" style={{ left: 0, top: `${box.y * 100}%`, width: `${box.x * 100}%`, height: `${box.h * 100}%` }} />
+        <div className="crop-dim" style={{ left: `${(box.x + box.w) * 100}%`, top: `${box.y * 100}%`, right: 0, height: `${box.h * 100}%` }} />
         <div
           className="crop-rect"
           style={{ left: `${box.x * 100}%`, top: `${box.y * 100}%`, width: `${box.w * 100}%`, height: `${box.h * 100}%` }}

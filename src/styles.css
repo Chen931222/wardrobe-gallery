@@ -1597,9 +1597,9 @@ h1, h2, h3 {
 .crop-rect {
   position: absolute;
   border: 1px solid var(--accent);
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, .45);
   pointer-events: none;
 }
+.crop-dim { position: absolute; background: rgba(0, 0, 0, .45); pointer-events: none; }
 
 /* ===== 想買 ===== */
 .add-owned { display: flex; gap: 18px; margin: 0; padding: 0; border: 0; font-size: 14px; color: var(--ink); }
