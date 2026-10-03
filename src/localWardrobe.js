@@ -93,12 +93,25 @@ export function cleanUrl(text) {
   }
 }
 
+/** 從一段文字裡找出網址:整段就是網址、分享文字裡夾著網址(「【GU】寬版牛仔褲 https://…」)、
+ *  或少了 https:// 的(「m.gu-global.com/tw/product?pid=…」)都認。找不到回 null。 */
+export function findUrl(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return null;
+  const direct = cleanUrl(raw);
+  if (direct) return direct;
+  const withScheme = raw.match(/https?:\/\/[^\s<>"'「」【】()（）]+/i);
+  if (withScheme) return cleanUrl(withScheme[0]);
+  const bare = raw.match(/(?:^|\s)((?:[a-z0-9-]+\.)+[a-z]{2,}\/[^\s<>"'「」【】()（）]*)/i);
+  return bare ? cleanUrl(`https://${bare[1]}`) : null;
+}
+
 /** 商品網址欄的錯誤訊息,沒問題回空字串。剪貼簿常常還留著衣櫃自己的網址(開 ?edit 時拷的),
  *  貼進來看起來像網址、點了卻回到衣櫃,所以要擋。 */
 export function productUrlProblem(text) {
   if (!String(text || "").trim()) return "";
-  const url = cleanUrl(text);
-  if (!url) return "這不是網址,要 https:// 開頭";
+  const url = findUrl(text);
+  if (!url) return "這裡找不到網址。到品牌的商品頁按分享、拷貝連結再貼";
   if (typeof window !== "undefined" && new URL(url).host === window.location.host) {
     return "這是衣櫃自己的網址。到品牌的商品頁按分享、拷貝連結再貼";
   }

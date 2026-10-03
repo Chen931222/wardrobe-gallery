@@ -6,7 +6,7 @@ import { OutfitStudio, rememberWearing } from "./OutfitStudio.jsx";
 import { LandingRing } from "./LandingRing.jsx";
 import { AddGarment } from "./AddGarment.jsx";
 import { SyncPanel } from "./SyncPanel.jsx";
-import { cleanUrl, deleteLocalItem, loadLocalItems, productUrlProblem, updateLocalItem } from "./localWardrobe.js";
+import { deleteLocalItem, findUrl, loadLocalItems, productUrlProblem, updateLocalItem } from "./localWardrobe.js";
 import { CAN_ADD, CAN_EDIT, canEditItem } from "./ownerMode.js";
 import { hasLocalChanges, scheduleSync, syncCode, syncNow } from "./sync.js";
 import { findSimilar, fitOf, guessWarmth, kindLabel, wishOutfits } from "./wishCheck.js";
@@ -41,15 +41,25 @@ function readEdits() {
 }
 
 
-function persistEdit(item) {
+const EDIT_FIELDS = ["name", "part", "color", "secondaryColor", "tags"];
+const editValue = (item, field) => {
+  const value = item?.[field];
+  if (field === "tags") return value || [];
+  if (field === "name") return value || "";
+  return value ?? null;
+};
+
+/** 只記跟原本(建檔時、還沒任何編輯)不一樣的欄位。整筆寫入的話,兩台各改一欄時同步分不出誰改了哪一欄,
+ *  後存的那台會把另一台的修改整件蓋掉(2026-10-03)。改回原值的欄位就拿掉,沒有改過的整件就刪掉。 */
+function persistEdit(item, original) {
   const edits = readEdits();
-  edits[item.id] = {
-    name: item.name || "",
-    part: item.part,
-    color: item.color || null,
-    secondaryColor: item.secondaryColor || null,
-    tags: item.tags || [],
-  };
+  const entry = {};
+  for (const field of EDIT_FIELDS) {
+    const value = editValue(item, field);
+    if (!original || JSON.stringify(value) !== JSON.stringify(editValue(original, field))) entry[field] = value;
+  }
+  if (Object.keys(entry).length) edits[item.id] = entry;
+  else delete edits[item.id];
   localStorage.setItem(STORAGE_KEY, JSON.stringify(edits));
   if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));   // 開了同步的話,5 秒後推上去
 }
@@ -404,7 +414,7 @@ function ReadOnlyDetails({ item, onWear }) {
 }
 
 /* 想買的單品存好之後還能改網址;不然貼錯只能刪掉重新去背。 */
-function WishLinkEditor({ item, onSetUrl }) {
+function WishLinkEditor({ item, onSetUrl, disabled = false }) {
   const [text, setText] = useState(item.sourceUrl || "");
   const [saved, setSaved] = useState(false);
   // 換了一件就重設;同一件的網址被別台改了,只有這台沒動過輸入框時才跟上,打到一半的字不蓋掉
@@ -423,12 +433,12 @@ function WishLinkEditor({ item, onSetUrl }) {
   }, [item.sourceUrl]);
   useEffect(() => { setSaved(false); }, [item.id]);
   const problem = productUrlProblem(text);
-  const changed = (cleanUrl(text) || "") !== (item.sourceUrl || "");
+  const changed = (findUrl(text) || "") !== (item.sourceUrl || "");
 
   const submit = async (event) => {
     event.preventDefault();
     if (problem || !changed) return;
-    const url = cleanUrl(text);
+    const url = findUrl(text);
     await onSetUrl(item.id, url);
     shownUrl.current = url || "";
     setText(url || "");
@@ -448,7 +458,7 @@ function WishLinkEditor({ item, onSetUrl }) {
           placeholder="https://"
           aria-invalid={Boolean(problem)}
         />
-        <button className="secondary-button" type="submit" disabled={Boolean(problem) || !changed}>存網址</button>
+        <button className="secondary-button" type="submit" disabled={disabled || Boolean(problem) || !changed}>存網址</button>
       </div>
       {problem && <small className="add-field-error">{problem}</small>}
       {saved && !problem && <small role="status">已存。</small>}
@@ -541,7 +551,8 @@ function rebaseDraft(draft, before, after) {
   ]));
 }
 
-function ItemViewer({ item, owned, onClose, onSave, onDelete, onWear, onBought, onSetUrl, onOpen, onWearOutfit }) {
+/** @param gone 這件在別台被刪掉或隱藏了:頁面留著(草稿還在、可以複製),但存檔、刪除、穿上這些動作都關掉 */
+function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWear, onBought, onSetUrl, onOpen, onWearOutfit }) {
   const closeButtonRef = useRef(null);
   const imageRef = useRef(null);
   const samplingCanvasRef = useRef(null);
@@ -603,9 +614,9 @@ function ItemViewer({ item, owned, onClose, onSave, onDelete, onWear, onBought, 
   }, []);
 
   const requestClose = useCallback(() => {
-    if (isDirty) nudgeUnsaved();
+    if (isDirty && !gone) nudgeUnsaved();   // 已經不在的那件,存不了也不用擋
     else onClose();
-  }, [isDirty, nudgeUnsaved, onClose]);
+  }, [isDirty, gone, nudgeUnsaved, onClose]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -728,19 +739,24 @@ function ItemViewer({ item, owned, onClose, onSave, onDelete, onWear, onBought, 
       )}
 
       <div className="viewer-details editing">
+        {gone && (
+          <p className="viewer-gone" role="status">
+            這件已經在另一台被刪除或隱藏了。打到一半的字還在,要留的話先複製下來;關掉這頁就會消失。
+          </p>
+        )}
         {item.wishlist && (
           <div className="viewer-wish">
-            <p>還沒買。只存在這台裝置,不會出現在公開的衣櫃。</p>
+            <p>還沒買,不會出現在公開的衣櫃;開了同步的話,你的其他裝置也看得到。</p>
             <div className="viewer-wish-actions">
               {item.sourceUrl && !productUrlProblem(item.sourceUrl) && (
                 <a className="secondary-button" href={item.sourceUrl} target="_blank" rel="noopener noreferrer">回商品頁</a>
               )}
-              <button className="secondary-button" type="button" onClick={() => onWear(item)}>
+              <button className="secondary-button" type="button" onClick={() => onWear(item)} disabled={gone}>
                 <Sparkle size={15} weight="regular" aria-hidden="true" /> 穿上看看
               </button>
-              <button className="secondary-button" type="button" onClick={() => onBought(item.id)}>已經買了</button>
+              <button className="secondary-button" type="button" onClick={() => onBought(item.id)} disabled={gone}>已經買了</button>
             </div>
-            <WishLinkEditor item={item} onSetUrl={onSetUrl} />
+            <WishLinkEditor item={item} onSetUrl={onSetUrl} disabled={gone} />
             <WishCheck item={item} owned={owned} onOpen={onOpen} onWearOutfit={onWearOutfit} />
           </div>
         )}
@@ -758,12 +774,12 @@ function ItemViewer({ item, owned, onClose, onSave, onDelete, onWear, onBought, 
             {closeBlocked && <p className="unsaved-notice" role="status">關閉前請先儲存或取消變更。</p>}
 
             <div className="viewer-actions">
-              <button className="delete-button" type="button" onClick={() => onDelete(item.id)}>
+              <button className="delete-button" type="button" onClick={() => onDelete(item.id)} disabled={gone}>
                 <Trash size={15} weight="regular" aria-hidden="true" /> 刪除
               </button>
               <span className="action-spacer" />
               <button className="secondary-button" type="button" onClick={cancelEditing}>取消</button>
-              <button className="primary-button" type="button" onClick={saveEditing}>
+              <button className="primary-button" type="button" onClick={saveEditing} disabled={gone}>
                 <Check size={15} weight="bold" aria-hidden="true" /> 儲存
               </button>
             </div>
@@ -872,7 +888,12 @@ export function App() {
     };
   }, [refresh]);
 
-  const selectedItem = items.find((item) => item.id === selectedId) || null;
+  // 單品頁開著時那件被別台刪掉或隱藏:不直接關掉(打到一半的字會跟著消失),留著最後看到的那份、標示已經不在
+  const lastSelectedRef = useRef(null);
+  const liveSelected = items.find((item) => item.id === selectedId) || null;
+  if (liveSelected) lastSelectedRef.current = liveSelected;
+  const selectedItem = liveSelected || (selectedId && lastSelectedRef.current?.id === selectedId ? lastSelectedRef.current : null);
+  const selectedGone = Boolean(selectedItem && !liveSelected);
 
   // 訪客的衣櫃跟站主的 104 件分開:自己加的是「我的衣櫃」,站主那批退成「示範衣櫃」,推薦只在同一個衣櫃裡配。
   // 站主(?edit)照舊看全部;?public 只看示範。訪客還沒加過衣服時先看示範,加了第一件就換成自己的。
@@ -971,7 +992,9 @@ export function App() {
 
   const saveItem = (updatedItem) => {
     setItems((current) => current.map((item) => item.id === updatedItem.id ? updatedItem : item));
-    persistEdit(updatedItem);
+    // 原本的樣子 = 還沒套任何編輯的那份(站主的從 wardrobe.json、自己加的從 IndexedDB)
+    const original = [...(servedRef.current || []), ...(localRef.current || [])].find((item) => item.id === updatedItem.id);
+    persistEdit(updatedItem, original);
   };
 
   const markBought = async (id) => {
@@ -1105,7 +1128,7 @@ export function App() {
         )}
 
         {view === "styling" && !loading && !!ownedItems.length && (
-          <OutfitStudio key={closet} items={wearItems} initialOutfit={pendingOutfit} />
+          <OutfitStudio key={closet} items={wearItems} initialOutfit={pendingOutfit} onOpenItem={setSelectedId} />
         )}
 
         {view === "closet" && !!closetItems.length && (
@@ -1126,6 +1149,7 @@ export function App() {
       {selectedItem && (
         <ItemViewer
           item={selectedItem}
+          gone={selectedGone}
           owned={ownedItems}
           onOpen={setSelectedId}
           onWearOutfit={(outfit) => { wearOutfit(outfit); setSelectedId(null); setView("styling"); }}

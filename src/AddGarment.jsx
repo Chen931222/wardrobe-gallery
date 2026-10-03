@@ -1,8 +1,8 @@
 // [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 import { useMemo, useRef, useState } from "react";
 import { Plus, SpinnerGap, X } from "@phosphor-icons/react";
-import { cleanUrl, cropBlob, deleteLocalItem, dominantColor, productUrlProblem, refillGaps, saveLocalItem, trimTransparent } from "./localWardrobe.js";
-import { fetchBrandProduct, parseBrandLink, partFromName, partFromProduct } from "./brandLink.js";
+import { cropBlob, deleteLocalItem, dominantColor, findUrl, productUrlProblem, refillGaps, saveLocalItem, trimTransparent } from "./localWardrobe.js";
+import { fetchBrandProduct, parseBrandLink, partFromName, partFromProduct, sameProduct } from "./brandLink.js";
 import { findSimilar, kindLabel } from "./wishCheck.js";
 
 const PARTS = [
@@ -210,9 +210,9 @@ export function AddGarment({ onAdded, existing = [] }) {
   const urlInvalid = Boolean(urlError);
 
   // 防呆:同一個商品連結貼第二次,或櫃裡已經有同款同色的,存之前先講(不擋,按鈕改成「還是要存」)
-  const draftUrl = draft?.wishlist ? cleanUrl(draft.sourceUrl) : null;
+  const draftUrl = draft?.wishlist ? findUrl(draft.sourceUrl) : null;
   const sameLink = useMemo(
-    () => (draftUrl ? existing.find((item) => item.sourceUrl && cleanUrl(item.sourceUrl) === draftUrl) : null),
+    () => (draftUrl ? existing.find((item) => item.sourceUrl && sameProduct(item.sourceUrl, draftUrl)) : null),
     [draftUrl, existing],
   );
   const similar = useMemo(
@@ -230,7 +230,7 @@ export function AddGarment({ onAdded, existing = [] }) {
       tags: [],
       blob: draft.blob,
       wishlist: draft.wishlist,
-      sourceUrl: draft.wishlist ? cleanUrl(draft.sourceUrl) : null,
+      sourceUrl: draft.wishlist ? findUrl(draft.sourceUrl) : null,
     });
     onAdded(draft.wishlist);
     reset();

@@ -107,7 +107,16 @@ export function rememberWearing(outfit) {
   } catch { /* 私密模式等存不了就算了 */ }
 }
 
-export function OutfitStudio({ items, initialOutfit = null }) {
+/** 指令要的東西怎麼說:「黑色」＋「開襟」＋「外套」;都沒講就用那一格的名稱 */
+function askedLabel(spec, fallback) {
+  const descriptors = (spec.descriptors || []).map((group) => group[0]).filter((word) => !(spec.category || "").includes(word));
+  return `${spec.color?.word ? `${spec.color.word}色` : ""}${descriptors.join("")}${spec.category || fallback}`;
+}
+
+/**
+ * @param onOpenItem 在衣架上點兩下一件衣服時叫,帶 id;App 拿去打開單品頁看資訊
+ */
+export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null }) {
   const [wearing, setWearing] = useState(() => initialOutfit || {});   // 帶一套進來時一開始就穿著,寫回時才不會先寫出空的
   const [looks, setLooks] = useState(readLooks);
   const [stripType, setStripType] = useState("upperbody");
@@ -368,6 +377,23 @@ export function OutfitStudio({ items, initialOutfit = null }) {
   };
 
   /* ---------- 穿脫 / 隨機 / 收藏 ---------- */
+  // 衣架:點一下穿上(或脫掉),點兩下看這件的資訊。第二下先把第一下的穿脫和那筆復原紀錄收回,再打開單品頁,
+  // 所以點兩下不會改到身上這套。手機和滑鼠都用同一套計時(iOS 不會穩定送 dblclick)。
+  const lastTapRef = useRef({ id: null, at: 0, before: null });
+  const tapRackItem = (item) => {
+    const now = Date.now();
+    const last = lastTapRef.current;
+    if (onOpenItem && last.id === item.id && now - last.at < 350) {
+      lastTapRef.current = { id: null, at: 0, before: null };
+      setWearing(last.before);
+      setPast((stack) => stack.slice(1));
+      onOpenItem(item.id);
+      return;
+    }
+    lastTapRef.current = { id: item.id, at: now, before: wearing };
+    toggleWear(item);
+  };
+
   const toggleWear = (item) => {
     pushHistory(wearing); dirtyRef.current = true;
     setWearing((current) => {
@@ -492,8 +518,8 @@ export function OutfitStudio({ items, initialOutfit = null }) {
       if (pin) {
         const found = findItemForSwap(items, pin, wearLog, null);
         if (found) {
-          result.outfit[pin.slot] = found.item;
-          const asked = `${pin.color?.word ? `${pin.color.word}色` : ""}${pin.category || SLOT_LABEL[pin.slot]}`;
+          result.outfit[found.item.part] = found.item;   // 放進它自己的格子(見上面換單品)
+          const asked = askedLabel(pin, SLOT_LABEL[pin.slot]);
           result.reasons.push(found.exact
             ? `照你指定換上「${found.item.name}」`
             : `你指定的${asked}櫃裡沒有,先用最接近的「${found.item.name}」`);
@@ -567,14 +593,17 @@ export function OutfitStudio({ items, initialOutfit = null }) {
     if (req.kind === "outfit") { runRecommend(req.intent, req.pin || null); return; }
 
     if (req.kind === "swap") {
-      const label = SLOT_LABEL[req.slot];
-      const vague = !req.color && !req.category;                       // 「換一件上衣」→ 要跟身上那件不一樣
-      const found = findItemForSwap(items, req, readWearLog(), vague ? (wearing[req.slot]?.id || null) : null);
-      if (!found) { setDaily({ understood: `換${label}`, reasons: [`櫃裡沒有${label}這一類的單品`] }); return; }
-      const asked = `${req.color?.word ? `${req.color.word}色` : ""}${req.category || label}`;
+      const vague = !req.color && !req.category && !(req.descriptors || []).length;   // 「換一件上衣」→ 要跟身上那件不一樣
+      const found = findItemForSwap(items, req, readWearLog(), vague && req.slot ? (wearing[req.slot]?.id || null) : null);
+      const askedSlotLabel = SLOT_LABEL[req.slot] || "這件";
+      if (!found) { setDaily({ understood: `換${askedSlotLabel}`, reasons: [`櫃裡沒有${askedSlotLabel}這一類的單品`] }); return; }
+      // 找到的那件可能建檔在別格(「灰色細針織開襟外套」在上衣):放進它自己的格子,不是硬塞進講的那一格
+      const slot = found.item.part;
+      const label = SLOT_LABEL[slot];
+      const asked = askedLabel(req, askedSlotLabel);
       setAdjusting(null);
       pushHistory(wearing); dirtyRef.current = true;
-      setWearing((current) => ({ ...current, [req.slot]: found.item }));
+      setWearing((current) => ({ ...current, [slot]: found.item }));
       setDaily({
         understood: `換${label}${vague ? "" : `:${asked}`}`,
         reasons: [found.exact ? `換上「${found.item.name}」` : `櫃裡沒有${asked},最接近的是「${found.item.name}」,先換上這件`],
@@ -992,14 +1021,15 @@ export function OutfitStudio({ items, initialOutfit = null }) {
             </button>
           ))}
         </nav>
+        {onOpenItem && <p className="studio-rack-hint">點一下穿上,點兩下看資訊</p>}
         <div className="studio-rack-grid">
           {(wardrobeByType[stripType] || []).map((item) => (
             <button
               key={item.id}
               type="button"
               className={`studio-rack-item${wearing[item.part]?.id === item.id ? " wearing" : ""}`}
-              onClick={() => toggleWear(item)}
-              title={item.wishlist ? `${item.name}(還沒買)` : item.name}
+              onClick={() => tapRackItem(item)}
+              title={`${item.wishlist ? `${item.name}(還沒買)` : item.name}${onOpenItem ? "\n點兩下看資訊" : ""}`}
             >
               <img src={item.thumbnail || item.image} alt={item.name || SLOT_LABEL[item.part]} loading="lazy" />
               {item.wishlist && <span className="wish-badge">想買</span>}

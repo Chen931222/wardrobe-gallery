@@ -183,7 +183,8 @@ const isPlain = (value) => Boolean(value) && typeof value === "object" && !Array
 
 /* 物件逐欄三方合併。同一欄兩邊都改了、而且兩邊都是物件時(edits 裡同一件衣服:一台改名、一台改顏色),
    再往下一層逐欄合,不讓後存的那台整件蓋掉另一台;真的同一欄兩邊都改了才是手上這台贏。
-   限制:base 裡沒有這件(兩台都是第一次改它)時分不出誰改了哪一欄,仍是手上這台整件贏。 */
+   base 裡沒有這件(兩台都是第一次改它)時,把「沒改過」(空物件)當底:edits 只記改過的欄位
+   (App 的 persistEdit,2026-10-03 起),所以一台只有 name、一台只有 color,兩欄都留得住。 */
 function mergeFields(l, was, r) {
   const out = {};
   for (const name of new Set([...Object.keys(l), ...Object.keys(r), ...Object.keys(was)])) {
@@ -191,7 +192,7 @@ function mergeFields(l, was, r) {
     if (same(l[name], r[name])) pick = l[name];
     else if (same(l[name], was[name])) pick = r[name];
     else if (same(r[name], was[name])) pick = l[name];
-    else if (isPlain(l[name]) && isPlain(r[name]) && isPlain(was[name])) pick = mergeFields(l[name], was[name], r[name]);
+    else if (isPlain(l[name]) && isPlain(r[name]) && (isPlain(was[name]) || was[name] === undefined)) pick = mergeFields(l[name], was[name] || {}, r[name]);
     else pick = l[name];
     if (pick !== undefined) out[name] = pick;
   }

@@ -1365,6 +1365,7 @@ h1, h2, h3 {
 }
 
 .studio-rack-item {
+  touch-action: manipulation;   /* iOS 點兩下會放大畫面;關掉才吃得到「點兩下看資訊」 */
   border: 1px solid var(--line);
   background: var(--surface);
   border-radius: 0;
@@ -1385,6 +1386,14 @@ h1, h2, h3 {
 .studio-rack-item.wearing {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* 衣架的操作說明:跟分類鈕一樣小、退到背景 */
+.studio-rack-hint {
+  margin: -8px 0 12px;
+  font-size: 12px;
+  letter-spacing: .06em;
+  color: var(--muted);
 }
 
 .studio-rack-empty {
@@ -1544,6 +1553,16 @@ h1, h2, h3 {
   pointer-events: none;
 }
 .piece-count-wish { color: var(--muted); }
+
+/* 這件在別台被刪掉或隱藏了:頁面還開著時的說明 */
+.viewer-gone {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink);
+}
 
 .viewer-wish {
   display: flex; flex-direction: column; gap: 10px;
@@ -2434,4 +2453,12 @@ h1, h2, h3 {
   display: inline-flex;
   min-height: 44px;
   padding: 10px 22px;
+}
+
+/* iPhone、iPad 的 Safari 遇到小於 16px 的輸入框,一聚焦就把整頁放大(收了鍵盤也不縮回)。
+   觸控裝置上一律不小於 16px;滑鼠的桌機照原本的字級。2026-10-03 用 WebKit 實測:iPad 搭配頁指令框原本 13px */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  select,
+  textarea { font-size: max(16px, 1em); }
 }

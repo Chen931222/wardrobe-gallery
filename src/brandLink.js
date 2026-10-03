@@ -5,39 +5,54 @@
 // 品名在 d.gu-global.com 的內部 API,但那支 CORS 不放行,瀏覽器讀不到,所以這裡不碰。
 // Zara 整站有機器人驗證,讀不到頁面;只能從網址路徑拿品名。
 
-import { cleanUrl } from "./localWardrobe.js";
+import { findUrl } from "./localWardrobe.js";
 
-/* 同一套商品頁系統的品牌。圖片網址規則一樣,只差網域。 */
+/* 同一套商品頁系統的品牌。圖片網址規則一樣,只差網域。
+   手機打開會被轉到 m. 開頭的手機版(2026-10-03 實測 301),商品頁是 /tw/product?pid=u…,
+   電腦版是 www. 開頭、/tw/zh_TW/product-detail.html?productCode=u…;兩種、加上沒有 www 的都認。 */
 const HMALL = {
-  "www.gu-global.com": { key: "gu", brand: "GU", imageHost: "https://www.gu-global.com" },
-  "www.uniqlo.com": { key: "uniqlo", brand: "UNIQLO", imageHost: "https://www.uniqlo.com" },
+  "gu-global.com": { key: "gu", brand: "GU", imageHost: "https://www.gu-global.com" },
+  "uniqlo.com": { key: "uniqlo", brand: "UNIQLO", imageHost: "https://www.uniqlo.com" },
 };
 
 const MAX_IMAGES = 15;
 
-/** 認不出來回 null。 */
+/** 認不出來回 null。text 可以是網址,也可以是 App「分享」拷出來的整段文字。 */
 export function parseBrandLink(text) {
-  const href = cleanUrl(text);
+  const href = findUrl(text);
   if (!href) return null;
   const url = new URL(href);
+  // 分享文字裡網址以外的那段常常是品名(「【GU】寬版牛仔褲 https://…」);品名 API 失敗時拿來先填
+  const nameHint = String(text || "").replace(/(?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,}\/\S*/gi, "").replace(/[【】\[\]「」]/g, " ")
+    .replace(/\b(GU|UNIQLO)\b/gi, "").replace(/\s+/g, " ").trim().slice(0, 60);
 
-  const hmall = HMALL[url.host];
-  const code = url.searchParams.get("productCode");
-  const region = url.pathname.split("/")[1];
-  if (hmall && code && /^u\d{8,}$/.test(code) && /^[a-z]{2}$/.test(region)) {
+  const hmall = HMALL[url.host.replace(/^(www|m)\./, "")];
+  const code = url.searchParams.get("productCode") || url.searchParams.get("pid") || (href.match(/u\d{9,}/) || [])[0];
+  const first = url.pathname.split("/")[1];
+  const region = /^[a-z]{2}$/.test(first) ? first : "tw";
+  if (hmall && code && /^u\d{8,}$/.test(code)) {
     return {
-      brand: hmall.brand, url: href, name: "", images: hmallImages(hmall.imageHost, region, code),
+      brand: hmall.brand, url: href, name: nameHint, images: hmallImages(hmall.imageHost, region, code),
       lookup: { brand: hmall.key, region, code },
+      key: `${hmall.key}:${code}`,   // 同一件商品的身分證:手機版、電腦版網址不同,比重複時用這個
     };
   }
 
   if (url.host.endsWith("zara.com")) {
     const slug = decodeURIComponent(url.pathname.split("/").pop() || "");
     const name = slug.replace(/-p\d+\.html$/, "").replace(/-/g, " ").trim();
-    return { brand: "Zara", url: href, name, images: [] };
+    return { brand: "Zara", url: href, name: name || nameHint, images: [] };
   }
 
-  return { brand: "", url: href, name: "", images: [] };
+  return { brand: "", url: href, name: nameHint, images: [] };
+}
+
+/** 兩個商品網址是不是同一件:認得出商品編號就比編號(手機版、電腦版、分享連結都算同一件),不然比網址。 */
+export function sameProduct(a, b) {
+  if (!a || !b) return false;
+  const left = parseBrandLink(a), right = parseBrandLink(b);
+  if (left?.key && right?.key) return left.key === right.key;
+  return Boolean(left?.url) && left?.url === right?.url;
 }
 
 /** 問自己的 /api/brand-product 拿品名與分類;失敗回 null,前端就讓人手動填。 */

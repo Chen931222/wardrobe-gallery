@@ -258,6 +258,32 @@ const CATEGORY_ALIASES = {
   "靴": ["靴", "boot"],
 };
 
+// 描述字(款式、材質、圖案):「開襟外套」的「開襟」、「燈芯絨西裝外套」的「燈芯絨」。舊版只認品類和顏色,
+// 「換成開襟外套」只看「外套」,給了一件普通外套(2026-10-03 本人回報)。名稱是中文、tags 常是英文,兩邊都認。
+const DESCRIPTORS = [
+  ["開襟", "cardigan", "開衫"], ["連帽", "hoodie"], ["燈芯絨", "corduroy"], ["丹寧", "denim", "牛仔"],
+  ["格紋", "格子", "plaid", "check"], ["條紋", "stripe", "pinstripe"], ["迷彩", "camo"], ["刷破", "破洞", "distressed"],
+  ["工裝", "cargo", "chore", "workwear"], ["真皮", "皮革", "皮衣", "leather"], ["羊毛", "wool"], ["針織", "knit"],
+  ["拉鍊", "zip"], ["印花", "圖案", "print", "graphic"], ["寬版", "寬鬆", "oversize", "baggy", "wide-leg", "relaxed"],
+  ["西裝", "blazer"], ["棒球", "baseball"], ["防風", "windbreaker"], ["翻領"], ["立領", "mockneck"], ["高領"],
+  ["圓領", "crewneck"], ["v領", "vneck"], ["燈籠"], ["打褶", "pleated"], ["水洗", "washed"], ["抽繩", "drawstring"],
+  ["運動", "sport", "jogger"], ["亨利領", "henley"], ["法蘭絨", "flannel"], ["麂皮", "suede"], ["帆布", "canvas"],
+];
+
+function detectDescriptors(t) {
+  return DESCRIPTORS.filter((group) => group.some((word) => t.includes(word.toLowerCase())));
+}
+
+// 拿來找品名的那一段:把動詞、贅字、顏色拿掉剩下的(「換成開襟外套」→「開襟外套」)。三個字以上才用,太短會亂中。
+const FILLER = ["換成", "改成", "換掉", "改用", "給我", "幫我", "我要", "我想", "想要", "來一件", "來件", "一件", "一雙", "一條",
+  "一頂", "一個", "穿上", "穿", "換", "改", "試試", "看看", "那件", "這件", "的", "吧", "呢", "嗎", "啊", "一下"];
+function phraseOf(t, colorWord) {
+  let phrase = t;
+  for (const word of [colorWord, ...FILLER].filter(Boolean).sort((a, b) => b.length - a.length)) phrase = phrase.split(word).join("");
+  phrase = phrase.replace(/[\s,，。.!！?？、色]/g, "");
+  return phrase.length >= 3 ? phrase : null;
+}
+
 // 顏色:名稱字＋hex 色域雙路認。長詞先比(「深藍」先於「藍」、「米白」先於「白」)。
 // 門檻是拿真衣櫃 101 件「名稱說的顏色 vs 建檔抓的 hex」對過調的(2026-09-21,原本 18 件不一致):
 //   米白/奶油偏暖會被當卡其 → 白以亮度為主;軍綠/橄欖其實落在 h40–70 低彩度 → 綠要收橄欖;
@@ -371,12 +397,17 @@ export function parseRequest(text) {
 
   if (slotHit && wantsRemove && !wantsSwap) return { kind: "remove", raw, slot: slotHit.slot };
   // 「換成黑色襯衫」:明講要替換那一格,就只換一件,別因為句子含「西裝」之類的字就重挑整套
-  if (slotHit && REPLACE_HINTS.some((h) => t.includes(h))) return { kind: "swap", raw, slot: slotHit.slot, category: slotHit.category, color };
+  const descriptors = detectDescriptors(t);
+  const phrase = phraseOf(t, color?.word);
+  const spec = { slot: slotHit?.slot || null, category: slotHit?.category || null, color, descriptors, phrase };
+  if (slotHit && REPLACE_HINTS.some((h) => t.includes(h))) return { kind: "swap", raw, ...spec };
   if (slotHit && intent?.formality) {
     // 「面試要穿襯衫」:整套照場合挑,再把指定那格釘成指定單品
-    return { kind: "outfit", raw, intent, pin: { slot: slotHit.slot, category: slotHit.category, color } };
+    return { kind: "outfit", raw, intent, pin: spec };
   }
-  if (slotHit) return { kind: "swap", raw, slot: slotHit.slot, category: slotHit.category, color };
+  if (slotHit) return { kind: "swap", raw, ...spec };
+  // 沒講品類,但講了款式或材質(「穿開襟的」「來件燈芯絨」):整櫃找
+  if (descriptors.length && wantsSwap && !intent?.understood) return { kind: "swap", raw, ...spec };
   if (intent?.understood) return { kind: "outfit", raw, intent };
   return { kind: "unknown", raw };
 }
@@ -384,12 +415,26 @@ export function parseRequest(text) {
 /** 在指定槽位找最符合「品類＋顏色」的單品。回 { item, exact } 或 null(這類沒東西)。
  *  excludeId:「換一件」沒指定顏色品類時,排除身上那件,不然會換回同一件。 */
 export function findItemForSwap(items, spec, wearLog = {}, excludeId = null) {
-  const pool = items.filter((it) => it.part === spec.slot && !it.wishlist);
+  const descriptors = spec.descriptors || [];
+  const owned = items.filter((it) => !it.wishlist);
+  // 候選:同一格的;再加上品名整段對得上、或描述字全中的別格單品。
+  // 例:「開襟外套」——「灰色細針織開襟外套」建檔在上衣,只看外套那格永遠找不到它。沒講品類(slot 為 null)就整櫃找。
+  const describedElsewhere = (it) => (spec.phrase && (it.name || "").toLowerCase().includes(spec.phrase))
+    || (descriptors.length && descriptors.every((group) => group.some((word) => itemText(it).includes(word.toLowerCase()))));
+  const pool = owned.filter((it) => !spec.slot || it.part === spec.slot || describedElsewhere(it));
   if (!pool.length) return null;
   const aliases = spec.category ? (CATEGORY_ALIASES[spec.category] || [spec.category]) : null;
   const scored = pool.map((it) => {
     const text = itemText(it);
-    let score = 0, catHit = false, colorHit = false;
+    let score = 0, catHit = false, colorHit = false, descHit = true;
+    if (spec.phrase && (it.name || "").toLowerCase().includes(spec.phrase)) score += 5;   // 品名整段對上:幾乎就是它
+    for (const group of descriptors) {
+      const hits = group.filter((word) => text.includes(word.toLowerCase())).length;
+      // 品名和英文標籤都對上(「開襟」＋cardigan)比只沾到一個字(「開襟領」Polo 衫)更像
+      score += hits ? 2.5 + Math.min(hits - 1, 1) * 0.6 : -1.5;
+      if (!hits) descHit = false;
+    }
+    if (spec.slot && it.part !== spec.slot) score -= 0.5;   // 別格的只在描述明顯更合時才贏
     // 品類比顏色重:要「黑襯衫」給深藍襯衫還說得過去,給黑衛衣就答非所問
     if (aliases) {
       catHit = aliases.some((a) => text.includes(a.toLowerCase()));
@@ -413,10 +458,10 @@ export function findItemForSwap(items, spec, wearLog = {}, excludeId = null) {
     }
     score += recencyPenalty(it, wearLog) * 0.3;
     if (excludeId && it.id === excludeId) score -= 5;
-    return { it, score, catHit, colorHit };
+    return { it, score, catHit, colorHit, descHit };
   }).sort((a, b) => b.score - a.score);
   const best = scored[0];
-  const exact = (!aliases || best.catHit) && (!spec.color || best.colorHit);
+  const exact = (!aliases || best.catHit) && (!spec.color || best.colorHit) && best.descHit;
   return { item: best.it, exact };
 }
 
