@@ -1584,9 +1584,12 @@ h1, h2, h3 {
 /* ===== 框選 ===== */
 .add-panel .add-step { font-size: 15px; color: var(--ink); }
 .add-panel .add-hint { color: var(--muted); font-size: 12px; line-height: 1.6; }
+/* overflow: hidden:框外變暗用的是框的大陰影,沒關在照片裡的話會蓋到整個視窗,
+   框好之後「去背框起來的」明明可以按,看起來卻是暗的(2026-10-04 本人 iPhone 回報) */
 .crop-frame {
   position: relative; align-self: center;
   max-width: 100%; line-height: 0;
+  overflow: hidden;
   border: 1px solid var(--line); background: var(--paper);
 }
 .crop-frame img { max-width: 100%; max-height: 52vh; width: auto; height: auto; user-select: none; -webkit-user-select: none; }
