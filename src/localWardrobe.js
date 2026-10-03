@@ -281,8 +281,13 @@ export async function refillGaps(originalBlob, cutBlob) {
   return new Promise((resolve) => cut.canvas.toBlob(resolve, "image/png"));
 }
 
-/** 取出衣物的代表色(略過透明與極端明暗的像素,避免抓到陰影或反光)。 */
-export async function dominantColor(blob) {
+/** 取出衣物的主色和副色。
+ *
+ *  舊版把所有像素的 RGB 平均:深藍和橄欖綠的條紋衣,主色變成衣服上沒有的灰紫 #4D474B,
+ *  被誤判成跟灰色衣服「同色」,副色也偵測不到(審查 F20)。改成先把像素分成色群:
+ *  最大的那群當主色;第二群夠大(≥18%)、又跟主色差得夠遠,才當副色。
+ *  只看完全不透明的像素:去背邊緣半透明的那圈混著背景和陰影,會被抓成一個假的副色。 */
+export async function garmentColors(blob) {
   const bitmap = await createImageBitmap(blob);
   const canvas = document.createElement("canvas");
   canvas.width = 64;
@@ -291,16 +296,60 @@ export async function dominantColor(blob) {
   context.drawImage(bitmap, 0, 0, 64, 64);
   const { data } = context.getImageData(0, 0, 64, 64);
 
-  let red = 0, green = 0, blue = 0, count = 0;
-  for (let i = 0; i < data.length; i += 4) {
-    if (data[i + 3] < 200) continue;
-    const luma = (data[i] * 0.299) + (data[i + 1] * 0.587) + (data[i + 2] * 0.114);
-    if (luma < 18 || luma > 242) continue;
-    red += data[i]; green += data[i + 1]; blue += data[i + 2]; count += 1;
+  const collect = (minAlpha) => {
+    const buckets = new Map();
+    let total = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] < minAlpha) continue;
+      const key = ((data[i] >> 5) << 6) | ((data[i + 1] >> 5) << 3) | (data[i + 2] >> 5);   // 每色 8 階
+      const bucket = buckets.get(key) || { r: 0, g: 0, b: 0, count: 0 };
+      bucket.r += data[i]; bucket.g += data[i + 1]; bucket.b += data[i + 2]; bucket.count += 1;
+      buckets.set(key, bucket);
+      total += 1;
+    }
+    return { buckets, total };
+  };
+  // 很小或很細的單品(手環、鞋帶)縮到 64×64 後幾乎沒有全不透明的像素,退一步收半透明的
+  let { buckets, total } = collect(250);
+  if (total < 40) ({ buckets, total } = collect(160));
+  if (!total) return { color: "#9a9286", secondaryColor: null };
+
+  const mean = (group) => ({ r: group.r / group.count, g: group.g / group.count, b: group.b / group.count });
+  const gap = (a, b) => Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b);
+  // 由多到少,每一格併進離它最近、在 48 以內的色群,不然自己開一群
+  const clusters = [];
+  for (const bucket of [...buckets.values()].sort((a, b) => b.count - a.count)) {
+    const center = mean(bucket);
+    const home = clusters.find((cluster) => gap(mean(cluster), center) < 48);
+    if (home) { home.r += bucket.r; home.g += bucket.g; home.b += bucket.b; home.count += bucket.count; }
+    else clusters.push({ ...bucket });
   }
-  if (!count) return "#9a9286";
-  const hex = (value) => Math.round(value / count).toString(16).padStart(2, "0");
-  return `#${hex(red)}${hex(green)}${hex(blue)}`;
+  clusters.sort((a, b) => b.count - a.count);
+  const hex = ({ r, g, b }) => `#${[r, g, b].map((value) => Math.round(value).toString(16).padStart(2, "0")).join("")}`;
+  const primary = mean(clusters[0]);
+  const second = clusters.slice(1).find((cluster) => cluster.count / total >= 0.18 && gap(mean(cluster), primary) >= 60);
+  return { color: hex(primary), secondaryColor: second ? hex(mean(second)) : null };
+}
+
+/** 雲端一張圖的上限是 3MB,加密前留一點餘裕。新增時和同步前都用這條線把圖縮小(審查 F5)。 */
+export const SYNC_IMAGE_LIMIT = 2.5 * 1024 * 1024;
+
+/** 圖超過 limit 就縮小長邊重存 PNG(不用 WebP:iOS 的 canvas.toBlob 不支援,會默默退回 PNG)。沒超過原樣回傳。 */
+export async function shrinkImage(blob, limit = SYNC_IMAGE_LIMIT) {
+  if (!blob || blob.size <= limit) return blob;
+  const bitmap = await createImageBitmap(blob);
+  let smallest = blob;
+  for (const side of [1100, 900, 700]) {
+    const scale = Math.min(1, side / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const out = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (out && out.size < smallest.size) smallest = out;
+    if (out && out.size <= limit) return out;
+  }
+  return smallest;
 }
 
 /** 依長寬比猜分類 —— 只是預設值,使用者可以在對話框改。 */

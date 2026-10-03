@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { becomeOwner } from "./ownerMode.js";
 import {
-  deleteCloud, formatCode, isValidCode, joinSync, lastSynced, normalizeCode, rotateCode,
+  deleteCloud, formatCode, isValidCode, joinSync, lastSyncError, lastSynced, normalizeCode, rotateCode,
   startSync, stopSync, syncCode, syncNotice, syncNow,
 } from "./sync.js";
 
@@ -18,7 +18,10 @@ const timeText = (iso) => {
 
 export function SyncPanel({ canStart = true }) {
   const [code, setCode] = useState(syncCode);
-  const [status, setStatus] = useState(() => (syncNotice() ? { error: syncNotice() } : lastSynced() ? { at: lastSynced() } : null));
+  // 打開面板時先講最近一次的結果:上次失敗就說失敗、改動還沒上去,不要只寫「上次同步 HH:MM」(審查 F40)
+  const [status, setStatus] = useState(() => (syncNotice() ? { error: syncNotice() }
+    : lastSyncError() ? { error: lastSyncError() }
+    : lastSynced() ? { at: lastSynced() } : null));
   const [busy, setBusy] = useState("");
   const [joining, setJoining] = useState(!canStart);
   const [typed, setTyped] = useState("");
@@ -50,13 +53,23 @@ export function SyncPanel({ canStart = true }) {
   const join = (event) => {
     event.preventDefault();
     const next = normalizeCode(typed);
-    if (!isValidCode(next)) { setStatus({ error: "同步碼是 16 個英文字母和數字,再對一次" }); return; }
+    if (!isValidCode(next)) {
+      // 打了 16 個字卻被說不對,多半是把長得像的字打成 0、O、1、I:同步碼裡不會有這四個(審查 F62)
+      const lookalike = next.length === 16 && /[01OI]/.test(next);
+      setStatus({ error: lookalike ? "同步碼裡不會有 0、O、1、I 這四個字,是長得像的別的字,再對一次" : `同步碼是 16 個英文字母和數字,現在是 ${next.length} 個,再對一次` });
+      return;
+    }
     act("加入中…", async () => {
       const result = await joinSync(next);
       if (!result.error) {
         setJoining(false);
         setTyped("");
-        if (!canStart) { becomeOwner(); window.location.replace(window.location.pathname); }   // 拿掉 ?edit=off、?public 這類參數,不然又被切回訪客
+        if (!canStart) {
+          // 重新整理之後講一聲加入了、拿到幾件(審查 F63:舊版直接跳回入口,沒有任何回饋)
+          try { sessionStorage.setItem("open-wardrobe-joined", String(result.pulled || 0)); } catch { /* 看不到回饋而已 */ }
+          becomeOwner();
+          window.location.replace(window.location.pathname);   // 拿掉 ?edit=off、?public 這類參數,不然又被切回訪客
+        }
       }
       return result;
     });
@@ -129,7 +142,7 @@ export function SyncPanel({ canStart = true }) {
       )}
 
       {status?.error ? (
-        <p className="studio-backup-msg" role="status">{status.stopped || !code ? status.error : `同步失敗:${status.error}`}</p>
+        <p className="studio-backup-msg is-error" role="status">{status.stopped || !code ? status.error : `同步沒成功,這台的改動還沒上去:${status.error}`}</p>
       ) : code && status?.at ? (
         <p className="studio-backup-msg" role="status">
           上次同步 {timeText(status.at)}
@@ -142,7 +155,7 @@ export function SyncPanel({ canStart = true }) {
           ? "另一台打開入口右上「同步」,輸入這組碼就會看到同一個衣櫃。拿到碼的人都看得到、改得到,不要貼到公開的地方。"
           : canStart
             ? "自己加的衣服、想買的、穿著紀錄和收藏會加密後存到雲端,只有輸入同步碼的裝置解得開,手機和平板就會一樣。"
-            : "同步碼在已經開始同步的那台:入口右上「同步」→「看同步碼」。加入後這台會看到一樣的衣櫃。"}
+            : "同步只給站主自己的裝置用:在已經同步的那台按「看同步碼」,把碼打在這裡。要把你加的衣服搬到另一台,用搭配頁最下面的「匯出備份」「匯入備份」。"}
       </p>
     </div>
   );

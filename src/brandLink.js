@@ -50,6 +50,12 @@ export function parseBrandLink(text) {
       key: `${hmall.key}:${code}`,   // 同一件商品的身分證:手機版、電腦版網址不同,比重複時用這個
     };
   }
+  // 品牌的網址、但不是單一商品頁(首頁、分類頁、搜尋結果):舊版當成「這個網站的圖抓不到」(審查 F59),
+  // 其實是找不到商品編號。講清楚要貼哪一種。日本、美國站的商品頁(/jp/ja/products/E465185-000/00)編號格式不同,
+  // 抓不到圖但網址還是要存,不能也當成「不是商品頁」
+  if (hmall && !/product|goods|\/p\//i.test(url.pathname + url.search)) {
+    return { brand: hmall.brand, url: href, name: nameHint, images: [], notProduct: true };
+  }
 
   if (url.host.endsWith("zara.com")) {
     const slug = decodeURIComponent(url.pathname.split("/").pop() || "");

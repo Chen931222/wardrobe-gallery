@@ -63,16 +63,27 @@ function colorGap(a, b) {
    黑對深藍 12.6–13.6、白對米色 21.9 不算(畫面上寫的是「同色」,不能把深藍說成黑)。 */
 const SIMILAR_GAP = 10;
 
-/** 櫃裡同分類、同款式、同版型(認得出的話)、主色接近的。版型確定一樣的排前面,其次看顏色多近。 */
+/* 花紋:條紋、格紋跟素面不算同一件。主色再接近,條紋衣跟素色 T 恤也不是重複買(審查 F20)。
+   品名沒寫花紋的當素面,所以兩件只要一件有花紋、或花紋不同,就不算像。 */
+const PATTERNS = [["條紋", /條紋|直紋|橫紋|stripe|pinstripe/i], ["格紋", /格紋|格子|plaid|check|tartan|千鳥/i], ["迷彩", /迷彩|camo/i]];
+function patternOf(item) {
+  const text = `${item.name || ""} ${(item.tags || []).join(" ")}`;
+  for (const [pattern, regex] of PATTERNS) if (regex.test(text)) return pattern;
+  return null;
+}
+
+/** 櫃裡同分類、同款式、同花紋、同版型(認得出的話)、主色接近的。版型確定一樣的排前面,其次看顏色多近。 */
 export function findSimilar(wish, owned) {
   const wishKind = kindOf(wish);
   const wishFit = fitOf(wish);
+  const wishPattern = patternOf(wish);
   return owned
     .filter((item) => item.part === wish.part)
     .filter((item) => {
       const kind = kindOf(item);
       return !wishKind || !kind || kind === wishKind;
     })
+    .filter((item) => patternOf(item) === wishPattern)
     .map((item) => ({ item, fit: fitOf(item), gap: colorGap(wish.color, item.color) }))
     .filter(({ fit }) => !wishFit || !fit || fit === wishFit)
     .filter(({ gap }) => gap <= SIMILAR_GAP)

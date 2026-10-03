@@ -8,8 +8,10 @@ import { AddGarment } from "./AddGarment.jsx";
 import { SyncPanel } from "./SyncPanel.jsx";
 import { deleteLocalItem, findUrl, loadLocalItems, productUrlProblem, updateLocalItem } from "./localWardrobe.js";
 import { CAN_ADD, CAN_EDIT, canEditItem } from "./ownerMode.js";
-import { hasLocalChanges, scheduleSync, syncCode, syncNow } from "./sync.js";
+import { hasLocalChanges, lastSyncError, noteDeliberateDelete, scheduleSync, syncCode, syncNotice, syncNow } from "./sync.js";
 import { findSimilar, fitOf, guessWarmth, kindLabel, wishOutfits } from "./wishCheck.js";
+import { colorName, isNeutral } from "./recommend.js";
+import { useDialog } from "./useDialog.js";
 
 const STORAGE_KEY = "open-wardrobe-edits-v1";
 const DELETED_STORAGE_KEY = "open-wardrobe-deleted-v1";
@@ -29,6 +31,36 @@ const TYPES = [
 ];
 
 const TYPE_MAP = Object.fromEntries(TYPES.map((type) => [type.id, type]));
+
+/* 衣櫃標籤是離線流程用英文關鍵字寫的,給人看的唯讀頁換成中文(審查 F50)。品牌照原文。
+   對不到的照原樣顯示:可能是站主自己打的。 */
+const TAG_ZH = {
+  "acid-wash": "酸洗", backpack: "後背包", baggy: "寬版", baseball: "棒球", baselayer: "內搭", belted: "附腰帶", biker: "騎士",
+  black: "黑色", blazer: "西裝外套", blouson: "短夾克", burgundy: "酒紅", "button-up": "排扣", camo: "迷彩", canvas: "帆布",
+  cardigan: "開襟", cargo: "工裝", "cargo-pants": "工裝褲", casual: "休閒", cat: "貓", charcoal: "炭灰", chino: "卡其褲",
+  chore: "工作外套", chunky: "厚底", "city-connect": "城市版", coach: "教練外套", "contrast-stitch": "對比車線", corduroy: "燈芯絨",
+  cotton: "棉", "cotton-fleece": "刷毛棉", court: "球場鞋", cream: "奶油色", creased: "壓線", crescent: "半月", crew: "圓領",
+  crewneck: "圓領", crossbody: "斜背", "dark-gray": "深灰", denim: "丹寧", distressed: "破損", drapey: "垂墜", drawstring: "抽繩",
+  "dress-pants": "西裝褲", "elastic-waist": "鬆緊腰", embroidered: "刺繡", "embroidered-logo": "刺繡標誌", field: "野戰",
+  "five-pocket": "五口袋", flannel: "法蘭絨", fleece: "刷毛", graphic: "印花", "graphic print": "印花", grey: "灰色",
+  halfzip: "半拉鍊", "harry-potter": "哈利波特", heather: "麻花", "heather-gray": "麻灰", heavyweight: "厚磅", henley: "亨利領",
+  hightop: "高筒", hoodie: "帽T", jacket: "夾克", jeans: "牛仔褲", jersey: "球衣", jogger: "束口褲", knit: "針織", laptop: "筆電包",
+  layered: "疊穿", leather: "皮革", "light-wash": "淺色水洗", lightweight: "輕薄", longsleeve: "長袖", loungewear: "居家服",
+  mesh: "網布", mockneck: "半高領", nationals: "國民隊", navy: "深藍", nylon: "尼龍", olive: "橄欖綠", "open-collar": "開領",
+  oversized: "寬版", oxford: "牛津布", padres: "教士隊", pants: "長褲", parachute: "降落傘褲", patch: "布章", pinstripe: "細條紋",
+  pleated: "打褶", "pocket-tee": "口袋 T", polo: "Polo 衫", "polo-rl": "Polo Ralph Lauren", preppy: "學院風", red: "紅色",
+  "relaxed-fit": "寬鬆", retro: "復古", ribbed: "羅紋", running: "慢跑", sandals: "涼鞋", shirt: "襯衫", "shirt-jacket": "襯衫外套",
+  "short sleeve": "短袖", shorts: "短褲", shortsleeve: "短袖", "shoulder bag": "肩背包", signature: "經典款", skater: "滑板",
+  sleeveless: "無袖", slides: "拖鞋", sling: "斜背", "smart-casual": "休閒正式", sneakers: "球鞋", socks: "襪子", sport: "運動",
+  "straight-leg": "直筒", streetwear: "街頭", striped: "條紋", suede: "麂皮", "sweat-shorts": "棉短褲", sweater: "毛衣",
+  sweatpants: "棉褲", sweatshirt: "大學T", tank: "背心", techwear: "機能風", textured: "紋理", tods: "TOD'S", trousers: "長褲",
+  twill: "斜紋布", vest: "背心", vintage: "古著", vneck: "V 領", waffle: "鬆餅格", "waist bag": "腰包", washed: "水洗",
+  "washed-black": "水洗黑", "wide-leg": "寬褲", windbreaker: "防風外套", wool: "羊毛", workwear: "工裝", zip: "拉鍊",
+  "zip-off": "可拆褲管", "zip-pocket": "拉鍊口袋",
+  adidas: "adidas", nike: "Nike", mlb: "MLB", dickies: "Dickies", gu: "GU", lacoste: "Lacoste", "new balance": "New Balance",
+  samsonite: "Samsonite", timberland: "Timberland", "under armour": "Under Armour",
+};
+const tagLabel = (tag) => TAG_ZH[String(tag).toLowerCase()] || tag;
 const TYPE_ORDER = Object.fromEntries(TYPES.slice(1).map((type, index) => [type.id, index]));
 
 
@@ -285,9 +317,9 @@ function ColorControl({ label, field, value, palette, onChange, sampling, setSam
           onChange={(event) => onChange(event.target.value)}
           aria-label={`選擇${label}`}
         />
-        <span className="selected-color-copy">
+        <span className="selected-color-copy" title={value || undefined}>
           <small>目前</small>
-          <strong>{value || "自訂"}</strong>
+          <strong>{value ? colorName(value) : "自訂"}</strong>
         </span>
       </label>
       <div className="suggestion-heading">
@@ -302,8 +334,8 @@ function ColorControl({ label, field, value, palette, onChange, sampling, setSam
             className={value?.toLowerCase() === color.toLowerCase() ? "active" : ""}
             style={{ backgroundColor: color }}
             onClick={() => onChange(color)}
-            aria-label={`把 ${color} 設為${label}`}
-            title={color}
+            aria-label={`把這個${colorName(color)}設為${label}`}
+            title={colorName(color)}
           />
         ))}
       </div>
@@ -382,7 +414,7 @@ function ReadOnlyDetails({ item, onWear }) {
     item.color && { hex: item.color, label: "主色" },
     item.secondaryColor && { hex: item.secondaryColor, label: "副色" },
   ].filter(Boolean);
-  const tags = item.tags || [];
+  const tags = [...new Set((item.tags || []).map(tagLabel))];
   return (
     <div className="viewer-readonly">
       <p className="viewer-ro-category">{type}</p>
@@ -393,7 +425,7 @@ function ReadOnlyDetails({ item, onWear }) {
               <span className="viewer-ro-swatch" style={{ backgroundColor: color.hex }} aria-hidden="true" />
               <span className="viewer-ro-color-copy">
                 <small>{color.label}</small>
-                <code>{color.hex}</code>
+                <span>{colorName(color.hex)}</span>
               </span>
             </span>
           ))}
@@ -511,7 +543,10 @@ function WishCheck({ item, owned, onOpen, onWearOutfit }) {
         {plan.error ? <p>{plan.error}</p> : (
           <>
             <p>
-              {plan.partner && plan.total > 0 && `${PART_NAME[plan.partner]} ${plan.total} 件裡,${plan.fit} 件跟它配色不打架。`}
+              {/* 中性色跟什麼都配,「26 件裡 26 件不打架」沒有資訊(審查 F58),換個說法 */}
+              {plan.partner && plan.total > 0 && (isNeutral(item.color)
+                ? `${colorName(item.color)}是中性色,跟櫃裡的${PART_NAME[plan.partner]}都配得起來。`
+                : `${PART_NAME[plan.partner]} ${plan.total} 件裡,${plan.fit} 件跟它配色不打架。`)}
               照它適合的天氣(體感約 {plan.feelsLike}°)配了 {plan.outfits.length} 套:
             </p>
             <ul className="wish-outfits">
@@ -526,7 +561,7 @@ function WishCheck({ item, owned, onOpen, onWearOutfit }) {
                         </span>
                       ))}
                     </div>
-                    <button className="secondary-button" type="button" onClick={() => onWearOutfit(outfit)}>穿這套</button>
+                    <button className="secondary-button" type="button" onClick={() => onWearOutfit(outfit)}>穿上看看</button>
                   </li>
                 );
               })}
@@ -555,6 +590,9 @@ function rebaseDraft(draft, before, after) {
 /** @param gone 這件在別台被刪掉或隱藏了:頁面留著(草稿還在、可以複製),但存檔、刪除、穿上這些動作都關掉 */
 function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWear, onBought, onSetUrl, onOpen, onWearOutfit }) {
   const closeButtonRef = useRef(null);
+  const dialogRef = useRef(null);
+  // 焦點圈在單品頁裡、關掉後回到原本點的那格(審查 F46)。Esc 照下面自己的處理(先取消吸色、有沒存的先擋)
+  useDialog(dialogRef, null, { initialFocus: closeButtonRef });
   const imageRef = useRef(null);
   const samplingCanvasRef = useRef(null);
   const shakeTimerRef = useRef(null);
@@ -621,6 +659,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
 
   useEffect(() => {
     const onKeyDown = (event) => {
+      if (event.isComposing || event.keyCode === 229) return;   // 選字中按 Esc 是取消選字
       if (event.key === "Escape") {
         if (sampling) setSampling(null);
         else requestClose();
@@ -649,6 +688,12 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
   useEffect(() => {
     if (isDirty) setSampleStatus((status) => (status === "已儲存。" ? "" : status));
   }, [isDirty]);
+
+  // 「在搭配頁穿上」「穿上看看」會離開這頁:有沒存的修改先擋下來,跟關閉一樣(審查抓到:改了分類沒存,直接穿上就丟了)
+  const wearHere = () => {
+    if (isDirty && !gone) { nudgeUnsaved(); return; }
+    onWear(item);
+  };
 
   const cancelEditing = () => {
     setDraft(draftOf(item));
@@ -679,7 +724,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
     const targetField = sampling === "secondary" ? "secondaryColor" : "color";
     setDraft((current) => ({ ...current, [targetField]: color }));
     setPalette((current) => [color, ...current.filter((existing) => existing.toLowerCase() !== color.toLowerCase())].slice(0, 5));
-    setSampleStatus(`已吸取 ${color}。`);
+    setSampleStatus(`已吸取這個${colorName(color)}。`);
     setSampling(null);
   };
 
@@ -705,7 +750,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
   return (
     <div className="viewer-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && requestClose()}>
     <div className="viewer-entry">
-    <aside className={`viewer editing${hasModeledImage ? " has-modeled-image" : ""}${shaking ? " shake" : ""}`} role="dialog" aria-modal="true" aria-label="選中的衣物">
+    <aside ref={dialogRef} className={`viewer editing${hasModeledImage ? " has-modeled-image" : ""}${shaking ? " shake" : ""}`} role="dialog" aria-modal="true" aria-label="選中的衣物">
       <button className="viewer-icon-close" type="button" onClick={requestClose} aria-label="關閉" ref={closeButtonRef}>
         <X size={24} weight="light" aria-hidden="true" />
       </button>
@@ -752,7 +797,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
               {item.sourceUrl && !productUrlProblem(item.sourceUrl) && (
                 <a className="secondary-button" href={item.sourceUrl} target="_blank" rel="noopener noreferrer">回商品頁</a>
               )}
-              <button className="secondary-button" type="button" onClick={() => onWear(item)} disabled={gone}>
+              <button className="secondary-button" type="button" onClick={wearHere} disabled={gone}>
                 <Sparkle size={15} weight="regular" aria-hidden="true" /> 穿上看看
               </button>
               <button className="secondary-button" type="button" onClick={() => onBought(item.id)} disabled={gone}>已經買了</button>
@@ -763,6 +808,14 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
         )}
         {canEditItem(item) ? (
           <>
+            {/* 站主和自己加的衣服,單品頁原本只有編輯表單,要穿上得回搭配頁找(審查 F30) */}
+            {!item.wishlist && (
+              <div className="viewer-wear-row">
+                <button className="secondary-button" type="button" onClick={wearHere} disabled={gone}>
+                  <Sparkle size={15} weight="regular" aria-hidden="true" /> 在搭配頁穿上
+                </button>
+              </div>
+            )}
             <ItemEditor
               draft={draft}
               setDraft={setDraft}
@@ -772,7 +825,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
               sampleStatus={sampleStatus}
             />
 
-            {closeBlocked && <p className="unsaved-notice" role="status">關閉前請先儲存或取消變更。</p>}
+            {closeBlocked && <p className="unsaved-notice" role="status">離開這頁前請先儲存或取消變更。</p>}
 
             <div className="viewer-actions">
               <button className="delete-button" type="button" onClick={() => onDelete(item.id)} disabled={gone}>
@@ -805,6 +858,32 @@ export function App() {
   const [pendingOutfit, setPendingOutfit] = useState(null);   // 由入口頁的今日推薦帶進搭配頁
   const [closetChoice, setClosetChoice] = useState(null);     // 訪客手動選的衣櫃;null = 照有沒有自己的衣服決定
   const [syncOpen, setSyncOpen] = useState(false);
+  const [pendingDaily, setPendingDaily] = useState(null);   // 入口今日推薦的天氣和理由,跟著那套帶進搭配頁(審查 F25)
+  const [addRequest, setAddRequest] = useState(0);           // 空衣櫃、推薦失敗的「新增」按鈕:換到衣櫃並打開新增
+  // 做完一件事的一行回饋:剛加入的、按了「已經買了」、剛加入同步(審查 F18、F55、F63)
+  const [notice, setNotice] = useState(() => {
+    try {
+      const joined = sessionStorage.getItem("open-wardrobe-joined");
+      if (joined === null) return "";
+      sessionStorage.removeItem("open-wardrobe-joined");
+      return Number(joined) ? `加入同步了,從另一台拿到 ${joined} 件。` : "加入同步了。";
+    } catch { return ""; }
+  });
+  const noticeTimer = useRef(null);
+  const say = useCallback((text) => {
+    setNotice(text);
+    clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(""), 6000);
+  }, []);
+  useEffect(() => {
+    if (notice) noticeTimer.current = setTimeout(() => setNotice(""), 6000);
+    return () => clearTimeout(noticeTimer.current);
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps -- 只為了一打開就有的那句(加入同步)排一次
+  // 同步出狀況(停掉、上次失敗)時入口「同步」旁亮一個點;不打開面板也看得到(審查 F11、F40)
+  const [syncAlert, setSyncAlert] = useState(() => CAN_EDIT && Boolean(syncNotice() || lastSyncError()));
+  const sheetRef = useRef(null);
+  const closeSync = useCallback(() => { setSyncOpen(false); setSyncAlert(CAN_EDIT && Boolean(syncNotice() || lastSyncError())); }, []);
+  useDialog(sheetRef, closeSync, { active: syncOpen });
 
   // 衣櫃 = 離線流程匯入的(data/library.json)+ 使用者自己在網頁加的(IndexedDB)
   // 同時有兩次 refresh 在跑時(同步拉到東西、剛存好),只採用最後發出的那次;edits 和隱藏名單在 await 之後才讀,
@@ -857,8 +936,8 @@ export function App() {
       // 背景時跳 confirm,瀏覽器可能不等人就回 false(會把剛刪的那件拿回來):先不問,回到前景的同步會再偵測一次
       if (pendingDeletes && document.visibilityState === "hidden") return;
       if (pendingDeletes) {
-        // 這台一次少了好幾件:問清楚是真的刪了,還是資料被瀏覽器清掉了
-        const push = window.confirm(`這台少了 ${pendingDeletes} 件自己加的衣服(可能是你刪的,也可能是瀏覽器把資料清掉了)。\n\n按「確定」:其他裝置和雲端也一起刪掉。\n按「取消」:從雲端把這 ${pendingDeletes} 件拿回來。`);
+        // 這台一次少了好幾件:問清楚是真的刪了,還是資料被瀏覽器清掉了。這次打開網站後自己按刪除的不算在裡面(sync.js 的 deliberate)
+        const push = window.confirm(`這台少了 ${pendingDeletes} 件自己加的衣服,不是剛剛在這裡按刪除的。可能是瀏覽器把資料清掉了,也可能是之前刪的還沒同步。\n\n按「確定」:其他裝置和雲端也一起刪掉。\n按「取消」:從雲端把這 ${pendingDeletes} 件拿回來。`);
         setTimeout(() => syncNow({ deletes: push ? "push" : "restore" }), 0);   // 等這一輪同步收尾
         return;
       }
@@ -868,7 +947,10 @@ export function App() {
       // 同步半途失敗時也重讀一次:可能已經寫進一部分衣服。
       const keys = event.detail.keys || [];
       if (event.detail.pulled || keys.includes(STORAGE_KEY) || keys.includes(DELETED_STORAGE_KEY) || (event.detail.error && !event.detail.stopped)) refresh();
+      setSyncAlert(Boolean(syncNotice() || lastSyncError()));
     };
+    // 網路恢復就補推:斷線時改的東西不用等下次切 app(審查 F40)
+    const onOnline = () => { if (syncCode()) syncNow(); };
     const onVisibility = () => {
       if (!syncCode()) return;
       if (document.visibilityState === "visible") syncNow();
@@ -880,8 +962,10 @@ export function App() {
     // iOS 從主畫面的 app 切回來,舊版有時不發 visibilitychange;從快取還原頁面時再補一次
     const onPageShow = (event) => { if (event.persisted && syncCode()) syncNow(); };
     window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("online", onOnline);
     if (syncCode()) syncNow();
     return () => {
+      window.removeEventListener("online", onOnline);
       window.removeEventListener("wardrobe-synced", onSynced);
       window.removeEventListener("wardrobe-local-change", scheduleSync);
       document.removeEventListener("visibilitychange", onVisibility);
@@ -933,13 +1017,20 @@ export function App() {
 
   // 帶進搭配頁的那套只用一次:離開搭配頁就清掉,不然回來時又被套回入口那套,蓋掉後來自己換的
   useEffect(() => {
-    if (view !== "styling") setPendingOutfit(null);
+    if (view !== "styling") { setPendingOutfit(null); setPendingDaily(null); }
   }, [view]);
 
-  // 帶一套進搭配頁:先記成「身上這套」,進去後手動重新整理也穿得回來
-  const wearOutfit = (outfit) => {
-    rememberWearing(outfit);
+  // 帶一套進搭配頁:先記成「身上這套」,進去後手動重新整理也穿得回來。daily = 入口今日推薦的天氣和理由
+  const wearOutfit = (outfit, daily = null) => {
+    rememberWearing(outfit, closet);
     setPendingOutfit(outfit);
+    setPendingDaily(daily);
+  };
+
+  // 「新增第一件」「去新增」:換到衣櫃(新增鈕在那裡的標題列),叫新增自己打開
+  const requestAdd = () => {
+    setView("closet");
+    setAddRequest((count) => count + 1);
   };
 
   const chooseType = (typeId) => {
@@ -998,9 +1089,12 @@ export function App() {
     persistEdit(updatedItem, original);
   };
 
+  // 商品網址留著:之後再貼同一件的連結,才認得出已經有了(審查 F31)。按完講一聲,不然畫面只是安靜地變成編輯表單(F55)
   const markBought = async (id) => {
-    await updateLocalItem(id, { wishlist: false, sourceUrl: null });
+    const target = items.find((item) => item.id === id);
+    await updateLocalItem(id, { wishlist: false });
     await refresh();
+    say(`「${target?.name || "這件"}」放進衣櫃了。`);
   };
 
   const setWishUrl = async (id, sourceUrl) => {
@@ -1014,6 +1108,7 @@ export function App() {
     const note = syncCode() ? "\n開了同步,其他裝置也會一起刪掉。" : "";
     if (!window.confirm(`確定刪除「${target?.name || "這件"}」?${note}`)) return;
     if (id.startsWith("local-")) {
+      noteDeliberateDelete(id);   // 同步不用再問一次「這台少了幾件」
       // 自己加的:直接從 IndexedDB 移除,不需要記到「已刪除」名單
       await deleteLocalItem(id);
       appliedSeq.current = ++refreshSeq.current;   // 還在跑的 refresh 讀的是刪除前的本機清單,作廢,免得那件又冒出來
@@ -1046,22 +1141,29 @@ export function App() {
           <LandingRing
             title={closet === "demo" && CAN_ADD ? "示範衣櫃" : "我的衣櫃"}
             note={closet === "demo" && CAN_ADD ? (
-              <>這是站主自己的衣櫃,先拿來示範。<button type="button" onClick={() => { chooseCloset("mine"); setView("closet"); }}>{mineCount ? "回我的衣櫃" : "建立我的衣櫃"}</button></>
+              <>
+                <span className="landing-pitch">把自己的衣服<span className="landing-pitch-more">拍照、或貼 GU、UNIQLO 的連結</span>放進來,每天照台中的天氣配一套。<span className="landing-pitch-more">下面是站主的衣櫃,先拿來示範。</span></span>
+                <button type="button" className="landing-make" onClick={() => { chooseCloset("mine"); if (mineCount) setView("closet"); else requestAdd(); }}>
+                  {mineCount ? "回我的衣櫃" : "建立我的衣櫃"}
+                </button>
+              </>
             ) : null}
             items={ownedItems}
             onSync={CAN_ADD ? () => setSyncOpen(true) : null}
+            syncAlert={syncAlert}
             onOpen={setSelectedId}
             onEnter={setView}
-            onWearOutfit={(outfit) => { wearOutfit(outfit); setView("styling"); }}
+            onAdd={CAN_ADD ? requestAdd : null}
+            onWearOutfit={(outfit, daily) => { wearOutfit(outfit, daily); setView("styling"); }}
           />
         )}
         {view === "landing" && loading && <p className="status">衣櫃載入中</p>}
 
         {/* 同步放在入口:手機第一眼就找得到。?public 不出現 */}
         {syncOpen && (
-          <div className="add-overlay" role="dialog" aria-modal="true" aria-label="同步" onClick={(event) => { if (event.target === event.currentTarget) setSyncOpen(false); }}>
+          <div className="add-overlay" role="dialog" aria-modal="true" aria-label="同步" ref={sheetRef} onClick={(event) => { if (event.target === event.currentTarget) closeSync(); }}>
             <div className="sync-sheet">
-              <button type="button" className="add-close" onClick={() => setSyncOpen(false)} aria-label="關閉">
+              <button type="button" className="add-close" onClick={closeSync} aria-label="關閉">
                 <X size={20} weight="light" aria-hidden="true" />
               </button>
               <h2>同步</h2>
@@ -1072,23 +1174,27 @@ export function App() {
 
         {(view !== "landing" || (!loading && !ownedItems.length)) && (
         <header className="gallery-header">
+          <h1 className="visually-hidden">{view === "styling" ? "搭配" : "衣櫃"}</h1>
           <div className="gallery-meta-row">
             <p className="piece-count">{ownedItems.length} 件單品{wishCount > 0 && <span className="piece-count-wish"> · 想買 {wishCount}</span>}</p>
             <div className="header-tools">
               {CAN_ADD && (
                 <AddGarment
                   existing={closet === "all" ? items : items.filter((item) => item.isLocal)}
-                  onAdded={async (wishlist) => {
+                  openRequest={addRequest}
+                  onOpenHandled={() => setAddRequest(0)}
+                  onAdded={async (wishlist, name) => {
                     if (!CAN_EDIT) { setClosetChoice("mine"); setPendingOutfit(null); }   // 換到我的衣櫃:示範衣櫃帶進來的那套不要跟過去
                     await refresh();
                     if (wishlist) showWishlist();
+                    say(wishlist ? `「${name}」放進想買的了。` : `「${name}」加進衣櫃了。`);
                   }}
                 />
               )}
               <nav className="view-nav" aria-label="切換頁面">
                 <button type="button" onClick={() => setView("landing")}>入口</button>
-                <button type="button" className={view === "closet" ? "active" : ""} onClick={() => setView("closet")}>衣櫃</button>
-                <button type="button" className={view === "styling" ? "active" : ""} onClick={() => setView("styling")}>搭配</button>
+                <button type="button" className={view === "closet" ? "active" : ""} aria-current={view === "closet" ? "page" : undefined} onClick={() => setView("closet")}>衣櫃</button>
+                <button type="button" className={view === "styling" ? "active" : ""} aria-current={view === "styling" ? "page" : undefined} onClick={() => setView("styling")}>搭配</button>
               </nav>
             </div>
           </div>
@@ -1111,6 +1217,8 @@ export function App() {
         </header>
         )}
 
+        {/* 浮在畫面上方:入口頁是滿版的、單品頁在手機上蓋滿整個畫面,放在頁面裡會看不到(審查抓到) */}
+        {notice && <p className="app-notice" role="status">{notice}</p>}
         {error && <p className="status error">{error}</p>}
         {view !== "landing" && !error && loading && <p className="status">衣櫃載入中</p>}
         {/* 只看「想買的」分頁時它自己會列出來;入口、搭配、其他分頁仍要講,不然空白一片 */}
@@ -1123,15 +1231,26 @@ export function App() {
             </p>
           ) : (
             <p className="status empty">
-              {CAN_ADD ? "你的衣櫃還是空的。按右上「新增」,貼 GU、UNIQLO 的商品連結,或拍一張平放的衣服。" : "這個衣櫃還沒有單品。"}
+              {/* 不講方位:iPhone 上新增在左上,桌機在右上(審查 F53)。直接給一顆按鈕 */}
+              {CAN_ADD ? "你的衣櫃還是空的。貼 GU、UNIQLO 的商品連結,或拍一張平放的衣服。" : "這個衣櫃還沒有單品。"}
+              {CAN_ADD && (
+                <>
+                  <br />
+                  <button type="button" className="secondary-button" onClick={requestAdd}>新增第一件</button>
+                </>
+              )}
             </p>
           )
         )}
 
         {view === "styling" && !loading && !!ownedItems.length && (
-          <OutfitStudio key={closet} items={wearItems} initialOutfit={pendingOutfit} onOpenItem={setSelectedId} />
+          <OutfitStudio key={closet} closet={closet} items={wearItems} initialOutfit={pendingOutfit} initialDaily={pendingDaily} onOpenItem={setSelectedId} />
         )}
 
+        {/* 示範衣櫃的眼鏡、手錶這幾類是 0 件,點下去整頁空白(審查 F52) */}
+        {view === "closet" && !!ownedItems.length && !visibleItems.length && activeType !== "wishlist" && (
+          <p className="status empty">這一類還沒有單品。</p>
+        )}
         {view === "closet" && !!closetItems.length && (
           <section className="gallery-grid" aria-label={`${activeType === "wishlist" ? "想買的" : TYPE_MAP[activeType]?.label || "全部"}衣物`}>
             {visibleItems.map((item) => (

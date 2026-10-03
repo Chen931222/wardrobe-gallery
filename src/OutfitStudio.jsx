@@ -1,7 +1,8 @@
 // [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowCounterClockwise, ArrowsClockwise, CalendarCheck, Export, FloppyDisk, ImageSquare, Lock, LockOpen, Microphone, Sparkle, Trash, X } from "@phosphor-icons/react";
-import { adjustIntent, fetchWeather, findItemForSwap, parseRequest, readWearLog, recommendOutfit, recordWear } from "./recommend.js";
+import { adjustIntent, fetchWeather, findItemForSwap, parseRequest, randomOutfit, readWearLog, recommendOutfit, recordWear, unrecordWear } from "./recommend.js";
+import { syncCode } from "./sync.js";
 import { buildBackup, downloadBackup, restoreBackup } from "./backup.js";
 import { LookCard } from "./LookCard.jsx";
 
@@ -45,8 +46,6 @@ const SLOT_LABEL = {
   socks: "襪子", shoes: "鞋子", bag: "包款",
   eyewear: "眼鏡", wrist: "手錶手環", accessories_up: "其他配件",
 };
-
-const CORE_SLOTS = new Set(["upperbody", "lowerbody", "shoes"]);
 
 function readLooks() {
   try {
@@ -99,12 +98,31 @@ function Silhouette() {
   );
 }
 
-/** 帶一套進搭配頁之前先記成「身上這套」:進去之後手動重新整理,也穿得回來。 */
-export function rememberWearing(outfit) {
+/* 「身上這套」每個衣櫃各存一份。訪客的「我的衣櫃」和「示範衣櫃」以前共用一個鍵,
+   在一邊換衣服就把另一邊那套蓋掉,切回去人台是空的(審查報告 known limit)。站主只有一個衣櫃,沿用原本的鍵。 */
+const wearingKey = (closet) => (!closet || closet === "all" ? WEARING_KEY : `${WEARING_KEY}-${closet}`);
+
+function readWearing(closet) {
+  try {
+    // 分開之前存的那份還在舊鍵裡:這個衣櫃還沒有自己的,就先拿舊的(還原時只會穿回這個衣櫃裡有的衣服)
+    const raw = localStorage.getItem(wearingKey(closet)) ?? localStorage.getItem(WEARING_KEY);
+    const value = JSON.parse(raw || "{}");
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeWearing(closet, outfit) {
   try {
     const ids = Object.fromEntries(Object.entries(outfit || {}).filter(([, item]) => item).map(([slot, item]) => [slot, item.id]));
-    localStorage.setItem(WEARING_KEY, JSON.stringify(ids));
+    localStorage.setItem(wearingKey(closet), JSON.stringify(ids));
   } catch { /* 私密模式等存不了就算了 */ }
+}
+
+/** 帶一套進搭配頁之前先記成「身上這套」:進去之後手動重新整理,也穿得回來。 */
+export function rememberWearing(outfit, closet = "all") {
+  writeWearing(closet, outfit);
 }
 
 /** 指令要的東西怎麼說:「黑色」＋「開襟」＋「外套」;都沒講就用那一格的名稱 */
@@ -115,14 +133,17 @@ function askedLabel(spec, fallback) {
 
 /**
  * @param onOpenItem 在衣架上點兩下一件衣服時叫,帶 id;App 拿去打開單品頁看資訊
+ * @param closet "all"(站主)、"mine"、"demo":「身上這套」各衣櫃分開記
+ * @param initialDaily 入口今日推薦帶進來的天氣和理由,進來就看得到為什麼是這套(審查 F25)
  */
-export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null }) {
+export function OutfitStudio({ items, initialOutfit = null, initialDaily = null, onOpenItem = null, closet = "all" }) {
   const [wearing, setWearing] = useState(() => initialOutfit || {});   // 帶一套進來時一開始就穿著,寫回時才不會先寫出空的
   const [looks, setLooks] = useState(readLooks);
   const [stripType, setStripType] = useState("upperbody");
   const [occasion, setOccasion] = useState("");           // 「說個場合」輸入框
   const [locks, setLocks] = useState({});                 // 槽位→true:重挑時那格不動
   const [past, setPast] = useState([]);                   // 復原用:最近幾套 wearing
+  const itemCountRef = useRef(items.length);              // 衣服件數:變多了才清掉「沒辦法推薦」
   const lastIntentRef = useRef(null);                     // 上一次整套推薦的場合,給「再正式一點」「再推薦一套」接著用
   const dirtyRef = useRef(false);                         // 使用者真的動過穿搭才寫 localStorage,免得還原前先被空狀態蓋掉
   const pushHistory = (current) => setPast((stack) => [current, ...stack].slice(0, HISTORY_MAX));
@@ -167,8 +188,8 @@ export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null })
 
   // 入口頁按「穿這套」帶進來的推薦穿搭,直接套上人形
   useEffect(() => {
-    if (initialOutfit) { dirtyRef.current = true; setWearing(initialOutfit); setAdjusting(null); }
-  }, [initialOutfit]);
+    if (initialOutfit) { dirtyRef.current = true; setWearing(initialOutfit); setAdjusting(null); setDaily(initialDaily); }
+  }, [initialOutfit]);   // eslint-disable-line react-hooks/exhaustive-deps -- 理由跟著那一套走,只在換一套帶進來時換
 
   // 記住身上這套:進頁面先從 localStorage 還原(入口頁帶進來的優先),之後只要使用者動過就存。
   const restoredRef = useRef(false);
@@ -176,23 +197,16 @@ export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null })
     if (restoredRef.current || !items.length) return;
     restoredRef.current = true;
     if (initialOutfit) return;
-    try {
-      const saved = JSON.parse(localStorage.getItem(WEARING_KEY) || "{}");
-      const next = {};
-      for (const [slot, id] of Object.entries(saved)) {
-        const item = items.find((existing) => existing.id === id);
-        if (item && item.part === slot) next[slot] = item;
-      }
-      if (Object.keys(next).length) setWearing(next);
-    } catch { /* 壞掉就當沒存 */ }
-  }, [items, initialOutfit]);
+    const next = {};
+    for (const [slot, id] of Object.entries(readWearing(closet))) {
+      const item = items.find((existing) => existing.id === id);
+      if (item && item.part === slot) next[slot] = item;
+    }
+    if (Object.keys(next).length) setWearing(next);
+  }, [items, initialOutfit, closet]);
   useEffect(() => {
-    if (!dirtyRef.current) return;
-    try {
-      const ids = Object.fromEntries(Object.entries(wearing).filter(([, item]) => item).map(([slot, item]) => [slot, item.id]));
-      localStorage.setItem(WEARING_KEY, JSON.stringify(ids));
-    } catch { /* 私密模式等存不了就算了 */ }
-  }, [wearing]);
+    if (dirtyRef.current) writeWearing(closet, wearing);
+  }, [wearing, closet]);
 
   const fitOf = useCallback((item) => (item && fits[item.id]) || DEFAULT_FIT, [fits]);
 
@@ -403,14 +417,9 @@ export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null })
     });
   };
 
+  // 隨機一套:有天氣(推薦過一次、或背景抓到了)就避開跟今天差太多的;還沒抓到不等,完全隨機(審查 F27)
   const randomize = () => {
-    const next = {};
-    for (const [slot, all] of Object.entries(wardrobeByType)) {
-      const group = all.filter((item) => !item.wishlist);
-      if (!group.length) continue;
-      if (!CORE_SLOTS.has(slot) && Math.random() < 0.55) continue;
-      next[slot] = group[Math.floor(Math.random() * group.length)];
-    }
+    const next = randomOutfit(items, weatherRef.current);
     setAdjusting(null);
     pushHistory(wearing); dirtyRef.current = true;
     setWearing(next);
@@ -418,7 +427,7 @@ export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null })
   };
 
   /* ---------- 今日推薦(天氣 + 規則引擎)與穿著紀錄 ---------- */
-  const [daily, setDaily] = useState(null);      // { weather, reasons } | { error }
+  const [daily, setDaily] = useState(() => (initialOutfit ? initialDaily : null));   // { weather, reasons } | { error }
   const [dailyBusy, setDailyBusy] = useState(false);
   // 「已記錄」直接看穿著紀錄:身上每一件今天都記過才算。舊版是一個布林,只有今日推薦和「換成…」會清,
   // 用隨機、衣架、復原、收藏、脫掉換了衣服,按鈕還卡在「已記錄」而且按不下去,真正穿出門的那套記不進去
@@ -428,6 +437,10 @@ export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null })
   // 衣櫃重讀過(別台刪掉、隱藏、改了名稱或分類):身上這套和復原紀錄逐件換成新的物件;
   // 不見了或分類改了的拿掉,免得人台穿著已經刪掉的衣服,還被寫進收藏和穿著紀錄。沒變就不動 state。
   useEffect(() => {
+    // 衣服變多了(剛新增一件),舊的「還沒有下身」可能已經不成立,不要一直掛著(審查 F18)。
+    // 只看件數變多:同步重讀衣櫃也會換一份新的 items,那時「抓不到天氣」這種錯還要留著給人看
+    if (items.length > itemCountRef.current) setDaily((current) => (current?.error ? null : current));
+    itemCountRef.current = items.length;
     const byId = new Map(items.map((item) => [item.id, item]));
     const remap = (outfit) => {
       let changed = false;
@@ -490,6 +503,13 @@ export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null })
   const today = new Date().toLocaleDateString("sv");
   const recorded = wornItems.length > 0 && wornItems.every((item) => wornDates[item.id] === today);
   const weatherRef = useRef(null);               // 快取,同一次瀏覽不重抓
+  // 背景先抓一次天氣:「隨機一套」要用,但不擋畫面;抓不到就算了,隨機照舊
+  useEffect(() => {
+    let alive = true;
+    if (!weatherRef.current && initialDaily?.weather) weatherRef.current = initialDaily.weather;
+    if (!weatherRef.current) fetchWeather().then((weather) => { if (alive && !weatherRef.current) weatherRef.current = weather; }).catch(() => {});
+    return () => { alive = false; };
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // 今日推薦、「照場合挑」、「再正式一點」、「上衣留著其他重挑」全走這一條;差別只在帶進來的參數:
   //   intent      場合意圖(null=純看天氣);會記成 lastIntent 給下一句「再…一點」「再推薦一套」接著用
@@ -698,7 +718,9 @@ export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null })
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    if (!confirm("匯入會用備份覆蓋這台瀏覽器目前的紀錄(穿著紀錄、收藏、微調…),確定?")) return;
+    // 講清楚會發生的三件事(審查 F42):舊版只說「這台瀏覽器」,開了同步其實會傳到每一台
+    const synced = syncCode() ? "\n・開了同步,這些會傳到你的每一台裝置。" : "";
+    if (!confirm(`匯入這份備份?\n・備份裡的衣服會加回來,包括之後刪掉的。\n・穿著紀錄、收藏、微調會換回備份當時的版本。${synced}`)) return;
     try {
       await restoreBackup(JSON.parse(await file.text()));
       setBackupMsg("已還原,重新整理讓紀錄生效…");
@@ -708,15 +730,31 @@ export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null })
     }
   };
 
+  // 按了「今天穿這套」可以取消(審查 F29):記之前每件的日期留著,取消時換回去。只留到換一套或離開這頁
+  const [wearUndo, setWearUndo] = useState(null);   // { ids: "a|b|c", before: { id: 日期|null } }
+  const wornKey = wornItems.map((item) => item.id).sort().join("|");
+  const canUndoWear = Boolean(wearUndo && wearUndo.ids === wornKey);
   const wearToday = () => {
     if (!wornItems.length) return;
-    setWornDates(recordWear(wornItems));
+    if (recorded && canUndoWear) {   // 過了午夜、或別台改過日期,就不是「剛記的那一下」,照常記
+      setWornDates(unrecordWear(wearUndo.before));
+      setWearUndo(null);
+      return;
+    }
+    const { log, before } = recordWear(wornItems);
+    setWornDates(log);
+    setWearUndo({ ids: wornKey, before });
   };
 
+  // 收藏:同一套(同樣幾件)不重複存,按完要看得出存了(審查 F54)
+  const sameIds = (a, b) => a.length === b.length && [...a].sort().join("|") === [...b].sort().join("|");
+  const savedAlready = wornItems.length > 0 && looks.some((look) => sameIds(look.itemIds, wornItems.map((item) => item.id)));
   const saveLook = () => {
     if (!wornItems.length) return;
+    const current = readLooks();
+    if (current.some((look) => sameIds(look.itemIds, wornItems.map((item) => item.id)))) { setLooks(current); return; }
     const look = { id: `look-${Date.now()}`, itemIds: wornItems.map((item) => item.id), savedAt: new Date().toISOString() };
-    const next = [look, ...readLooks()].slice(0, 30);
+    const next = [look, ...current].slice(0, 30);
     setLooks(next);
     localStorage.setItem(LOOKS_KEY, JSON.stringify(next));
     if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));
@@ -733,11 +771,34 @@ export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null })
     setWearing(next);
   };
 
+  // 刪收藏不問,但留 6 秒可以復原(審查 F13:垃圾桶緊貼「做成卡片」,點一下就刪、救不回來)。比 confirm 不打斷操作
+  const [lookUndo, setLookUndo] = useState(null);   // { look, index }
+  const lookUndoTimer = useRef(null);
+  useEffect(() => () => clearTimeout(lookUndoTimer.current), []);
   const deleteLook = (id) => {
-    const next = readLooks().filter((look) => look.id !== id);
+    const current = readLooks();
+    const index = current.findIndex((look) => look.id === id);
+    if (index < 0) return;
+    const next = current.filter((look) => look.id !== id);
     setLooks(next);
     localStorage.setItem(LOOKS_KEY, JSON.stringify(next));
     if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));
+    setLookUndo({ look: current[index], index });
+    clearTimeout(lookUndoTimer.current);
+    lookUndoTimer.current = setTimeout(() => setLookUndo(null), 6000);
+  };
+  const restoreLook = () => {
+    if (!lookUndo) return;
+    const current = readLooks();
+    if (!current.some((look) => look.id === lookUndo.look.id)) {
+      const next = [...current];
+      next.splice(Math.min(lookUndo.index, next.length), 0, lookUndo.look);
+      setLooks(next.slice(0, 30));
+      localStorage.setItem(LOOKS_KEY, JSON.stringify(next.slice(0, 30)));
+      if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));
+    }
+    clearTimeout(lookUndoTimer.current);
+    setLookUndo(null);
   };
 
   /* ---------- 選取框(在調整中的那件外圍) ---------- */
@@ -766,8 +827,15 @@ export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null })
     </button>
   );
   const wearTodayButton = (
-    <button type="button" className={`studio-wear-today${recorded ? " done" : ""}`} onClick={wearToday} disabled={!wornItems.length || recorded}>
-      <CalendarCheck size={15} weight="regular" aria-hidden="true" /> {recorded ? (phone ? "已記錄" : "已記錄,近幾天不再推薦") : "今天穿這套"}
+    <button
+      type="button"
+      className={`studio-wear-today${recorded ? " done" : ""}`}
+      onClick={wearToday}
+      disabled={!wornItems.length || (recorded && !canUndoWear)}
+      aria-label={recorded && canUndoWear ? "已記錄今天穿這套;按一下取消" : undefined}
+    >
+      <CalendarCheck size={15} weight="regular" aria-hidden="true" />{" "}
+      {!recorded ? "今天穿這套" : canUndoWear ? (phone ? "已記錄 · 取消" : "已記錄,近幾天不再推薦 · 取消") : (phone ? "已記錄" : "已記錄,近幾天不再推薦")}
     </button>
   );
 
@@ -884,7 +952,7 @@ export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null })
             onChange={(event) => setOccasion(event.target.value)}
             onFocus={focusOccasion}
             onBlur={blurOccasion}
-            placeholder="「約會」「換成黑色襯衫」「再正式一點」「上衣留著其他重挑」「上一步」"
+            placeholder="說個場合,或要換哪一件"
             aria-label="輸入場合或指定要換的單品"
           />
           {(SpeechAPI || isIOS) && (
@@ -904,6 +972,15 @@ export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null })
             <Sparkle size={14} weight="regular" aria-hidden="true" /> 照這句挑
           </button>
         </form>
+        {/* 例句放在框下面、點了就照著做。舊版全塞在 placeholder,被截斷,「上一步」從來看不到(審查 F51) */}
+        <p className="studio-examples">
+          <span>例如</span>
+          {["約會", "換成黑色襯衫", "再正式一點", "上衣留著其他重挑", "上一步"].map((example) => (
+            <button key={example} type="button" disabled={dailyBusy} onClick={() => { setOccasion(example); handleRequest(example); }}>
+              {example}
+            </button>
+          ))}
+        </p>
         {listening && (
           <p className="studio-mic-note" role="status">聆聽中… 語音會傳到瀏覽器的辨識服務(Chrome→Google、Safari→Apple)轉成文字</p>
         )}
@@ -962,8 +1039,8 @@ export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null })
             </button>
           </div>
           <div className="studio-actions-finalize" role="group" aria-label="定案這套">
-            <button type="button" className="studio-save" onClick={saveLook} disabled={!wornItems.length}>
-              <FloppyDisk size={15} weight="regular" aria-hidden="true" /> 收藏這套
+            <button type="button" className="studio-save" onClick={saveLook} disabled={!wornItems.length || savedAlready}>
+              <FloppyDisk size={15} weight={savedAlready ? "fill" : "regular"} aria-hidden="true" /> {savedAlready ? "已收藏" : "收藏這套"}
             </button>
             <button type="button" onClick={() => openCard(wearing, { understood: daily?.understood, weather: daily?.weather })} disabled={!wornItems.length} title="做成一張可分享的圖(不上傳)">
               <Export size={15} weight="regular" aria-hidden="true" /> 匯出這套
@@ -972,9 +1049,14 @@ export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null })
           </div>
         </div>
 
-        {!!looks.length && (
+        {(!!looks.length || lookUndo) && (
           <div className="studio-looks">
             <h3>收藏的穿搭</h3>
+            {lookUndo && (
+              <p className="studio-look-undo" role="status">
+                刪掉了一套收藏。<button type="button" onClick={restoreLook}>復原</button>
+              </p>
+            )}
             <ul>
               {looks.map((look) => {
                 const names = look.itemIds
@@ -999,8 +1081,8 @@ export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null })
                     >
                       <ImageSquare size={14} weight="regular" aria-hidden="true" />
                     </button>
-                    <button type="button" className="studio-look-delete" onClick={() => deleteLook(look.id)} aria-label="刪除這套穿搭">
-                      <Trash size={13} weight="regular" aria-hidden="true" />
+                    <button type="button" className="studio-look-delete" onClick={() => deleteLook(look.id)} aria-label="刪除這套穿搭" title="刪除(6 秒內可以復原)">
+                      <Trash size={15} weight="regular" aria-hidden="true" />
                     </button>
                   </li>
                 );
@@ -1029,6 +1111,7 @@ export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null })
               key={slot}
               type="button"
               className={stripType === slot ? "active" : ""}
+              aria-pressed={stripType === slot}
               onClick={() => setStripType(slot)}
             >
               {label}
@@ -1043,6 +1126,8 @@ export function OutfitStudio({ items, initialOutfit = null, onOpenItem = null })
               key={item.id}
               type="button"
               className={`studio-rack-item${wearing[item.part]?.id === item.id ? " wearing" : ""}`}
+              aria-pressed={wearing[item.part]?.id === item.id}
+              aria-label={`${item.name || SLOT_LABEL[item.part]}${item.wishlist ? "(還沒買)" : ""}`}
               onClick={() => tapRackItem(item)}
               title={`${item.wishlist ? `${item.name}(還沒買)` : item.name}${onOpenItem ? "\n點兩下看資訊" : ""}`}
             >

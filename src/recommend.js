@@ -45,12 +45,28 @@ export function readWearLog() {
   }
 }
 
+/** 記下今天穿了這幾件。回傳新的紀錄,和記之前每件的日期(取消用,沒記過的是 null)。 */
 export function recordWear(items) {
   const log = readWearLog();
   const today = new Date().toLocaleDateString("sv");
-  for (const item of items) log[item.id] = today;
+  const before = {};
+  for (const item of items) { before[item.id] = log[item.id] ?? null; log[item.id] = today; }
   localStorage.setItem(WEARLOG_KEY, JSON.stringify(log));
   if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));   // 開了同步的話,5 秒後推上去
+  return { log, before };
+}
+
+/** 取消剛剛那一下「今天穿這套」:每件換回記之前的日期。不能直接刪掉,不然會連更早的紀錄一起清掉(審查 F29)。
+ *  只動今天記的那幾件;中間別台改過的日期不碰。 */
+export function unrecordWear(before) {
+  const log = readWearLog();
+  const today = new Date().toLocaleDateString("sv");
+  for (const [id, date] of Object.entries(before || {})) {
+    if (log[id] !== today) continue;
+    if (date) log[id] = date; else delete log[id];
+  }
+  localStorage.setItem(WEARLOG_KEY, JSON.stringify(log));
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));
   return log;
 }
 
@@ -119,7 +135,7 @@ function hexToHsl(hex) {
   return { h, s, l };
 }
 
-function isNeutral(hex) {
+export function isNeutral(hex) {
   const { s, l } = hexToHsl(hex);
   return s < 0.22 || l < 0.18 || l > 0.9;
 }
@@ -238,6 +254,16 @@ function cueHit(item) {
   return find(FORMAL_CUES, "正式") || find(SPORTY_CUES, "運動") || find(CASUAL_CUES, "休閒") || null;
 }
 
+/* 線索詞的中文說法:給理由面板看,不影響比對 */
+const CUE_ZH = {
+  shirt: "襯衫", suit: "西裝", blazer: "西裝外套", slacks: "西裝褲", chino: "卡其褲", leather: "皮革", loafer: "樂福鞋",
+  oxford: "牛津布", derby: "德比鞋", coat: "大衣", wool: "羊毛", tailored: "剪裁", polo: "Polo 衫",
+  sport: "運動", jersey: "球衣", sweat: "棉質運動", "帽t": "帽T", hoodie: "帽T", track: "運動", jogger: "束口褲", mesh: "網布",
+  running: "慢跑", athletic: "運動", sneaker: "球鞋", gym: "運動", slides: "拖鞋",
+  denim: "丹寧", jeans: "牛仔褲", distressed: "破損", baggy: "寬版", oversize: "寬版", tee: "T 恤", "t-shirt": "T 恤",
+  shorts: "短褲", canvas: "帆布", casual: "休閒", cotton: "棉",
+};
+
 /* ---------- 單品請求:「換成黑色襯衫」「脫掉外套」 ----------
  * 對應 drape 的 request route(specific item / remove a piece),一樣純關鍵字。 */
 
@@ -329,6 +355,16 @@ const COLOR_WORDS = [
   { key: "yellow", words: ["黃", "金"], target: { h: 55, l: 0.6 }, test: (c) => c.h >= 45 && c.h <= 70 && c.s > 0.3 },
   { key: "orange", words: ["橘", "橙"], target: { h: 30, l: 0.55 }, test: (c) => c.h >= 15 && c.h <= 45 && c.s > 0.5 && c.l > 0.4 },
 ];
+
+const COLOR_NAME = { navy: "深藍", white: "白", black: "黑", grey: "灰", blue: "藍", red: "紅", green: "綠", khaki: "卡其", brown: "咖啡", purple: "紫", pink: "粉紅", yellow: "黃", orange: "橘" };
+
+/** 色碼 → 「深藍色」這種說法,給人看的畫面用(審查 F50:舊版直接露出 #4D474B)。認不出來的叫「混色」。 */
+export function colorName(hex) {
+  if (!/^#?[0-9a-f]{6}$/i.test(hex || "")) return "";
+  const hsl = hexToHsl(hex);
+  const hit = COLOR_WORDS.find((spec) => spec.test(hsl));
+  return hit ? `${COLOR_NAME[hit.key]}色` : "混色";
+}
 
 /** 一件單品所有已知的顏色(主色+副色+色盤):條紋衫的白才不會被平均成的那坨灰吞掉。 */
 function itemColors(item) {
@@ -506,18 +542,72 @@ function materialsOf(list) {
 }
 
 /**
+ * 「隨機一套」:按鈕本來就叫隨機,但體感 36° 時 8 次有 2 次是毛衣加長褲(審查 F27)。
+ * 有天氣就先濾掉跟今天差太多的上衣、外套、下身和鞋;沒有天氣(還沒抓到)就完全隨機,不等 API。
+ * 每一格濾完沒東西就退回那一格全部,不會因為濾太嚴而少一件。
+ */
+export function randomOutfit(items, weather = null) {
+  const pickOne = (list) => list[Math.floor(Math.random() * list.length)];
+  const byPart = (part) => items.filter((item) => item.part === part && !item.wishlist);
+  const narrow = (list, keep) => { const kept = list.filter(keep); return kept.length ? kept : list; };
+  const known = (item) => typeof item.warmth === "number";
+  const feels = typeof weather?.feelsLike === "number" ? weather.feelsLike : null;
+  const target = feels === null ? null : targetWarmth(feels);
+  const wantOuter = feels === null ? null : needOuter(feels, weather.rainProb ?? 0);
+  const outfit = {};
+
+  const tops = byPart("upperbody");
+  if (tops.length) {
+    // 要穿外套的天氣,上衣本身薄一點(外套那份照 recommendOutfit 打 8 折算)
+    const topTarget = target === null ? null : wantOuter ? Math.max(1, target - 2.4) : target;
+    outfit.upperbody = pickOne(topTarget === null ? tops : narrow(tops, (top) => !known(top) || Math.abs(top.warmth - topTarget) <= 1.5));
+  }
+  const outers = byPart("wholebody_up");
+  if (outers.length) {
+    if (wantOuter === null) {
+      if (Math.random() < 0.45) outfit.wholebody_up = pickOne(outers);
+    } else if (wantOuter) {
+      const need = (target - (known(outfit.upperbody || {}) ? outfit.upperbody.warmth : 1)) / 0.8;
+      outfit.wholebody_up = pickOne(narrow(outers, (outer) => !known(outer) || Math.abs(outer.warmth - need) <= 1.5));
+    } else if (Math.random() < 0.25) {
+      const thin = outers.filter((outer) => known(outer) && outer.warmth <= 1);   // 熱天只會敞開披一件薄的
+      if (thin.length) outfit.wholebody_up = pickOne(thin);
+    }
+  }
+  const bottoms = byPart("lowerbody");
+  if (bottoms.length) {
+    outfit.lowerbody = pickOne(feels === null ? bottoms : narrow(bottoms, (bottom) => !known(bottom)
+      || (feels < 22 ? bottom.warmth > 1 : feels >= 30 ? bottom.warmth <= 3 : true)));
+  }
+  const shoes = byPart("shoes");
+  if (shoes.length) {
+    outfit.shoes = pickOne(feels === null ? shoes : narrow(shoes, (shoe) => (feels >= 20 || !known(shoe) || shoe.warmth > 1)
+      && !((weather.rainProb ?? 0) >= 60 && shoe.rainOk === false)));
+  }
+  for (const part of ["socks", "bag", "eyewear", "wrist", "accessories_up"]) {
+    const list = byPart(part);
+    if (list.length && Math.random() >= 0.55) outfit[part] = pickOne(list);
+  }
+  return outfit;
+}
+
+/**
  * @param {Array} items    整櫃衣物(需含 warmth/rainOk/color/part)
  * @param {Object} weather fetchWeather() 的結果
  * @param {Object} wearLog readWearLog() 的結果
  * @param {Object} [intent] parseIntent() 的結果(場合意圖);null 就是純看天氣
  * @param {Object} [locked] 槽位→單品。鎖住的格不動,其他件圍著它配(配色/保暖都以它為前提)
- * @returns {{ outfit: Object, reasons: string[] } | { error: string }}
+ * @returns {{ outfit: Object, reasons: string[] } | { error: string, missing: string }}
  */
 export function recommendOutfit(items, weather, wearLog, intent = null, locked = {}) {
   const byPart = (part) => items.filter((item) => item.part === part && item.warmth !== undefined);
   const pool = (part) => (locked[part] ? [locked[part]] : byPart(part));
   const tops = pool("upperbody"), bottoms = pool("lowerbody");
-  if (!tops.length || !bottoms.length) return { error: "衣櫃裡上衣或下身不夠,沒辦法推薦" };
+  // 講缺什麼,畫面上才知道下一步要加哪一件(審查 F36:舊版只說「不夠」)
+  if (!tops.length || !bottoms.length) {
+    const missing = !tops.length && !bottoms.length ? "上衣和下身" : !tops.length ? "上衣" : "下身";
+    return { error: `衣櫃裡還沒有${missing},${!tops.length && !bottoms.length ? "各加一件" : "加一件"}就能推薦`, missing };
+  }
 
   // 場合意圖可覆寫天氣:「當冷天穿」降體感、「會下雨」拉高降雨機率。重指派 weather(新物件,不動呼叫端)。
   const forecast = weather;   // 理由裡要講真的預報,不講被覆寫過的數字
@@ -695,9 +785,10 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
       const name = it.name || "";
       // 讀法:單品 → 命中的線索(類別);截斷時去掉尾巴半個括號,箭頭順著讀不逆向
       const short = name.length > 12 ? `${name.slice(0, 12).replace(/[（(【\[]+$/, "")}…` : name;
-      return hit ? `${short} → ${hit.w}(${hit.kind})` : `${short} → 無線索`;
+      // 線索詞有一半是英文標籤(leather、tee),畫面上換成中文(審查 F50);這段是刻意做的透明化,不拿掉
+      return hit ? `「${short}」有${CUE_ZH[hit.w] || hit.w},算${hit.kind}` : `「${short}」看不出來`;
     });
-    reasons.push(`看到的線索:${shown.join(" · ")}`);
+    reasons.push(`看到的線索:${shown.join(";")}`);
   }
 
   return { outfit, reasons };

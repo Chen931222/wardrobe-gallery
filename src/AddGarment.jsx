@@ -1,9 +1,10 @@
 // [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, SpinnerGap, X } from "@phosphor-icons/react";
-import { cropBlob, deleteLocalItem, dominantColor, findUrl, productUrlProblem, refillGaps, saveLocalItem, trimTransparent } from "./localWardrobe.js";
+import { cropBlob, deleteLocalItem, findUrl, garmentColors, productUrlProblem, refillGaps, saveLocalItem, shrinkImage, trimTransparent } from "./localWardrobe.js";
 import { fetchBrandProduct, parseBrandLink, partFromName, partFromProduct, sameProduct } from "./brandLink.js";
 import { findSimilar, kindLabel } from "./wishCheck.js";
+import { useDialog } from "./useDialog.js";
 
 const PARTS = [
   { id: "upperbody", label: "上衣" },
@@ -21,18 +22,58 @@ const FULL = { x: 0, y: 0, w: 1, h: 1 };
 
 /* 去背模型有 80MB 左右,第一次用會下載。動態 import 讓它不進主 bundle,
    沒按「新增」的人完全不會付這個成本。 */
+const MODEL_READY_KEY = "open-wardrobe-bgmodel-v1";   // 這台成功去背過一次 = 模型已經在瀏覽器快取裡
+const modelReady = () => { try { return localStorage.getItem(MODEL_READY_KEY) === "1"; } catch { return false; } };
+
+/* 進度回呼要是同一個函式:去背套件把設定(連 progress 一起)照第一次呼叫的樣子快取起來,之後每次都叫第一次那個。
+   每次給新的回呼的話,第二件開始進度文字不動、下載看門狗也收不到進度,算到一半就被當成卡住(2026-10-03 審查抓到)。
+   所以回呼固定一個,真正要通知誰放在 currentProgress。 */
+let currentProgress = null;
+let downloading = false;
+const PROGRESS_CONFIG = {
+  output: { format: "image/png", quality: 0.9 },
+  progress: (key, current, total) => {
+    if (!currentProgress) return;
+    if (key.startsWith("fetch") && current < total) {
+      downloading = true;
+      currentProgress(`下載去背模型 ${Math.round((current / total) * 100)}%`, true);
+    } else if (key.startsWith("fetch")) {
+      // 下載到 100% 之後畫面會停 7–9 秒在算(主執行緒忙,文字也動不了),先講清楚接下來在做什麼(審查 F33)
+      currentProgress(downloading ? "模型下載好了,開始去背,約 10–20 秒…" : "去背中,約 10–20 秒…", false);
+    } else {
+      currentProgress("去背中,約 10–20 秒…", false);
+    }
+  },
+};
+// 一次只算一張:取消只是不看結果,模型那邊停不下來;馬上再按一次去背,兩張一起算,iPad 的記憶體會撐不住
+let previousRun = Promise.resolve();
+let pending = 0;   // 排隊中加上正在算的張數
+
+/** @param onProgress (文字, 是否在下載) */
 async function removeBg(file, onProgress) {
-  const { removeBackground } = await import("@imgly/background-removal");
-  return removeBackground(file, {
-    output: { format: "image/png", quality: 0.9 },
-    progress: (key, current, total) => {
-      if (key.startsWith("fetch")) onProgress(`下載去背模型 ${Math.round((current / total) * 100)}%`);
-      else onProgress("去背處理中…");
-    },
-  });
+  const waitFor = previousRun;
+  let release;
+  previousRun = new Promise((resolve) => { release = resolve; });
+  pending += 1;
+  try {
+    if (pending > 1) onProgress("上一張還在算,等它結束…", false);
+    await waitFor;
+    const { removeBackground } = await import("@imgly/background-removal");
+    downloading = false;
+    currentProgress = onProgress;
+    const result = await removeBackground(file, PROGRESS_CONFIG);
+    try { localStorage.setItem(MODEL_READY_KEY, "1"); } catch { /* 存不了就每次都顯示第一次的提示 */ }
+    return result;
+  } finally {
+    if (currentProgress === onProgress) currentProgress = null;
+    pending -= 1;
+    release();
+  }
 }
 
-/* 在照片上拖一個框。座標存成 0–1,和照片實際解析度無關。 */
+/* 在照片上拖一個框。座標存成 0–1,和照片實際解析度無關。
+   手指點下去常常會動 1–3px,舊版一動就把框重畫成一個點,按鈕變灰也不說原因(審查 F32):移動不到 8px 不算拖。 */
+const DRAG_THRESHOLD = 8;
 function CropBox({ src, box, onChange }) {
   const frameRef = useRef(null);
   const startRef = useRef(null);
@@ -47,11 +88,16 @@ function CropBox({ src, box, onChange }) {
 
   const down = (event) => {
     event.currentTarget.setPointerCapture(event.pointerId);
-    startRef.current = point(event);
+    startRef.current = { at: point(event), x: event.clientX, y: event.clientY, dragging: false };
   };
   const move = (event) => {
-    if (!startRef.current) return;
-    const a = startRef.current;
+    const start = startRef.current;
+    if (!start) return;
+    if (!start.dragging) {
+      if (Math.hypot(event.clientX - start.x, event.clientY - start.y) < DRAG_THRESHOLD) return;
+      start.dragging = true;
+    }
+    const a = start.at;
     const b = point(event);
     onChange({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(a.x - b.x), h: Math.abs(a.y - b.y) });
   };
@@ -81,6 +127,8 @@ function ImagePicker({ images, onPick }) {
   const [failed, setFailed] = useState(() => new Set());
   const [loaded, setLoaded] = useState(0);
   const allFailed = failed.size === images.length;
+  // 載不到分不出是沒網路、被擋還是真的下架,不要猜「可能下架了」(審查 F60)
+  const offline = typeof navigator !== "undefined" && navigator.onLine === false;
   return (
     <>
       <div className="pick-grid">
@@ -96,18 +144,35 @@ function ImagePicker({ images, onPick }) {
           </button>
         ))}
       </div>
-      {allFailed && <p className="add-field-error">這件的圖抓不到,可能下架了或網址改了。改用截圖。</p>}
+      {allFailed && (
+        <p className="add-field-error">
+          {offline ? "現在沒有網路,商品圖載不到。有網路再試,或改用截圖。" : "這件的商品圖載不到(網址可能不對,或品牌那邊擋了)。改用截圖。"}
+        </p>
+      )}
       {!allFailed && loaded === 0 && <small className="add-hint">載入中…</small>}
     </>
   );
 }
 
+const PAD = 0.1;
+/** 框往外多留 10% 再去背:框得太貼,模型看不到背景,中間色的條紋會被去成半透明、旁邊留一條陰影(審查 F19)。去背完再裁回原本的框。 */
+function expandBox(region) {
+  const x = Math.max(0, region.x - region.w * PAD);
+  const y = Math.max(0, region.y - region.h * PAD);
+  const right = Math.min(1, region.x + region.w * (1 + PAD));
+  const bottom = Math.min(1, region.y + region.h * (1 + PAD));
+  return { x, y, w: right - x, h: bottom - y };
+}
+
 /**
- * @param onAdded 存好之後叫,帶一個參數:這件是不是存進「想買的」
+ * @param onAdded 存好之後叫,帶兩個參數:這件是不是存進「想買的」、存成什麼名字
  * @param existing 這個衣櫃已經有的(含想買的),存檔前拿來比對有沒有重複;站主是全部,訪客只有自己加的
+ * @param openRequest 大於 0 就打開新增(空衣櫃、推薦失敗的「新增第一件」按鈕用);打開後叫 onOpenHandled 讓呼叫端歸零,
+ *        不然切到入口再回來、這個元件重新掛上時又會自己打開
  */
-export function AddGarment({ onAdded, existing = [] }) {
+export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHandled = null }) {
   const inputRef = useRef(null);
+  const dialogRef = useRef(null);
   const [stage, setStage] = useState("idle"); // idle | source | pick | crop | working | review
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -116,8 +181,20 @@ export function AddGarment({ onAdded, existing = [] }) {
   const [draft, setDraft] = useState(null);
   const [linkText, setLinkText] = useState("");
   const [link, setLink] = useState(null); // parseBrandLink 的結果,貼了連結才有
+  const runRef = useRef(0);                // 每次下載商品圖、去背都換一號;取消或逾時就換號,晚回來的結果丟掉
+  const watchdogRef = useRef(null);
 
-  const reset = () => {
+  /* 返回手勢(iPhone 從左緣側滑):舊版會直接離開網站,剛去背好的結果全丟(審查 F34)。
+     打開新增時押一筆歷史,返回就只關掉新增;已經去背好的先問一聲。用 UI 關掉時自己把那一筆吃掉。 */
+  const historyRef = useRef(false);
+  const pushHistory = () => {
+    if (historyRef.current) return;
+    try { window.history.pushState({ addGarment: true }, ""); historyRef.current = true; } catch { /* 不支援就算了 */ }
+  };
+
+  const clear = () => {
+    runRef.current += 1;
+    clearTimeout(watchdogRef.current);
     if (draft?.preview) URL.revokeObjectURL(draft.preview);
     if (source?.url) URL.revokeObjectURL(source.url);
     setDraft(null);
@@ -128,9 +205,62 @@ export function AddGarment({ onAdded, existing = [] }) {
     setLinkText("");
     setLink(null);
   };
+  const reset = () => {
+    clear();
+    if (historyRef.current) { historyRef.current = false; window.history.back(); }
+  };
+  const clearRef = useRef(clear);
+  clearRef.current = clear;
+  const stageRef = useRef(stage);
+  stageRef.current = stage;
+  useEffect(() => {
+    const onPop = () => {
+      if (!historyRef.current) return;   // 自己 history.back() 吃掉的那一筆,或新增沒開著
+      historyRef.current = false;
+      if (stageRef.current === "idle") return;
+      if (stageRef.current === "review" && !window.confirm("要放棄剛去背好的這件嗎?")) { pushHistory(); return; }
+      clearRef.current();
+    };
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      clearTimeout(watchdogRef.current);
+    };
+  }, []);
+
+  const open = () => {
+    setError("");
+    setStage("source");
+    pushHistory();
+  };
+  useEffect(() => {
+    if (!openRequest) return;
+    open();
+    onOpenHandled?.();
+  }, [openRequest]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Esc、✕、取消、返回手勢:去背好的那一步先問(焦點一進來就在 ✕ 上,按一下 Enter 不該把算了半分鐘的結果丟掉),其他直接關
+  const requestClose = () => {
+    if (stage === "review" && !window.confirm("要放棄剛去背好的這件嗎?")) return;
+    reset();
+  };
+  // 處理中按取消:回到上一步,照片和框都留著(審查 F4)。模型那邊停不下來,晚回來的結果丟掉
+  const cancelWork = () => {
+    runRef.current += 1;
+    clearTimeout(watchdogRef.current);
+    setStatus("");
+    setStage(source ? "crop" : link?.images.length ? "pick" : "source");
+  };
+  const showing = stage !== "idle";
+  useDialog(dialogRef, stage === "working" ? cancelWork : requestClose, { active: showing, watch: stage });
 
   const linkProblem = productUrlProblem(linkText);
   const parsedLink = linkText.trim() && !linkProblem ? parseBrandLink(linkText) : null;
+  // 貼上連結的那一步就講加過了沒(審查 F31):舊版要等去背完才說,白等一輪
+  const linkDupe = useMemo(
+    () => (parsedLink?.url && !parsedLink.notProduct ? existing.find((item) => item.sourceUrl && sameProduct(item.sourceUrl, parsedLink.url)) : null),
+    [parsedLink?.url, parsedLink?.notProduct, existing],   // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   const applyLink = () => {
     setLink(parsedLink);
@@ -150,6 +280,7 @@ export function AddGarment({ onAdded, existing = [] }) {
 
   /* 下載品牌的大圖再進框選;大圖失敗就退回挑圖時看到的那張。 */
   const pickBrandImage = async (image) => {
+    const run = ++runRef.current;
     setStage("working");
     setError("");
     setStatus("下載商品圖…");
@@ -158,10 +289,12 @@ export function AddGarment({ onAdded, existing = [] }) {
       if (!response.ok) response = await fetch(image.thumb);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const blob = await response.blob();
+      if (run !== runRef.current) return;
       pick(new File([blob], "brand.jpg", { type: blob.type || "image/jpeg" }));
     } catch (cause) {
+      if (run !== runRef.current) return;
       console.error(cause);
-      setError("商品圖下載失敗。換一張,或改用截圖。");
+      setError(navigator.onLine === false ? "現在沒有網路,商品圖下載不了。" : "商品圖下載失敗。換一張,或改用截圖。");
       setStage("pick");
     }
   };
@@ -175,15 +308,45 @@ export function AddGarment({ onAdded, existing = [] }) {
   };
 
   const cutout = async (region) => {
+    const run = ++runRef.current;
+    const alive = () => run === runRef.current;
     setStage("working");
     setError("");
     setStatus("讀取照片…");
+    // 看門狗只管下載:60 秒沒有任何下載進度就停(舊版卡住時永遠停在「讀取照片…」,Esc、點外面都沒用)。
+    // 開始算之後不計時:iPad gen 7 光推論就可能超過 45 秒,要停就按取消
+    const arm = () => {
+      clearTimeout(watchdogRef.current);
+      watchdogRef.current = setTimeout(() => {
+        if (!alive()) return;
+        runRef.current += 1;
+        setError("去背模型下載停住了。檢查網路後再按一次。");
+        setStatus("");
+        setStage("crop");
+      }, 60000);
+    };
+    arm();
     try {
-      const input = region === FULL ? source.file : await cropBlob(source.file, region);
-      const cut = await removeBg(input, setStatus);
+      const outer = region === FULL ? FULL : expandBox(region);
+      const input = outer === FULL ? source.file : await cropBlob(source.file, outer);
+      const cut = await removeBg(input, (text, downloading) => {
+        if (!alive()) return;
+        setStatus(text);
+        if (downloading) arm(); else clearTimeout(watchdogRef.current);
+      });
+      if (!alive()) return;
+      clearTimeout(watchdogRef.current);
       setStatus("修邊…");
-      const { blob } = await trimTransparent(await refillGaps(input, cut));
-      const color = await dominantColor(blob);
+      let clean = await refillGaps(input, cut);
+      if (outer !== FULL) {
+        clean = await cropBlob(clean, {
+          x: (region.x - outer.x) / outer.w, y: (region.y - outer.y) / outer.h,
+          w: region.w / outer.w, h: region.h / outer.h,
+        });
+      }
+      const blob = await shrinkImage((await trimTransparent(clean)).blob);
+      const { color, secondaryColor } = await garmentColors(blob);
+      if (!alive()) return;
       setDraft({
         id: `local-${Date.now()}`,
         blob,
@@ -192,6 +355,7 @@ export function AddGarment({ onAdded, existing = [] }) {
         // 長寬比猜分類一直猜錯(短褲→鞋、外套→下身),沒有品名可以看就留空讓人選
         part: link?.part || partFromName(link?.name) || "",
         color,
+        secondaryColor,
         // 貼了商品連結才預設「還沒買」;從相簿選的多半是自己已經有的
         wishlist: Boolean(link?.url),
         sourceUrl: link?.url || "",
@@ -199,6 +363,8 @@ export function AddGarment({ onAdded, existing = [] }) {
       setStage("review");
       setStatus("");
     } catch (cause) {
+      if (!alive()) return;
+      clearTimeout(watchdogRef.current);
       console.error(cause);
       setError("去背失敗,可能是照片太大或網路斷線。換一張試試,或改用離線流程處理。");
       setStage("crop");
@@ -220,21 +386,38 @@ export function AddGarment({ onAdded, existing = [] }) {
     [draft?.part, draft?.name, draft?.color, existing],
   );
   const dupes = sameLink ? [sameLink] : similar;
+  // 很像的分成已經有的、想買的:只比到想買的那件,舊版還是寫「櫃裡已經有 1 件」(審查 F57)
+  const similarText = () => {
+    const kind = kindLabel({ part: draft.part, name: draft.name });
+    const owned = similar.filter((item) => !item.wishlist).length;
+    const wished = similar.length - owned;
+    if (owned && wished) return `櫃裡已經有 ${owned} 件同色的${kind},想買的裡還有 ${wished} 件,確定還要再加?`;
+    if (owned) return `櫃裡已經有 ${owned} 件同色的${kind},確定還要再加?`;
+    return `想買的裡已經有 ${wished} 件同色的${kind},確定還要再加?`;
+  };
 
   const save = async () => {
+    const name = draft.name.trim() || (draft.wishlist ? "想買的單品" : "新單品");
     await saveLocalItem({
       id: draft.id,
-      name: draft.name.trim() || (draft.wishlist ? "想買的單品" : "新單品"),
+      name,
       part: draft.part,
       color: draft.color,
+      secondaryColor: draft.secondaryColor,
       tags: [],
       blob: draft.blob,
       wishlist: draft.wishlist,
       sourceUrl: draft.wishlist ? findUrl(draft.sourceUrl) : null,
     });
-    onAdded(draft.wishlist);
+    onAdded(draft.wishlist, name);
     reset();
   };
+
+  const closeButton = (label = "取消") => (
+    <button type="button" className="add-close" onClick={requestClose} aria-label={label}>
+      <X size={20} weight="light" aria-hidden="true" />
+    </button>
+  );
 
   return (
     <>
@@ -249,7 +432,7 @@ export function AddGarment({ onAdded, existing = [] }) {
       <button
         type="button"
         className="add-garment-button"
-        onClick={() => { setError(""); setStage("source"); }}
+        onClick={open}
         disabled={stage === "working"}
       >
         {stage === "working"
@@ -258,14 +441,12 @@ export function AddGarment({ onAdded, existing = [] }) {
       </button>
 
       {stage === "source" && (
-        <div className="add-overlay" role="dialog" aria-modal="true" aria-label="新增衣物">
+        <div className="add-overlay" role="dialog" aria-modal="true" aria-label="新增衣物" ref={dialogRef}>
           <form
             className="add-panel add-panel-review"
-            onSubmit={(event) => { event.preventDefault(); if (parsedLink) applyLink(); }}
+            onSubmit={(event) => { event.preventDefault(); if (parsedLink && !parsedLink.notProduct) applyLink(); }}
           >
-            <button type="button" className="add-close" onClick={reset} aria-label="取消">
-              <X size={20} weight="light" aria-hidden="true" />
-            </button>
+            {closeButton()}
             <p className="add-step">新增一件</p>
             <label className="add-field">
               <span>貼商品連結</span>
@@ -283,19 +464,26 @@ export function AddGarment({ onAdded, existing = [] }) {
               {linkProblem && <small className="add-field-error">{linkProblem}</small>}
             </label>
             <small className="add-hint">
-              {parsedLink?.images.length
-                ? `${parsedLink.brand} 的商品圖抓得到。下一步挑一張平拍的。`
-                : parsedLink?.name
-                  ? `${parsedLink.brand} 的圖抓不到,品名先填「${parsedLink.name}」,接著選截圖。`
-                  : parsedLink
-                    ? "這個網站的圖抓不到,網址會存起來,接著選截圖。"
-                    : "GU、UNIQLO 貼連結就能挑圖;其他品牌用截圖。"}
+              {parsedLink?.notProduct
+                ? `這是 ${parsedLink.brand} 的網址,但不是單一商品頁。打開那件商品,按分享、拷貝連結再貼。`
+                : parsedLink?.images.length
+                  ? `${parsedLink.brand} 的商品圖抓得到。下一步挑一張平拍的。`
+                  : parsedLink?.name
+                    ? `${parsedLink.brand || "這個網站"}的圖抓不到,品名先填「${parsedLink.name}」,接著選截圖。`
+                    : parsedLink
+                      ? "這個網站的圖抓不到,網址會存起來,接著選截圖。"
+                      : "GU、UNIQLO 貼連結就能挑圖;其他品牌用截圖。"}
             </small>
+            {linkDupe && (
+              <small className="add-hint add-dupe-early" role="status">
+                這件加過了:「{linkDupe.name}」{linkDupe.wishlist ? ",在想買的裡" : ",已經在衣櫃裡"}。還是可以再加一次。
+              </small>
+            )}
             <div className="add-actions">
-              <button type="button" className="secondary-button" onClick={() => { setLink(parsedLink); inputRef.current?.click(); }}>
+              <button type="button" className="secondary-button" onClick={() => { setLink(parsedLink?.notProduct ? null : parsedLink); inputRef.current?.click(); }}>
                 {parsedLink ? "改用照片" : "從相簿選照片"}
               </button>
-              <button type="submit" className="primary-button" disabled={!parsedLink}>
+              <button type="submit" className="primary-button" disabled={!parsedLink || parsedLink.notProduct}>
                 {parsedLink?.images.length ? "列出商品圖" : "選截圖"}
               </button>
             </div>
@@ -304,14 +492,12 @@ export function AddGarment({ onAdded, existing = [] }) {
       )}
 
       {stage === "pick" && link && (
-        <div className="add-overlay" role="dialog" aria-modal="true" aria-label="挑一張商品圖">
+        <div className="add-overlay" role="dialog" aria-modal="true" aria-label="挑一張商品圖" ref={dialogRef}>
           <div className="add-panel add-panel-review">
-            <button type="button" className="add-close" onClick={reset} aria-label="取消">
-              <X size={20} weight="light" aria-hidden="true" />
-            </button>
+            {closeButton()}
             <p className="add-step">挑一張平拍的</p>
             {link.name && <small className="add-hint">{link.name}</small>}
-            <small className="add-hint">衣服單獨擺著的那張去背最乾淨。模特兒穿著的,人會一起留下來。</small>
+            <small className="add-hint">衣服單獨擺著的那張去背最乾淨,通常在最後幾張。模特兒穿著的,人會一起留下來。</small>
             <ImagePicker images={link.images} onPick={pickBrandImage} />
             <div className="add-actions">
               <button type="button" className="secondary-button" onClick={() => inputRef.current?.click()}>改用截圖</button>
@@ -321,14 +507,13 @@ export function AddGarment({ onAdded, existing = [] }) {
       )}
 
       {stage === "crop" && source && (
-        <div className="add-overlay" role="dialog" aria-modal="true" aria-label="框出衣服">
+        <div className="add-overlay" role="dialog" aria-modal="true" aria-label="框出衣服" ref={dialogRef}>
           <div className="add-panel add-panel-review">
-            <button type="button" className="add-close" onClick={reset} aria-label="取消">
-              <X size={20} weight="light" aria-hidden="true" />
-            </button>
+            {closeButton()}
             <p className="add-step">用手指框出衣服</p>
             <small className="add-hint">截圖的話,把狀態列、價格、按鈕框在外面。模特兒穿著的圖去背後人也會留下,盡量挑平拍那張。</small>
             <CropBox src={source.url} box={box} onChange={setBox} />
+            {box !== FULL && tooSmall && <small className="add-field-error" role="status">框太小了,重新拖一個。</small>}
             <div className="add-actions">
               <button type="button" className="secondary-button" onClick={() => cutout(FULL)}>整張去背</button>
               <button type="button" className="primary-button" onClick={() => cutout(box)} disabled={box === FULL || tooSmall}>
@@ -340,21 +525,23 @@ export function AddGarment({ onAdded, existing = [] }) {
       )}
 
       {stage === "working" && (
-        <div className="add-overlay" role="status" aria-live="polite">
+        <div className="add-overlay" role="dialog" aria-modal="true" aria-label="處理中" ref={dialogRef}>
           <div className="add-panel">
             <SpinnerGap size={30} className="add-spinner" aria-hidden="true" />
-            <p>{status}</p>
-            <small>第一次使用要下載約 80MB 的去背模型,之後會快很多。照片在這台裝置上處理,不會上傳。</small>
+            <p role="status" aria-live="polite">{status}</p>
+            <small>
+              {modelReady() ? "" : "第一次使用要下載約 80MB 的去背模型,之後會快很多。"}
+              照片在這台裝置上處理,不會上傳。
+            </small>
+            <button type="button" className="secondary-button add-cancel" onClick={cancelWork}>取消</button>
           </div>
         </div>
       )}
 
       {stage === "review" && draft && (
-        <div className="add-overlay" role="dialog" aria-modal="true" aria-label="確認新增的衣物">
+        <div className="add-overlay" role="dialog" aria-modal="true" aria-label="確認新增的衣物" ref={dialogRef}>
           <div className="add-panel add-panel-review">
-            <button type="button" className="add-close" onClick={reset} aria-label="取消">
-              <X size={20} weight="light" aria-hidden="true" />
-            </button>
+            {closeButton()}
             <img className="add-preview" src={draft.preview} alt="去背結果預覽" />
 
             <fieldset className="add-owned">
@@ -425,8 +612,8 @@ export function AddGarment({ onAdded, existing = [] }) {
               <div className="add-dupe" role="status">
                 <p>
                   {sameLink
-                    ? `這個連結已經加過了:「${sameLink.name}」${sameLink.wishlist ? ",在想買的裡" : ""}。`
-                    : `櫃裡已經有 ${similar.length} 件同色的${kindLabel({ part: draft.part, name: draft.name })},確定還要再加?`}
+                    ? `這個連結已經加過了:「${sameLink.name}」${sameLink.wishlist ? ",在想買的裡" : ",已經在衣櫃裡"}。`
+                    : similarText()}
                 </p>
                 <div className="add-dupe-thumbs">
                   {dupes.slice(0, 4).map((item) => (
@@ -438,7 +625,7 @@ export function AddGarment({ onAdded, existing = [] }) {
             )}
 
             <div className="add-actions">
-              <button type="button" className="secondary-button" onClick={reset}>取消</button>
+              <button type="button" className="secondary-button" onClick={requestClose}>取消</button>
               <button type="button" className="primary-button" onClick={save} disabled={urlInvalid || !draft.part}>
                 {dupes.length ? "還是要存" : draft.wishlist ? "放進想買的" : "加入衣櫃"}
               </button>

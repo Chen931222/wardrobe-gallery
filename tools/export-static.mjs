@@ -61,6 +61,44 @@ await copyFile(join(ROOT, "functions", "_sync-core.mjs"), join(OUT, "api", "_syn
 const blobVersion = JSON.parse(await readFile(join(ROOT, "node_modules", "@vercel", "blob", "package.json"), "utf8")).version;
 await writeFile(join(OUT, "package.json"), JSON.stringify({ private: true, type: "module", dependencies: { "@vercel/blob": blobVersion } }, null, 2) + "\n");
 
+// 安全標頭(2026-10-03,審查報告的資安項)。同步碼存在瀏覽器裡,萬一哪天被塞進一段腳本,
+// CSP 讓它只能連到下面這幾個地方,碼送不出去。每一條都對得到用途,加新的外部服務要記得補:
+//   api.open-meteo.com           今日推薦的天氣
+//   staticimgly.com              去背模型(第一次約 80MB)與它的 WASM 執行檔
+//   www.gu-global.com/uniqlo.com 貼連結挑圖:縮圖要顯示、大圖要下載回來去背
+//   blob: / data:                自己加的衣服(IndexedDB 的圖)、去背中間結果、匯入備份檔裡的圖;
+//                                字型的 data: 是 Vite 把小於 4KB 的字型檔直接內嵌進 CSS
+//   'wasm-unsafe-eval' + blob:   去背的 WASM 執行檔是先下載成 blob 再載入的(onnxruntime-web)
+//   'unsafe-eval'                去背套件裡的 ndarray 用 new Function 產生建構函式;不給的話去背直接失敗
+//                                (2026-10-03 本機掛同一組標頭實測)。網站自己的程式沒有 eval;
+//                                主要的防線(不准內嵌 <script>、不准從別的網域載程式、只能連上面這幾個地方)都還在
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob:",
+  "worker-src 'self' blob:",
+  "connect-src 'self' blob: data: https://api.open-meteo.com https://staticimgly.com https://www.gu-global.com https://www.uniqlo.com",
+  "img-src 'self' blob: data: https://www.gu-global.com https://www.uniqlo.com",
+  "style-src 'self'",
+  "font-src 'self' data:",
+  "manifest-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join("; ");
+const SECURITY_HEADERS = [
+  { key: "Content-Security-Policy", value: CSP },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  // 麥克風給搭配頁的「用說的」。相機不關:新增衣服的選照片在 Android 上會給「拍照」,不確定會不會被這條擋到
+  { key: "Permissions-Policy", value: "geolocation=(), payment=(), usb=(), microphone=(self)" },
+];
+await writeFile(join(OUT, "vercel.json"), JSON.stringify({
+  git: { deploymentEnabled: false },
+  headers: [{ source: "/(.*)", headers: SECURITY_HEADERS }],
+}, null, 2) + "\n");
+
 const dataDir = join(OUT, "data");
 await mkdir(join(dataDir, "library"), { recursive: true });
 await copyFile(join(ROOT, "data", "library.json"), join(dataDir, "wardrobe.json"));

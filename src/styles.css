@@ -46,6 +46,11 @@
   background: var(--paper);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  /* 原生元件(捲軸、單選鈕、日期)跟著暗色走,不要冒出 Windows 亮白的捲軸(審查 F64) */
+  color-scheme: dark;
+  accent-color: var(--accent);
+  /* Cormorant 預設是舊式數字,「0」像小寫 o、「104」讀成「1o4」(審查 F66) */
+  font-variant-numeric: lining-nums;
 }
 
 /* 淺色 = 打開衣櫃的樺木內裝。保留為可選主題,預設不觸發;
@@ -71,6 +76,7 @@
   --shadow-lift: rgba(93, 74, 55, .20);
   --hover-tint: rgba(93, 74, 55, .09);
   --paper-veil: rgba(236, 227, 209, .88);
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -89,6 +95,39 @@ body {
 body.viewer-open { overflow: hidden; }
 
 button { font: inherit; }
+
+/* 焦點框只有一套:沒有自己定義的元素,不再掉回瀏覽器預設的圓角雙色環(審查 F65)。
+   不加 border-radius: 0,圓形色票的焦點框要跟著圓 */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 給螢幕閱讀器的標題:畫面上不顯示 */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* 做完一件事的一行回饋(剛加入、買了、加入同步):固定浮在上方,入口、單品頁、新增視窗之上都看得到,6 秒後消失 */
+.app-notice {
+  position: fixed;
+  top: max(14px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 97;
+  width: max-content;
+  max-width: min(440px, calc(100vw - 32px));
+  margin: 0;
+  padding: 10px 16px;
+  background: var(--surface);
+  border: 1px solid var(--ok);
+  color: var(--ok);
+  font-size: 13px;
+  line-height: 1.5;
+  pointer-events: none;
+}
 
 /* 標題走 Cormorant,負字距是參考站的招牌(H1 -0.04em)。中文自動落到 Noto Serif TC。 */
 h1, h2, h3 {
@@ -389,13 +428,16 @@ h1, h2, h3 {
   gap: 24px;
 }
 
+/* 標題那格要能撐開:舊版被擠到短名稱一字一行、8 個字也斷兩行,英文還被強制大寫(審查 F49) */
+.viewer-heading > div { flex: 1 1 auto; min-width: 0; }
+
 .viewer-heading h2 {
   margin: 0;
   max-width: calc(100% - 48px);
   font-size: 16px;
   font-weight: 500;
   letter-spacing: .05em;
-  text-transform: uppercase;
+  overflow-wrap: anywhere;
 }
 
 .modeled-heading {
@@ -789,7 +831,7 @@ h1, h2, h3 {
   color: var(--ink);
   font-size: 12px;
   font-weight: 500;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: lining-nums tabular-nums;
   text-transform: uppercase;
 }
 
@@ -876,7 +918,7 @@ h1, h2, h3 {
   gap: 8px;
   color: var(--muted);
   font-size: 11px;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
 .native-color input {
@@ -956,8 +998,9 @@ h1, h2, h3 {
   .gallery-header { padding: 38px 24px 0; }
   .category-nav { width: 100%; margin: 38px 0 0; }
   .category-nav button { min-height: 38px; padding: 9px 15px; font-size: 11px; }
+  /* iPad 直向原本固定 3 欄、一格 247×384,104 件要捲將近 12 屏(審查 F47);照寬度排,iPad 直向是 4 欄 */
   .gallery-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
     gap: 18px 14px;
     padding: 30px 20px 50px;
   }
@@ -1072,11 +1115,15 @@ h1, h2, h3 {
 
 .studio-stage-column { display: flex; flex-direction: column; gap: 20px; }
 
+/* 人台用寬度控制,高度照 200:340 跟著變(直接定高會讓疊上去的衣服變形)。桌機 1440×900、iPad 橫向
+   原本固定 646px 高,「今日推薦」掉到第一屏外(審查 F43):讓人台高度不超過畫面高減掉上下的東西 */
 .studio-stage {
   position: relative;
   aspect-ratio: 200 / 340;
   max-width: 380px;
-  width: 100%;
+  width: min(100%, 380px, calc((100vh - 330px) * 200 / 340));
+  width: min(100%, 380px, calc((100svh - 330px) * 200 / 340));
+  min-width: 220px;
   margin: 0 auto;
   border: 1px solid var(--line);
   background: var(--surface);
@@ -1208,17 +1255,43 @@ h1, h2, h3 {
 
 .studio-look-load:hover { color: var(--accent); }
 
+/* 刪除收藏:撐到 36px(觸控 44px),跟「做成卡片」隔開一點,不再一點就刪錯(審查 F13、F24) */
 .studio-look-delete {
+  display: grid;
+  place-items: center;
+  min-width: 36px;
+  min-height: 36px;
+  margin-left: 6px;
   border: 0;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
   padding: 4px;
 }
+.studio-look-undo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--body);
+}
+.studio-look-undo button {
+  min-height: 36px;
+  padding: 4px 12px;
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
 
 .studio-look-delete:hover { color: var(--accent); }
 
 .studio-look-card {
+  display: grid;
+  place-items: center;
+  min-width: 36px;
+  min-height: 36px;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -1450,8 +1523,8 @@ h1, h2, h3 {
 .gallery-cell:focus-within .gallery-delete { opacity: 1; }
 .gallery-delete:hover { color: var(--danger); border-color: var(--danger); }
 .gallery-delete:focus-visible { opacity: 1; outline: 2px solid var(--accent); outline-offset: 2px; }
-/* 觸控裝置沒有 hover,直接常駐顯示 */
-@media (hover: none) { .gallery-delete { opacity: 1; } }
+/* 觸控裝置沒有 hover,直接常駐顯示;格子上的垃圾桶撐到 36px(審查 F24) */
+@media (hover: none) { .gallery-delete { opacity: 1; width: 36px; height: 36px; } }
 
 .add-overlay {
   position: fixed; inset: 0; z-index: 95;
@@ -1473,8 +1546,8 @@ h1, h2, h3 {
 
 .add-panel-review { align-items: stretch; text-align: left; gap: 14px; }
 .add-close {
-  position: absolute; top: 8px; right: 8px;
-  width: 32px; height: 32px; display: grid; place-items: center;
+  position: absolute; top: 4px; right: 4px;
+  width: 44px; height: 44px; display: grid; place-items: center;
   border: 0; background: transparent; color: var(--muted); cursor: pointer;
 }
 .add-close:hover { color: var(--ink); }
@@ -1937,6 +2010,7 @@ h1, h2, h3 {
 }
 .studio-backup-controls button:hover { background: var(--hover-tint); }
 .studio-backup-msg { margin: 10px 0 0; font-size: 12px; color: var(--accent); }
+.studio-backup-msg.is-error { color: var(--danger); }
 .studio-backup-note { margin: 8px auto 0; max-width: 440px; font-size: 11px; line-height: 1.6; color: var(--muted); }
 .studio-backup-controls button:disabled { opacity: .55; cursor: default; }
 
@@ -2199,6 +2273,45 @@ h1, h2, h3 {
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
+}
+/* 陌生人第一眼要知道這站在做什麼,「建立我的衣櫃」是主要下一步:做成 44px 的按鈕,不是 72×18 的小字連結(審查 F37) */
+.landing-note { max-width: 480px; text-wrap: pretty; }   /* 480:第一句一行放得下,不會斷在「配一/套」 */
+.landing-pitch { display: block; }
+.landing-note button.landing-make {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin: 10px 0 0;
+  padding: 0 18px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: .08em;
+  text-decoration: none;
+}
+.landing-note button.landing-make:hover { opacity: .88; }
+.landing-top:has(.landing-note) { align-items: flex-start; }   /* 說明變長時導覽留在右上,不跟著置中掉下來 */
+.landing-top nav button.has-alert { color: var(--ink); }
+/* 手機:標題和導覽一列,說明和「建立我的衣櫃」在下一列用滿整個寬度。說明只留一句「放進來、每天配一套」:
+   怎麼放(拍照、貼連結)按下去就看得到,「這是示範」標題已經寫了;說明一長,標題列就吃掉半個圓環(iPhone SE 實測) */
+@media (max-width: 640px) {
+  .landing-top:has(.landing-note) { flex-wrap: wrap; row-gap: 10px; }
+  .landing-top:has(.landing-note) .landing-title { display: contents; }
+  .landing-top:has(.landing-note) nav { order: 1; }
+  .landing-top .landing-note { order: 2; flex: 1 1 100%; max-width: none; margin: 0; display: flex; align-items: center; gap: 12px; }
+  .landing-pitch { flex: 1 1 auto; }
+  .landing-pitch-more { display: none; }
+  .landing-note button.landing-make { flex: none; margin: 0; padding: 0 14px; }
+}
+.sync-dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  margin-left: 6px;
+  vertical-align: 2px;
+  border-radius: 50%;
+  background: var(--danger);
 }
 
 .landing-top nav { display: flex; gap: 0; border: 1px solid var(--line); background: var(--paper); }
@@ -2501,3 +2614,46 @@ h1, h2, h3 {
   select,
   textarea { font-size: max(16px, 1em); }
 }
+
+/* 指令框下面的例句:點了就照著做(審查 F51)。手機上一列橫滑,不把貼底列往下推 */
+.studio-examples {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px 6px;
+  margin: -8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.studio-examples span { flex: none; margin-right: 2px; white-space: nowrap; }
+.studio-examples button {
+  min-height: 32px;
+  padding: 2px 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--body);
+  font-size: 12px;
+  cursor: pointer;
+}
+.studio-examples button:hover:not(:disabled) { color: var(--ink); border-color: var(--muted); }
+.studio-examples button:disabled { opacity: .5; cursor: default; }
+@media (max-width: 640px) {
+  .studio-examples {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    margin: -8px -20px 0;
+    padding: 0 20px;
+    scrollbar-width: none;
+  }
+  .studio-examples::-webkit-scrollbar { display: none; }
+  .studio-examples button { flex: 0 0 auto; min-height: 36px; }
+}
+
+/* 單品頁:可以編輯的衣服也有「在搭配頁穿上」(審查 F30) */
+.viewer-wear-row { margin: 0 0 18px; }
+
+/* 去背處理中可以取消(審查 F4) */
+.add-panel .add-cancel { margin-top: 8px; min-height: 40px; }
+.add-panel .add-dupe-early { color: var(--accent); }

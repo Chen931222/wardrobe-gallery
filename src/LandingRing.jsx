@@ -59,7 +59,15 @@ function pickVaried(items, count) {
   return shuffle(picked);
 }
 
-export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = null, title = "我的衣櫃", note = null }) {
+/** 衣服只有幾件時不排圓環:1–3 件排成一圈,大圖會頂到畫面上緣、被導覽蓋住(審查 F36)。改成置中一排。 */
+const ROW_MAX = 3;
+
+/**
+ * @param onWearOutfit (那一套, { weather, reasons }):今日推薦的理由跟著帶進搭配頁
+ * @param onAdd        推薦不了(缺上衣或下身)時給一顆「去新增」;沒給就不顯示
+ * @param syncAlert    同步有狀況(停掉、上次失敗):「同步」旁亮一個點
+ */
+export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = null, onAdd = null, syncAlert = false, title = "我的衣櫃", note = null }) {
   // 手機(<640)重排:少放幾件圓環卡才夠大可點,今日推薦從環心移到環下方長條,不再壓卡片
   const [phone, setPhone] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches);
   useEffect(() => {
@@ -122,13 +130,21 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
     return { w, h: w / ar };
   }), [picked, natSizes]);
 
+  // 標題列的高度:訪客多了一段說明和「建立我的衣櫃」按鈕,標題列變高,圓環 12 點那件會被蓋住(審查 F37 提醒過)。
+  // 量出來,圓環的上緣讓開它
+  const topRef = useRef(null);
+  const [topH, setTopH] = useState(0);
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
-    const measure = () => setDims({ w: stage.clientWidth, h: stage.clientHeight });
+    const measure = () => {
+      setDims({ w: stage.clientWidth, h: stage.clientHeight });
+      setTopH(topRef.current ? topRef.current.offsetHeight : 0);
+    };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(stage);
+    if (topRef.current) observer.observe(topRef.current);
     return () => observer.disconnect();
   }, []);
 
@@ -143,7 +159,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
       try {
         const weather = await fetchWeather();
         const result = recommendOutfit(items, weather, readWearLog());
-        if (alive) setDaily(result.error ? { error: result.error } : { weather, ...result });
+        if (alive) setDaily(result.error ? { error: result.error, missing: result.missing } : { weather, ...result });
       } catch {
         if (alive) setDaily({ error: "抓不到天氣" });
       }
@@ -180,6 +196,10 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
     };
 
     const onKeyDown = (event) => {
+      // 輸入框裡的方向鍵是移動游標;對話框開著時背後的圓環不跟著轉(審查 F21:同步碼、單品名稱欄不能移動游標)
+      const target = event.target;
+      if (target instanceof Element && (target.closest("input, textarea, select, [contenteditable], [aria-modal='true']"))) return;
+      if (document.querySelector("[aria-modal='true']")) return;
       if (event.key === "ArrowDown" || event.key === "ArrowRight") { event.preventDefault(); advance(1); }
       if (event.key === "ArrowUp" || event.key === "ArrowLeft") { event.preventDefault(); advance(-1); }
       if (event.key === "Escape") setFocusIdx(null);
@@ -215,15 +235,25 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
     // 要橫的才算寬,直向走平板公式(跟 iPad mini 744 一樣)
     const wide = w >= 800 && w > h * 1.05;
     // 手機:環往上收、半徑小一點,把畫面下半讓給今日推薦長條;平板(640–800)與桌機維持原本
-    const ringR = wide ? Math.min(w * 0.168, h * 0.295) : phone ? Math.min(w * 0.36, h * 0.26) : w * 0.32;
+    let ringR = wide ? Math.min(w * 0.168, h * 0.295) : phone ? Math.min(w * 0.36, h * 0.26) : w * 0.32;
+    let cy = h * (wide ? 0.5 : phone ? 0.34 : 0.46);
+    const tallest = Math.max(...boxes.map((b) => b.h), 0.01);
+    const topClear = topH + 8;                                 // 卡片上緣至少要在標題列下面
+    if (n <= ROW_MAX) {
+      // 一排:總寬不超過畫面 70%、最高的一件不超過畫面 30%(手機 24%),每件之間留 1/4 件寬
+      const totalW = boxes.reduce((sum, b) => sum + b.w, 0) * 1.25;
+      const k = Math.max(1, Math.min((w * 0.7) / totalW, (h * (phone ? 0.24 : 0.3)) / tallest, 260));
+      const rowY = Math.max(h * (phone ? 0.3 : 0.32), topClear + (tallest * k) / 2);
+      return { wide, ringR, k, cy: rowY, row: true };
+    }
     const GAP = 6;                                            // 卡與卡之間至少留白(px)
 
-    const clashes = (k) => {
+    const clashes = (R, k) => {
       for (let off = 0; off < n; off++) {
         const rects = boxes.map((b, i) => {
           const a = ((i - off) / n) * Math.PI * 2 + Math.PI / 2;
           const cw = b.w * k, ch = b.h * k;
-          return { x: Math.cos(a) * ringR - cw / 2, y: -Math.sin(a) * ringR - ch / 2, w: cw, h: ch };
+          return { x: Math.cos(a) * R - cw / 2, y: -Math.sin(a) * R - ch / 2, w: cw, h: ch };
         });
         for (let i = 0; i < rects.length; i++) {
           for (let j = i + 1; j < rects.length; j++) {
@@ -235,14 +265,27 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
       }
       return false;
     };
+    const fit = (R) => {
+      let lo = 1, hi = Math.max(R, 1);                         // k 的搜尋範圍
+      for (let step = 0; step < 22; step++) {
+        const mid = (lo + hi) / 2;
+        if (clashes(R, mid)) hi = mid; else lo = mid;
+      }
+      return lo;
+    };
 
-    let lo = 1, hi = Math.max(ringR, 1);                       // k 的搜尋範圍
-    for (let step = 0; step < 22; step++) {
-      const mid = (lo + hi) / 2;
-      if (clashes(mid)) hi = mid; else lo = mid;
+    let k = fit(ringR);
+    // 最高的那件轉到 12 點時會頂到標題列:圓心往下、半徑縮小同樣的量,下緣不動(手機下面是今日推薦長條),
+    // 上緣讓出標題列。最多縮到原本的六成,再小就寧可蓋一點
+    const overlap = topClear - (cy - ringR - (tallest * k) / 2);
+    if (overlap > 0) {
+      const shrink = Math.min(overlap / 2, ringR * 0.4);
+      cy += shrink;
+      ringR -= shrink;
+      k = fit(ringR);
     }
-    return { wide, ringR, k: lo };
-  }, [dims, boxes, n, phone]);
+    return { wide, ringR, k, cy, row: false };
+  }, [dims, boxes, n, phone, topH]);
 
   // 依模式算每張卡的位置與大小(純函式,一次算完交給 CSS transition 去飛)
   const layout = (index) => {
@@ -252,12 +295,21 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
     const box = boxes[index];
     const cardW = box.w * k, cardH = box.h * k;
 
+    if (focusIdx === null && metrics.row) {
+      // 一排:由左到右照順序,整排置中;放在畫面上方三成的地方,下面留給今日推薦
+      const gap = 0.25;
+      const widths = boxes.map((b) => b.w * k);
+      const total = widths.reduce((sum, value) => sum + value, 0) + gap * k * Math.max(0, n - 1) * 0.8;
+      let left = w * 0.5 - total / 2;
+      for (let i = 0; i < index; i += 1) left += widths[i] + gap * k * 0.8;
+      return { x: left + cardW / 2, y: metrics.cy, cardW, cardH, scale: 1, z: 10 };
+    }
     if (focusIdx === null) {
       // 減去 ringOffset:角度變小 = 螢幕座標上順時針(y 軸向下,所以 sin 前面是負號)
       const a = ((index - ringOffset) / n) * Math.PI * 2 + Math.PI / 2;
       return {
         x: w * 0.5 + Math.cos(a) * ringR,
-        y: h * (wide ? 0.5 : phone ? 0.34 : 0.46) - Math.sin(a) * ringR,   // 手機把環往上收,下半留給推薦長條
+        y: metrics.cy - Math.sin(a) * ringR,   // 手機把環往上收,下半留給推薦長條;標題列太高時往下讓
         cardW, cardH, scale: 1,
         z: Math.round(10 + 5 * Math.cos(a)),
       };
@@ -291,6 +343,10 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
     : null;
   const dailyOutfit = freshDaily && Object.keys(freshDaily).length ? freshDaily : null;   // 全部拿掉了就不顯示空的「穿這套」
 
+  // 「穿上看看」:理由和天氣一起帶進搭配頁,進去看得到為什麼是這套,主按鈕也接著是「再推薦一套」(審查 F25)。
+  // 名字不叫「穿這套」:搭配頁有一顆「今天穿這套」會記穿著紀錄,這顆不會(F56)
+  const wearDaily = () => onWearOutfit(dailyOutfit, { weather: daily.weather, reasons: daily.reasons || [] });
+
   const onCardClick = (index, item) => {
     if (focusIdx === index) onOpen(item.id);       // 已聚焦 → 開詳情
     else setFocusIdx(index);                        // 其他 → 聚焦它
@@ -302,7 +358,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
 
   return (
     <section className="landing" aria-label="衣櫃入口導覽">
-      <header className="landing-top">
+      <header className="landing-top" ref={topRef}>
         <div className="landing-title">
           <h1>{title}</h1>
           {note && <p className="landing-note">{note}</p>}
@@ -310,7 +366,11 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
         <nav>
           <button type="button" onClick={() => onEnter("closet")}>衣櫃</button>
           <button type="button" onClick={() => onEnter("styling")}>搭配</button>
-          {onSync && <button type="button" onClick={onSync}>同步</button>}
+          {onSync && (
+            <button type="button" onClick={onSync} className={syncAlert ? "has-alert" : undefined} aria-label={syncAlert ? "同步(有狀況,打開看)" : undefined}>
+              同步{syncAlert && <span className="sync-dot" aria-hidden="true" />}
+            </button>
+          )}
         </nav>
       </header>
 
@@ -322,12 +382,13 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
             className="landing-daily"
             style={{
               left: `${dims.w * 0.5}px`,
-              top: `${dims.h * (metrics.wide ? 0.5 : 0.46)}px`,
-              width: `${metrics.ringR * 1.12}px`,
+              top: `${metrics.row ? Math.max(dims.h * 0.7, metrics.cy + dims.h * 0.3) : metrics.cy}px`,   // 一排的時候放在那排下面
+              width: `${metrics.row ? Math.min(dims.w * 0.6, 360) : metrics.ringR * 1.12}px`,
             }}
           >
             {!daily && <p className="landing-daily-loading">讀取今天的天氣…</p>}
             {daily?.error && <p className="landing-daily-loading">{daily.error}</p>}
+            {daily?.missing && onAdd && <button type="button" className="landing-daily-go" onClick={onAdd}>去新增</button>}
             {dailyOutfit && (
               <>
                 <p className="landing-daily-weather">
@@ -341,8 +402,8 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
                     </li>
                   ))}
                 </ul>
-                <button type="button" className="landing-daily-go" onClick={() => onWearOutfit(dailyOutfit)}>
-                  <Sparkle size={14} weight="regular" aria-hidden="true" /> 穿這套
+                <button type="button" className="landing-daily-go" onClick={wearDaily}>
+                  <Sparkle size={14} weight="regular" aria-hidden="true" /> 穿上看看
                 </button>
               </>
             )}
@@ -379,8 +440,8 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
           );
         })}
         {/* 手機:環心空出來,放一行手勢提示(桌機的提示在底部) */}
-        {phone && focusIdx === null && dims && (
-          <p className="landing-ring-note" style={{ left: `${dims.w * 0.5}px`, top: `${dims.h * 0.34}px` }}>
+        {phone && focusIdx === null && dims && !metrics?.row && (
+          <p className="landing-ring-note" style={{ left: `${dims.w * 0.5}px`, top: `${metrics?.cy ?? dims.h * 0.34}px` }}>
             滑一下轉一件<br />點一件放大
           </p>
         )}
@@ -391,6 +452,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
         <div className="landing-daily-strip">
           {!daily && <p className="landing-daily-loading">讀取今天的天氣…</p>}
           {daily?.error && <p className="landing-daily-loading">{daily.error}</p>}
+          {daily?.missing && onAdd && <button type="button" className="landing-daily-go" onClick={onAdd}>去新增</button>}
           {dailyOutfit && (
             <>
               <p className="landing-daily-weather">
@@ -402,8 +464,8 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
                   <li key={slot}><b>{SLOT_LABEL[slot]}</b>{dailyOutfit[slot].name}</li>
                 ))}
               </ul>
-              <button type="button" className="landing-daily-go" onClick={() => onWearOutfit(dailyOutfit)}>
-                <Sparkle size={14} weight="regular" aria-hidden="true" /> 穿這套
+              <button type="button" className="landing-daily-go" onClick={wearDaily}>
+                <Sparkle size={14} weight="regular" aria-hidden="true" /> 穿上看看
               </button>
             </>
           )}
@@ -430,7 +492,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
       {!(phone && focusIdx === null) && (
         <p className="landing-hint">
           {focusIdx === null
-            ? (touch ? "上下滑轉一件 · 點一件聚焦" : "滾輪轉動 · 點一件聚焦")
+            ? (metrics?.row ? "點一件聚焦" : touch ? "上下滑轉一件 · 點一件聚焦" : "滾輪轉動 · 點一件聚焦")
             : touch ? "上下滑看下一件 · 再點看細節 · 點空白返回" : "滾輪瀏覽下一件 · 再點一下看細節 · 點空白處返回"}
         </p>
       )}
