@@ -92,6 +92,30 @@ function metaContents(html, key) {
   return out;
 }
 
+/* 品名、品牌整理:分享標題常帶價格(MUJI「…黑色 NT$714」)和網站名(「… | LONGINES TW」、「LEVI'S®官方旗艦店」) */
+const PRICE = /\s*(NT\$|US\$|HK\$|\$|¥|￥|€|£)\s?[\d,]+(\.\d+)?\s*起?\s*$/i;
+const STORE_WORDS = /官方(網路)?(旗艦店|網站|購物網站|商城|商店|線上商店)|官網|線上購物|網路商店|official\s*(online\s*)?(store|shop|site|website)|online\s*(store|shop)/gi;
+const squash = (text) => String(text || "").toLowerCase().replace(/[\s®™'’.]/g, "");
+
+export function cleanBrand(brand, host) {
+  const cleaned = decode(brand).replace(STORE_WORDS, "").replace(/[|｜:\-–—\s]+$/, "").replace(/(.+?)\s*(台灣|taiwan|tw)$/i, "$1").trim();
+  if (cleaned) return cleaned;
+  // 網站沒寫品牌:拿網域(shop.muji.tw → MUJI,短的全大寫)
+  const label = String(host || "").replace(/^(www\d?|m|tw|shop|store)\./, "").split(".")[0] || "";
+  return label.length <= 5 ? label.toUpperCase() : label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+export function cleanName(name, brand) {
+  const parts = decode(name).split(/\s*[|｜]\s*/).map((part) => part.replace(PRICE, "").trim()).filter(Boolean);
+  const b = squash(brand);
+  const noise = (part) => {
+    const n = squash(part);
+    STORE_WORDS.lastIndex = 0;
+    return STORE_WORDS.test(part) || (b && (n === b || (n.startsWith(b) && /^(tw|taiwan|台灣|hk|us|jp)$/.test(n.slice(b.length)))));
+  };
+  return parts.filter((part, index) => index === 0 || !noise(part)).join(" ").replace(PRICE, "").trim();
+}
+
 const imageUrls = (value) => [].concat(value || []).flatMap((entry) => (typeof entry === "string" ? [entry] : entry?.url ? [entry.url] : entry?.contentUrl ? [entry.contentUrl] : []));
 
 function productFromLd(html) {
@@ -132,7 +156,15 @@ const sign = (secret, src) => createHmac("sha256", secret).update(src).digest("b
 export async function readProductPage(pageUrl, secret) {
   const start = checkUrl(pageUrl);
   if (!start) return { status: 400, body: { error: "這個網址不能讀" } };
-  const { response, url, bytes } = await fetchLimited(start, "text/html,application/xhtml+xml", MAX_HTML, { truncate: true });
+  let page;
+  try {
+    page = await fetchLimited(start, "text/html,application/xhtml+xml", MAX_HTML, { truncate: true });
+  } catch (error) {
+    // 不拒絕也不回應(H&M 實測等 30 秒都沒回),是大品牌常見的擋法:當成擋住了,前端叫人改用截圖
+    if (error?.name === "TimeoutError") return { status: 200, body: { blocked: true, timeout: true, images: [] } };
+    throw error;
+  }
+  const { response, url, bytes } = page;
   const html = new TextDecoder().decode(bytes);
   if (!response.ok || !/html/i.test(response.headers.get("content-type") || "html")) {
     return { status: 200, body: { blocked: looksBlocked(response.status, html), images: [], status: response.status } };
@@ -151,8 +183,13 @@ export async function readProductPage(pageUrl, secret) {
     } catch { /* 拿不到就照一般網頁讀 */ }
   }
   const ld = productFromLd(html);
-  name ||= ld?.name || metaContents(html, "og:title")[0] || decode((html.match(/<title[^>]*>([^<]*)<\/title>/i) || [])[1]);
+  const ogTitle = metaContents(html, "og:title")[0] || "";
+  // 分享標題比 JSON-LD 的品名完整就用它(LONGINES:「巨擘系列」vs「巨擘系列 | Ø 40.00 mm, 銀色 | L2.793.4.73.2 | LONGINES TW」)
+  const ldName = ld?.name && ogTitle.includes(ld.name) && ogTitle.length > ld.name.length ? ogTitle : ld?.name;
+  name ||= ldName || ogTitle || decode((html.match(/<title[^>]*>([^<]*)<\/title>/i) || [])[1]);
   brand ||= ld?.brand || metaContents(html, "og:site_name")[0] || "";
+  brand = cleanBrand(brand, url.hostname);
+  name = cleanName(name, brand);
   sources = [...sources, ...(ld?.images || []), ...metaContents(html, "og:image"), ...metaContents(html, "og:image:secure_url"), ...metaContents(html, "twitter:image")];
 
   const seen = new Set();

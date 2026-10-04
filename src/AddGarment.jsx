@@ -160,6 +160,24 @@ function ImagePicker({ images, onPick }) {
   );
 }
 
+/* 去背套件只收 PNG、JPEG、WebP。LONGINES 的商品圖是 AVIF,整張去背直接失敗(2026-10-04 正式站實測
+   「Invalid format: image/avif」);其他格式先讓瀏覽器解開、轉成 PNG。轉不了(瀏覽器也不認得)就照原樣,讓去背自己報錯 */
+const CUTOUT_TYPES = /^image\/(png|jpeg|webp)$/;
+async function toCutoutFormat(file) {
+  if (CUTOUT_TYPES.test(file.type)) return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    canvas.getContext("2d").drawImage(bitmap, 0, 0);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    return blob ? new File([blob], "photo.png", { type: "image/png" }) : file;
+  } catch {
+    return file;
+  }
+}
+
 const PAD = 0.1;
 /** 框往外多留 10% 再去背:框得太貼,模型看不到背景,中間色的條紋會被去成半透明、旁邊留一條陰影(審查 F19)。去背完再裁回原本的框。 */
 function expandBox(region) {
@@ -287,7 +305,9 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     // 品名:分享文字裡的優先;商品頁讀到的補上品牌(品名裡已經有就不重複)
     const pageName = page.name && brand && !page.name.toLowerCase().includes(brand.toLowerCase()) ? `${page.name}(${brand})` : page.name;
     const name = parsedLink.name || pageName || "";
-    return { ...parsedLink, brand, name, images: page.images, part: partFromName(name) || null };
+    // 品名猜不出分類就看網址(LONGINES 的品名沒有「錶」,網址是 /p/watch-longines-…)
+    const slug = decodeURIComponent(new URL(parsedLink.url).pathname).replace(/[-_/.]+/g, " ");
+    return { ...parsedLink, brand, name, images: page.images, part: partFromName(name) || partFromName(slug) || null };
   })();
   // 貼上連結的那一步就講加過了沒(審查 F31):舊版要等去背完才說,白等一輪
   const linkDupe = useMemo(
@@ -335,10 +355,11 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     }
   };
 
-  const pick = (file) => {
+  const pick = async (file) => {
     if (!file) return;
     setError("");
-    setSource({ file, url: URL.createObjectURL(file) });
+    const usable = await toCutoutFormat(file);
+    setSource({ file: usable, url: URL.createObjectURL(usable) });
     setBox(FULL);
     setStage("crop");
   };
