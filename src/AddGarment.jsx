@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, SpinnerGap, X } from "@phosphor-icons/react";
 import { cropBlob, deleteLocalItem, findUrl, garmentColors, productUrlProblem, refillGaps, saveLocalItem, shrinkImage, trimTransparent } from "./localWardrobe.js";
-import { fetchBrandProduct, parseBrandLink, partFromName, partFromProduct, sameProduct } from "./brandLink.js";
+import { fetchBrandProduct, fetchProductPage, parseBrandLink, partFromName, partFromProduct, sameProduct } from "./brandLink.js";
 import { findSimilar, kindLabel } from "./wishCheck.js";
 import { useDialog } from "./useDialog.js";
 
@@ -262,6 +262,33 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
 
   const linkProblem = productUrlProblem(linkText);
   const parsedLink = linkText.trim() && !linkProblem ? parseBrandLink(linkText) : null;
+
+  // 其他品牌:貼上就在背景讀商品頁(停 350ms 等貼完),讀到圖就跟 GU 一樣挑圖;擋機器人、讀不到就照舊用截圖
+  const pageUrl = parsedLink?.page ? parsedLink.url : null;
+  const [pageInfo, setPageInfo] = useState(null);   // { url, status: loading|ok|blocked|empty, name, brand, images, error }
+  useEffect(() => {
+    if (!pageUrl) return undefined;
+    setPageInfo({ url: pageUrl, status: "loading", images: [] });
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      fetchProductPage(pageUrl, controller.signal).then((data) => {
+        const status = data.images.length ? "ok" : data.blocked ? "blocked" : "empty";
+        setPageInfo({ url: pageUrl, status, name: data.name || "", brand: data.brand || "", images: data.images, error: data.error || "" });
+      }).catch(() => { /* 換了網址,這次的不要了 */ });
+    }, 350);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [pageUrl]);
+  const page = pageUrl && pageInfo?.url === pageUrl ? pageInfo : null;
+  const pageLoading = Boolean(pageUrl) && (!page || page.status === "loading");
+  const effectiveLink = (() => {
+    if (!parsedLink?.page || !page || page.status === "loading") return parsedLink;
+    const site = new URL(parsedLink.url).hostname.replace(/^(www|m|tw)\./, "");
+    const brand = page.brand || site;
+    // 品名:分享文字裡的優先;商品頁讀到的補上品牌(品名裡已經有就不重複)
+    const pageName = page.name && brand && !page.name.toLowerCase().includes(brand.toLowerCase()) ? `${page.name}(${brand})` : page.name;
+    const name = parsedLink.name || pageName || "";
+    return { ...parsedLink, brand, name, images: page.images, part: partFromName(name) || null };
+  })();
   // 貼上連結的那一步就講加過了沒(審查 F31):舊版要等去背完才說,白等一輪
   const linkDupe = useMemo(
     () => (parsedLink?.url && !parsedLink.notProduct ? existing.find((item) => item.sourceUrl && sameProduct(item.sourceUrl, parsedLink.url)) : null),
@@ -269,18 +296,21 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
   );
 
   const applyLink = () => {
-    setLink(parsedLink);
-    // 品名在背景問,挑圖、去背照常進行;回來時如果名稱還空著才填,不蓋掉手打的
-    fetchBrandProduct(parsedLink?.lookup).then((product) => {
-      if (!product) return;
-      const name = `${product.name}(${parsedLink.brand})`;
-      const part = partFromProduct(product.name, product.categories);
-      setLink((current) => (current?.url === parsedLink.url ? { ...current, name, part } : current));
-      setDraft((current) => (current && current.sourceUrl === parsedLink.url && !current.name
-        ? { ...current, name, part: current.part || part || "" }
-        : current));
-    });
-    if (parsedLink?.images.length) setStage("pick");
+    const chosen = effectiveLink;
+    setLink(chosen);
+    // GU、UNIQLO:品名在背景問,挑圖、去背照常進行;回來時如果名稱還空著才填,不蓋掉手打的
+    if (chosen?.lookup) {
+      fetchBrandProduct(chosen.lookup).then((product) => {
+        if (!product) return;
+        const name = `${product.name}(${chosen.brand})`;
+        const part = partFromProduct(product.name, product.categories);
+        setLink((current) => (current?.url === chosen.url ? { ...current, name, part } : current));
+        setDraft((current) => (current && current.sourceUrl === chosen.url && !current.name
+          ? { ...current, name, part: current.part || part || "" }
+          : current));
+      });
+    }
+    if (chosen?.images.length) setStage("pick");
     else inputRef.current?.click();
   };
 
@@ -450,7 +480,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
         <div className="add-overlay" role="dialog" aria-modal="true" aria-label="新增衣物" ref={dialogRef}>
           <form
             className="add-panel add-panel-review"
-            onSubmit={(event) => { event.preventDefault(); if (parsedLink && !parsedLink.notProduct) applyLink(); }}
+            onSubmit={(event) => { event.preventDefault(); if (parsedLink && !parsedLink.notProduct && !pageLoading) applyLink(); }}
           >
             {closeButton()}
             <p className="add-step">新增一件</p>
@@ -469,16 +499,20 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
               />
               {linkProblem && <small className="add-field-error">{linkProblem}</small>}
             </label>
-            <small className="add-hint">
+            <small className="add-hint" role="status">
               {parsedLink?.notProduct
                 ? `這是 ${parsedLink.brand} 的網址,但不是單一商品頁。打開那件商品,按分享、拷貝連結再貼。`
-                : parsedLink?.images.length
-                  ? `${parsedLink.brand} 的商品圖抓得到。下一步挑一張平拍的。`
-                  : parsedLink?.name
-                    ? `${parsedLink.brand || "這個網站"}的圖抓不到,品名先填「${parsedLink.name}」,接著選截圖。`
-                    : parsedLink
-                      ? "這個網站的圖抓不到,網址會存起來,接著選截圖。"
-                      : "GU、UNIQLO 貼連結就能挑圖;其他品牌用截圖。"}
+                : pageLoading
+                  ? "讀取商品頁…"
+                  : effectiveLink?.images.length
+                    ? `${effectiveLink.brand} 的商品圖抓得到${effectiveLink.page ? `(${effectiveLink.images.length} 張)` : ""}。下一步挑一張平拍的。`
+                    : page?.status === "blocked"
+                      ? `這個網站擋住了自動讀取(大品牌和蝦皮常這樣),網址會存起來,接著選截圖${effectiveLink?.name ? `;品名先填「${effectiveLink.name}」` : ""}。`
+                      : effectiveLink?.name
+                        ? `${effectiveLink.brand || "這個網站"}的圖抓不到,品名先填「${effectiveLink.name}」,接著選截圖。`
+                        : parsedLink
+                          ? "這頁讀不到商品圖,網址會存起來,接著選截圖。"
+                          : "貼品牌官網或購物網站的商品連結,讀得到就能直接挑圖;讀不到的(像蝦皮、Zara)用截圖。"}
             </small>
             {linkDupe && (
               <small className="add-hint add-dupe-early" role="status">
@@ -486,11 +520,11 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
               </small>
             )}
             <div className="add-actions">
-              <button type="button" className="secondary-button" onClick={() => { setLink(parsedLink?.notProduct ? null : parsedLink); inputRef.current?.click(); }}>
+              <button type="button" className="secondary-button" onClick={() => { setLink(parsedLink?.notProduct ? null : effectiveLink ? { ...effectiveLink, images: [] } : null); inputRef.current?.click(); }}>
                 {parsedLink ? "改用照片" : "從相簿選照片"}
               </button>
-              <button type="submit" className="primary-button" disabled={!parsedLink || parsedLink.notProduct}>
-                {parsedLink?.images.length ? "列出商品圖" : "選截圖"}
+              <button type="submit" className="primary-button" disabled={!parsedLink || parsedLink.notProduct || pageLoading}>
+                {pageLoading ? "讀取中…" : effectiveLink?.images.length ? "列出商品圖" : "選截圖"}
               </button>
             </div>
           </form>
@@ -503,7 +537,9 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
             {closeButton()}
             <p className="add-step">挑一張平拍的</p>
             {link.name && <small className="add-hint">{link.name}</small>}
-            <small className="add-hint">衣服單獨擺著的那張去背最乾淨,通常在最後幾張。模特兒穿著的,人會一起留下來。</small>
+            <small className="add-hint">
+              衣服單獨擺著的那張去背最乾淨{link.lookup ? ",通常在最後幾張" : ""}。模特兒穿著的,人會一起留下來。
+            </small>
             <ImagePicker images={link.images} onPick={pickBrandImage} />
             <div className="add-actions">
               <button type="button" className="secondary-button" onClick={() => inputRef.current?.click()}>改用截圖</button>

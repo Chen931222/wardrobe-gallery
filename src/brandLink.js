@@ -63,7 +63,21 @@ export function parseBrandLink(text) {
     return { brand: "Zara", url: href, name: name || nameHint, images: [] };
   }
 
-  return { brand: "", url: href, name: nameHint, images: [] };
+  // 其他品牌:圖和品名問自己的 /api/product-page(讀商品頁公開的分享資料,見 functions/_product-page-core.mjs)
+  return { brand: "", url: href, name: nameHint, images: [], page: true };
+}
+
+/** 讀其他品牌的商品頁:{ name, brand, images: [{ thumb, full }] },擋住了回 { blocked: true },其他失敗回 { error }。 */
+export async function fetchProductPage(url, signal) {
+  try {
+    const response = await fetch(`/api/product-page?${new URLSearchParams({ url })}`, { signal: signal || AbortSignal.timeout(15000) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) return { error: data.error || `讀取失敗(${response.status})`, images: [] };
+    return { ...data, images: Array.isArray(data.images) ? data.images : [] };
+  } catch (error) {
+    if (error?.name === "AbortError") throw error;
+    return { error: navigator.onLine === false ? "現在沒有網路" : "讀不到這個商品頁", images: [] };
+  }
 }
 
 /** 兩個商品網址是不是同一件:認得出商品編號就比編號(手機版、電腦版、分享連結都算同一件),不然比網址。 */
@@ -101,20 +115,22 @@ function hmallImages(host, region, code) {
 /* 從品名猜分類:取「最後出現」的關鍵字,因為中文的主詞在尾巴(針織外套→外套、毛絨針織上衣→上衣)。
    同一個位置有兩個字時,照下面的順序(「船型襪」的襪排在鞋前面)。 */
 const PART_WORDS = [
-  ["socks", /襪/],
-  ["shoes", /鞋|靴|拖/],
-  ["bag", /包|袋/],
-  ["eyewear", /眼鏡|墨鏡/],
-  ["wrist", /錶|手環/],
-  ["wholebody_up", /外套|夾克|大衣|風衣|背心外套|羽絨|教練|西裝/],
-  ["lowerbody", /褲|裙/],
-  ["upperbody", /T恤|襯衫|上衣|針織|毛衣|衛衣|帽T|POLO|Polo|背心|連帽/],
+  ["socks", /襪|\bsocks?\b/i],
+  ["shoes", /鞋|靴|拖|\b(shoes?|sneakers?|boots?|loafers?|sandals?|slides?|trainers?|mules?)\b/i],
+  ["bag", /包|袋|\b(bags?|backpacks?|totes?|wallets?|purses?|crossbody|duffel|weekender|clutch|pouch|luggage|suitcase)\b/i],
+  ["eyewear", /眼鏡|墨鏡|\b(sunglasses|glasses|eyewear)\b/i],
+  // 手錶、手環;項鍊、耳環這類放在「其他配件」
+  ["wrist", /錶|手環|手鍊|\b(watch|watches|bracelets?|bangles?)\b/i],
+  ["accessories_up", /項鍊|耳環|戒指|帽子|棒球帽|毛帽|圍巾|\b(necklaces?|earrings?|rings?|caps?|hats?|beanies?|scarf|scarves)\b/i],
+  ["wholebody_up", /外套|夾克|大衣|風衣|背心外套|羽絨|教練|西裝|\b(jackets?|coats?|blazers?|parkas?|windbreakers?|cardigans?)\b/i],
+  ["lowerbody", /褲|裙|\b(pants|trousers|jeans|shorts|skirts?|chinos|joggers?|leggings)\b/i],
+  ["upperbody", /T恤|襯衫|上衣|針織|毛衣|衛衣|帽T|POLO|Polo|背心|連帽|\b(t-?shirts?|tees?|shirts?|polos?|sweaters?|hoodies?|sweatshirts?|tops?|tanks?|knit)\b/i],
 ];
 
 export function partFromName(name) {
   let best = null, bestAt = -1;
   for (const [part, pattern] of PART_WORDS) {
-    const global = new RegExp(pattern.source, "g");
+    const global = new RegExp(pattern.source, `${pattern.flags.replace("g", "")}g`);
     for (const match of String(name || "").matchAll(global)) {
       const end = match.index + match[0].length;
       if (end > bestAt) { best = part; bestAt = end; }

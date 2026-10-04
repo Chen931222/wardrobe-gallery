@@ -8,6 +8,7 @@
 // 所以 vercel.json 關掉了 Git 自動部署(2026-09 線上版兩次被 push 觸發的建置蓋掉)。
 import { cp, mkdir, rm, readdir, readFile, copyFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -58,6 +59,12 @@ await copyFile(join(ROOT, "functions", "brand-product.mjs"), join(OUT, "api", "b
 // 所以輸出資料夾放一份只列這個套件的 package.json,Vercel 部署時會自己裝。
 await copyFile(join(ROOT, "functions", "sync.mjs"), join(OUT, "api", "sync.mjs"));
 await copyFile(join(ROOT, "functions", "_sync-core.mjs"), join(OUT, "api", "_sync-core.mjs"));
+// 其他品牌的商品頁和商品圖。圖片網址要用 secret 簽名才肯代為下載(免得變成誰都能用的開放代理);
+// secret 每次匯出亂數產生、只放在輸出資料夾(不進 git),部署一次換一次,舊的簽名跟著失效也沒關係
+await copyFile(join(ROOT, "functions", "_product-page-core.mjs"), join(OUT, "api", "_product-page-core.mjs"));
+await copyFile(join(ROOT, "functions", "product-page.mjs"), join(OUT, "api", "product-page.mjs"));
+await copyFile(join(ROOT, "functions", "product-image.mjs"), join(OUT, "api", "product-image.mjs"));
+await writeFile(join(OUT, "api", "_proxy-secret.mjs"), `export const SECRET = ${JSON.stringify(randomBytes(32).toString("hex"))};\n`);
 const blobVersion = JSON.parse(await readFile(join(ROOT, "node_modules", "@vercel", "blob", "package.json"), "utf8")).version;
 await writeFile(join(OUT, "package.json"), JSON.stringify({ private: true, type: "module", dependencies: { "@vercel/blob": blobVersion } }, null, 2) + "\n");
 

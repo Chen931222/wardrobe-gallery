@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowCounterClockwise, ArrowsClockwise, CalendarCheck, Export, FloppyDisk, ImageSquare, Lock, LockOpen, Microphone, Sparkle, Trash, X } from "@phosphor-icons/react";
 import { adjustIntent, fetchWeather, findItemForSwap, parseRequest, randomOutfit, readWearLog, recommendOutfit, recordWear, unrecordWear } from "./recommend.js";
 import { syncCode } from "./sync.js";
-import { buildBackup, downloadBackup, restoreBackup } from "./backup.js";
+import { downloadBackupZip, readBackupFile, restoreBackup } from "./backup.js";
 import { LookCard } from "./LookCard.jsx";
 
 // 搭配工作室:把去背衣物疊在人形上組穿搭。
@@ -711,7 +711,10 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   const backupFileRef = useRef(null);
   const [backupMsg, setBackupMsg] = useState("");
   const exportBackup = async () => {
-    try { downloadBackup(await buildBackup()); setBackupMsg("已匯出備份檔到你的下載"); }
+    try {
+      const count = await downloadBackupZip();
+      setBackupMsg(count ? `已匯出 ZIP:${count} 件衣服的去背圖(PNG)和紀錄,在你的下載` : "已匯出 ZIP(紀錄;還沒有自己加的衣服,所以沒有圖)");
+    }
     catch { setBackupMsg("匯出失敗,再試一次"); }
   };
   const importBackup = async (event) => {
@@ -722,7 +725,8 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     const synced = syncCode() ? "\n・開了同步,這些會傳到你的每一台裝置。" : "";
     if (!confirm(`匯入這份備份?\n・備份裡的衣服會加回來,包括之後刪掉的。\n・穿著紀錄、收藏、微調會換回備份當時的版本。${synced}`)) return;
     try {
-      await restoreBackup(JSON.parse(await file.text()));
+      const { backup, files } = await readBackupFile(file);
+      await restoreBackup(backup, files);
       setBackupMsg("已還原,重新整理讓紀錄生效…");
       setTimeout(() => window.location.reload(), 800);
     } catch (cause) {
@@ -1097,10 +1101,10 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
             <span className="studio-backup-label">紀錄備份</span>
             <button type="button" onClick={exportBackup}>匯出備份</button>
             <button type="button" onClick={() => backupFileRef.current?.click()}>匯入備份</button>
-            <input ref={backupFileRef} type="file" accept="application/json,.json" onChange={importBackup} hidden />
+            <input ref={backupFileRef} type="file" accept="application/zip,.zip,application/json,.json" onChange={importBackup} hidden />
           </div>
           {backupMsg && <p className="studio-backup-msg" role="status">{backupMsg}</p>}
-          <p className="studio-backup-note">備份檔存在你自己手上,不經過雲端。沒開同步的話,穿著紀錄、收藏、微調只在這台瀏覽器,換裝置或清資料前先「匯出」,到新裝置「匯入」。同步碼不會寫進備份檔。</p>
+          <p className="studio-backup-note">備份是一個 ZIP,存在你自己手上、不經過雲端:解開有每件自己加的衣服的去背圖(PNG),和穿著紀錄、收藏、微調。換裝置或清資料前先「匯出」,到新裝置「匯入」這個 ZIP。同步碼不會寫進備份檔。</p>
         </div>
       </div>
 
