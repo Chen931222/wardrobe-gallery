@@ -14,6 +14,11 @@ const HOSTS = {
   uniqlo: "https://d.uniqlo.com",
 };
 
+const REGION_CURRENCY = {
+  tw: "TWD", jp: "JPY", us: "USD", hk: "HKD", kr: "KRW", sg: "SGD", my: "MYR", th: "THB", ph: "PHP", id: "IDR",
+  vn: "VND", au: "AUD", ca: "CAD", uk: "GBP", gb: "GBP", fr: "EUR", de: "EUR", es: "EUR", it: "EUR", nl: "EUR", be: "EUR", cn: "CNY",
+};
+
 export async function lookupBrandProduct({ brand, region, code }) {
   const host = HOSTS[brand];
   if (!host || !/^[a-z]{2}$/.test(region || "") || !/^u\d{8,16}$/.test(code || "")) {
@@ -27,9 +32,12 @@ export async function lookupBrandProduct({ brand, region, code }) {
   if (!response.ok) return { status: 502, body: { error: `品牌回 ${response.status}` } };
   const summary = (await response.json())?.resp?.[0]?.spuInfo?.summary;
   if (!summary?.name) return { status: 404, body: { error: "找不到這件" } };
+  // 價錢:特價後的最低價,沒有就原價(2026-10-05 實測 GU:minPrice 690、originPrice 690)
+  const amount = Number(summary.minPrice ?? summary.originPrice);
   return {
     status: 200,
     body: {
+      price: Number.isFinite(amount) && amount > 0 ? { amount, currency: REGION_CURRENCY[region] || null } : null,
       name: summary.name,
       categories: (summary.categoryNames || []).filter((label) => typeof label === "string" && label !== "全商品"),
     },

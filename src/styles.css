@@ -1526,12 +1526,42 @@ h1, h2, h3 {
 /* 觸控裝置沒有 hover,直接常駐顯示;格子上的垃圾桶撐到 36px(審查 F24) */
 @media (hover: none) { .gallery-delete { opacity: 1; width: 36px; height: 36px; } }
 
+/* 視窗比螢幕高也要捲得到:舊版桌機用 grid 置中又沒開捲動,太高的時候上下兩截直接切掉。
+   改成 flex + margin: auto:塞得下就置中,塞不下就從頂端開始、整個捲。
+   原生捲軸藏起來,換成看得到的那條(ScrollRail.jsx;iPhone 的原生捲軸平常不顯示) */
 .add-overlay {
   position: fixed; inset: 0; z-index: 95;
-  display: grid; place-items: center; padding: 24px;
+  display: flex; align-items: flex-start; padding: 24px;
+  overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-width: none;
   background: var(--scrim);
   -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
 }
+.add-overlay::-webkit-scrollbar { display: none; }
+.add-overlay > * { flex-shrink: 0; margin: auto; }
+
+.scroll-rail {
+  position: fixed; z-index: 96;
+  top: max(14px, env(safe-area-inset-top)); bottom: max(14px, env(safe-area-inset-bottom)); right: 0;
+  width: 20px;
+  touch-action: none;
+}
+.scroll-rail::before {
+  content: ""; position: absolute; top: 0; bottom: 0; right: 7px;
+  width: 2px; border-radius: 1px; background: var(--line);
+  pointer-events: none;
+}
+.scroll-rail-thumb {
+  position: absolute; left: 0; right: 0;
+  min-height: 36px;
+  cursor: grab;
+}
+.scroll-rail-thumb::after {
+  content: ""; position: absolute; top: 0; bottom: 0; right: 5px;
+  width: 6px; border-radius: 3px; background: var(--muted);
+}
+.scroll-rail-thumb:active { cursor: grabbing; }
+.scroll-rail-thumb:active::after { background: var(--accent); }
 
 .add-panel {
   position: relative;
@@ -1697,7 +1727,8 @@ h1, h2, h3 {
 @media (max-width: 640px) {
   /* iOS Safari 遇到小於 16px 的輸入框會自動放大畫面 */
   .add-field input, .add-field select { font-size: 16px; }
-  .add-overlay { padding: 12px; align-items: start; overflow-y: auto; }
+  .add-overlay { padding: 12px; }
+  .add-overlay > * { margin: 0 auto auto; }   /* 手機貼頂:打字時鍵盤不會蓋到上面的輸入框 */
   .gallery-meta-row { flex-wrap: wrap; gap: 12px; }
   .header-tools { width: 100%; justify-content: space-between; }
 }
@@ -2660,3 +2691,53 @@ h1, h2, h3 {
 /* 去背處理中可以取消(審查 F4) */
 .add-panel .add-cancel { margin-top: 8px; min-height: 40px; }
 .add-panel .add-dupe-early { color: var(--accent); }
+
+/* ===== 價錢 ===== */
+/* 衣櫃格子:圖下面一行小字,沒標價的不顯示 */
+.gallery-price {
+  display: block;
+  margin-top: 2px;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: .04em;
+  color: var(--muted);
+}
+.price-row { display: flex; gap: 6px; }
+.price-row select { flex: none; width: auto; min-width: 76px; }
+.price-row input { flex: 1 1 auto; min-width: 0; }
+.price-status { margin: 6px 0 0; font-size: 12px; line-height: 1.6; color: var(--muted); }
+.price-fetch {
+  margin-left: 8px;
+  min-height: 32px;
+  padding: 2px 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.price-fetch:hover { border-color: var(--ink); }
+.viewer-ro-price { margin: 4px 0 0; font-family: var(--font-display); font-size: 18px; color: var(--ink); }
+.add-panel .price-field label { font-size: 13px; color: var(--muted); }
+
+/* ===== 訪客自己的衣櫃還空著:歡迎畫面(示範要自己點) ===== */
+.welcome {
+  max-width: 520px;
+  margin: 56px 56px 0;
+}
+.welcome h2 { margin: 0 0 12px; font-size: 26px; }
+.welcome p { margin: 0; font-size: 14px; line-height: 1.8; color: var(--body); }
+.welcome-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.welcome-actions button { min-height: 44px; padding: 0 20px; }
+.welcome .welcome-note { margin-top: 26px; font-size: 13px; color: var(--muted); }
+.welcome-note button {
+  margin-left: 6px; padding: 0; border: 0; background: none;
+  color: var(--ink); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.status .welcome-demo { margin-left: 8px; }
+@media (max-width: 640px) {
+  .welcome { margin: 32px 18px 0; }
+  .welcome h2 { font-size: 22px; }
+}

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowCounterClockwise, ArrowsClockwise, CalendarCheck, Export, FloppyDisk, ImageSquare, Lock, LockOpen, Microphone, Sparkle, Trash, X } from "@phosphor-icons/react";
 import { adjustIntent, fetchWeather, findItemForSwap, parseRequest, randomOutfit, readWearLog, recommendOutfit, recordWear, unrecordWear } from "./recommend.js";
 import { syncCode } from "./sync.js";
-import { downloadBackupZip, readBackupFile, restoreBackup } from "./backup.js";
+import { downloadBackupZip, importBackupFile } from "./backup.js";
 import { LookCard } from "./LookCard.jsx";
 
 // 搭配工作室:把去背衣物疊在人形上組穿搭。
@@ -721,17 +721,8 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    // 講清楚會發生的三件事(審查 F42):舊版只說「這台瀏覽器」,開了同步其實會傳到每一台
-    const synced = syncCode() ? "\n・開了同步,這些會傳到你的每一台裝置。" : "";
-    if (!confirm(`匯入這份備份?\n・備份裡的衣服會加回來,包括之後刪掉的。\n・穿著紀錄、收藏、微調會換回備份當時的版本。${synced}`)) return;
-    try {
-      const { backup, files } = await readBackupFile(file);
-      await restoreBackup(backup, files);
-      setBackupMsg("已還原,重新整理讓紀錄生效…");
-      setTimeout(() => window.location.reload(), 800);
-    } catch (cause) {
-      setBackupMsg(`匯入失敗:${cause?.message || "檔案格式不對"}`);
-    }
+    const message = await importBackupFile(file, Boolean(syncCode()));
+    if (message) setBackupMsg(message);
   };
 
   // 按了「今天穿這套」可以取消(審查 F29):記之前每件的日期留著,取消時換回去。只留到換一套或離開這頁

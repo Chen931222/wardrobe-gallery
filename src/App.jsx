@@ -12,6 +12,10 @@ import { hasLocalChanges, lastSyncError, noteDeliberateDelete, scheduleSync, syn
 import { findSimilar, fitOf, guessWarmth, kindLabel, wishOutfits } from "./wishCheck.js";
 import { colorName, isNeutral } from "./recommend.js";
 import { useDialog } from "./useDialog.js";
+import { ScrollRail } from "./ScrollRail.jsx";
+import { fetchPriceForUrl } from "./brandLink.js";
+import { CURRENCIES, formatPrice, parsePrice } from "./price.js";
+import { importBackupFile } from "./backup.js";
 
 const STORAGE_KEY = "open-wardrobe-edits-v1";
 const DELETED_STORAGE_KEY = "open-wardrobe-deleted-v1";
@@ -53,7 +57,7 @@ const TAG_ZH = {
   "short sleeve": "短袖", shorts: "短褲", shortsleeve: "短袖", "shoulder bag": "肩背包", signature: "經典款", skater: "滑板",
   sleeveless: "無袖", slides: "拖鞋", sling: "斜背", "smart-casual": "休閒正式", sneakers: "球鞋", socks: "襪子", sport: "運動",
   "straight-leg": "直筒", streetwear: "街頭", striped: "條紋", suede: "麂皮", "sweat-shorts": "棉短褲", sweater: "毛衣",
-  sweatpants: "棉褲", sweatshirt: "大學T", tank: "背心", techwear: "機能風", textured: "紋理", tods: "TOD'S", trousers: "長褲",
+  sweatpants: "棉褲", sweatshirt: "大學T", tank: "背心", tee: "T 恤", techwear: "機能風", textured: "紋理", tods: "TOD'S", trousers: "長褲",
   twill: "斜紋布", vest: "背心", vintage: "古著", vneck: "V 領", waffle: "鬆餅格", "waist bag": "腰包", washed: "水洗",
   "washed-black": "水洗黑", "wide-leg": "寬褲", windbreaker: "防風外套", wool: "羊毛", workwear: "工裝", zip: "拉鍊",
   "zip-off": "可拆褲管", "zip-pocket": "拉鍊口袋",
@@ -61,6 +65,24 @@ const TAG_ZH = {
   samsonite: "Samsonite", timberland: "Timberland", "under armour": "Under Armour",
 };
 const tagLabel = (tag) => TAG_ZH[String(tag).toLowerCase()] || tag;
+
+/* 示範衣櫃:給朋友、作品集訪客看的。不攤開站主全部 104 件,只放一小份樣本(各類幾件,今日推薦還配得出來),
+   品名去掉括號裡的品牌(「紅色網布輕量慢跑鞋(Nike)」→「紅色網布輕量慢跑鞋」),標籤拿掉品牌。
+   2026-10-05 本人:網站給朋友試用了,不想把自己的衣服都放在入口。站主自己(?edit)照舊看全部。
+   注意這只是畫面上不顯示:data/wardrobe.json 還是公開的,直接開那個網址看得到全部。 */
+const DEMO_QUOTA = { upperbody: 6, wholebody_up: 3, lowerbody: 5, shoes: 3, bag: 2, socks: 1 };
+const BRAND_TAGS = new Set(["adidas", "nike", "mlb", "dickies", "gu", "lacoste", "new balance", "samsonite", "timberland", "under armour", "tods", "polo-rl", "padres", "nationals"]);
+const stableHash = (text) => [...String(text)].reduce((hash, char) => ((hash * 31) + char.charCodeAt(0)) >>> 0, 7);
+function demoSample(served) {
+  const picked = [];
+  const sorted = [...served].sort((a, b) => stableHash(a.id) - stableHash(b.id));   // 每次都挑同一份,不是每次重新整理換一批
+  for (const [part, count] of Object.entries(DEMO_QUOTA)) picked.push(...sorted.filter((item) => item.part === part).slice(0, count));
+  return picked.map((item) => ({
+    ...item,
+    name: String(item.name || "").replace(/\s*[（(][^()（）]*[)）]\s*$/, "").trim() || item.name,
+    tags: (item.tags || []).filter((tag) => !BRAND_TAGS.has(String(tag).toLowerCase())),
+  }));
+}
 const TYPE_ORDER = Object.fromEntries(TYPES.slice(1).map((type, index) => [type.id, index]));
 
 
@@ -73,7 +95,7 @@ function readEdits() {
 }
 
 
-const EDIT_FIELDS = ["name", "part", "color", "secondaryColor", "tags"];
+const EDIT_FIELDS = ["name", "part", "color", "secondaryColor", "tags", "price", "priceCurrency"];
 const editValue = (item, field) => {
   const value = item?.[field];
   if (field === "tags") return value || [];
@@ -233,6 +255,7 @@ function GalleryItem({ item, selected, onOpen, onDelete }) {
         />
         {item.wishlist && <span className="wish-badge">想買</span>}
       </button>
+      {Boolean(item.price) && <span className="gallery-price">{formatPrice(item.price, item.priceCurrency)}</span>}
       {canEditItem(item) && (
         <button
           className="gallery-delete"
@@ -350,7 +373,7 @@ function ColorControl({ label, field, value, palette, onChange, sampling, setSam
   );
 }
 
-function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleStatus }) {
+function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleStatus, priceStatus = "", onFetchPrice = null }) {
   const suggestedSecondary = palette.find((color) => color.toLowerCase() !== draft.color?.toLowerCase()) || "#9a9286";
 
   return (
@@ -370,6 +393,31 @@ function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleSta
           {TYPES.slice(1).map((type) => <option value={type.id} key={type.id}>{type.label}</option>)}
         </select>
       </label>
+
+      {/* 價錢:想買的有商品網址就自己去抓(打開單品頁時、或按「從網址抓價錢」);沒有網址的自己填 */}
+      <div className="field price-field">
+        <span>價錢</span>
+        <div className="price-row">
+          <select aria-label="幣別" value={draft.priceCurrency || "TWD"} onChange={(event) => setDraft((current) => ({ ...current, priceCurrency: event.target.value }))}>
+            {CURRENCIES.map(([code, symbol]) => <option key={code} value={code}>{symbol}</option>)}
+          </select>
+          <input
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            aria-label="價錢"
+            value={draft.price}
+            onChange={(event) => setDraft((current) => ({ ...current, price: event.target.value }))}
+            placeholder="還沒標價"
+          />
+        </div>
+        {(priceStatus || onFetchPrice) && (
+          <p className="price-status" aria-live="polite">
+            {priceStatus}
+            {onFetchPrice && <button type="button" className="price-fetch" onClick={onFetchPrice}>從網址抓價錢</button>}
+          </p>
+        )}
+      </div>
 
       <fieldset className="color-field">
         <legend>顏色</legend>
@@ -418,6 +466,7 @@ function ReadOnlyDetails({ item, onWear }) {
   return (
     <div className="viewer-readonly">
       <p className="viewer-ro-category">{type}</p>
+      {Boolean(item.price) && <p className="viewer-ro-price">{formatPrice(item.price, item.priceCurrency)}</p>}
       {!!colors.length && (
         <div className="viewer-ro-colors">
           {colors.map((color) => (
@@ -573,10 +622,13 @@ function WishCheck({ item, owned, onOpen, onWearOutfit }) {
   );
 }
 
-const DRAFT_FIELDS = ["name", "part", "color", "secondaryColor", "tags"];
+const DRAFT_FIELDS = ["name", "part", "color", "secondaryColor", "tags", "price", "priceCurrency"];
 
 function draftOf(item) {
-  return { name: item.name || "", part: item.part, color: item.color || "#9a9286", secondaryColor: item.secondaryColor || null, tags: [...(item.tags || [])] };
+  return {
+    name: item.name || "", part: item.part, color: item.color || "#9a9286", secondaryColor: item.secondaryColor || null, tags: [...(item.tags || [])],
+    price: item.price ? String(item.price) : "", priceCurrency: item.priceCurrency || "TWD",
+  };
 }
 
 /* 同一件換成新物件時(同步拉到別台的衣服、存檔):沒動過的欄位跟上新值,正在改的欄位保留。 */
@@ -588,7 +640,7 @@ function rebaseDraft(draft, before, after) {
 }
 
 /** @param gone 這件在別台被刪掉或隱藏了:頁面留著(草稿還在、可以複製),但存檔、刪除、穿上這些動作都關掉 */
-function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWear, onBought, onSetUrl, onOpen, onWearOutfit }) {
+function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWear, onBought, onSetUrl, onSetPrice, onOpen, onWearOutfit }) {
   const closeButtonRef = useRef(null);
   const dialogRef = useRef(null);
   // 焦點圈在單品頁裡、關掉後回到原本點的那格(審查 F46)。Esc 照下面自己的處理(先取消吸色、有沒存的先擋)
@@ -633,12 +685,16 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
       color: draft.color?.toLowerCase() || null,
       secondaryColor: draft.secondaryColor?.toLowerCase() || null,
       tags: normalizedTags(draft.tags),
+      price: parsePrice(draft.price),
+      priceCurrency: parsePrice(draft.price) ? draft.priceCurrency || "TWD" : null,
     }) !== JSON.stringify({
       name: (item.name || "").trim(),
       part: item.part,
       color: item.color?.toLowerCase() || null,
       secondaryColor: item.secondaryColor?.toLowerCase() || null,
       tags: normalizedTags(item.tags || []),
+      price: item.price || null,
+      priceCurrency: item.price ? item.priceCurrency || "TWD" : null,
     });
   }, [draft, item]);
 
@@ -702,8 +758,27 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
     onClose();
   };
 
+  // 有商品網址就能從網址找價錢:想買的、打開時還沒標價就自動找一次;按鈕可以重新找(特價、改價)。找到直接存
+  const [priceStatus, setPriceStatus] = useState("");
+  const canFetchPrice = Boolean(item.sourceUrl && !productUrlProblem(item.sourceUrl)) && !gone;
+  const fetchPrice = useCallback(async (auto = false) => {
+    setPriceStatus("從網址找價錢…");
+    const price = await fetchPriceForUrl(item.sourceUrl).catch(() => null);
+    if (!price) { setPriceStatus(auto ? "" : "這個網址讀不到價錢(可能擋住了),自己填"); return; }
+    onSetPrice(item.id, price);
+    setPriceStatus(`從網址讀到 ${formatPrice(price.amount, price.currency)}`);
+  }, [item.id, item.sourceUrl, onSetPrice]);
+  useEffect(() => {
+    setPriceStatus("");
+    if (item.wishlist && canFetchPrice && !item.price) fetchPrice(true);
+  }, [item.id]);   // eslint-disable-line react-hooks/exhaustive-deps -- 只在打開或換一件時自動找
+
   const saveEditing = () => {
-    onSave({ ...item, ...draft, name: draft.name.trim(), tags: draft.tags.map((tag) => tag.trim()).filter(Boolean) });
+    const price = parsePrice(draft.price);
+    onSave({
+      ...item, ...draft, name: draft.name.trim(), tags: draft.tags.map((tag) => tag.trim()).filter(Boolean),
+      price, priceCurrency: price ? draft.priceCurrency || "TWD" : null,
+    });
     setSampling(null);
     setSampleStatus("已儲存。");
   };
@@ -823,6 +898,8 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
               sampling={sampling}
               setSampling={setSampling}
               sampleStatus={sampleStatus}
+              priceStatus={priceStatus}
+              onFetchPrice={canFetchPrice ? () => fetchPrice(false) : null}
             />
 
             {closeBlocked && <p className="unsaved-notice" role="status">離開這頁前請先儲存或取消變更。</p>}
@@ -859,7 +936,8 @@ export function App() {
   const [closetChoice, setClosetChoice] = useState(null);     // 訪客手動選的衣櫃;null = 照有沒有自己的衣服決定
   const [syncOpen, setSyncOpen] = useState(false);
   const [pendingDaily, setPendingDaily] = useState(null);   // 入口今日推薦的天氣和理由,跟著那套帶進搭配頁(審查 F25)
-  const [addRequest, setAddRequest] = useState(0);           // 空衣櫃、推薦失敗的「新增」按鈕:換到衣櫃並打開新增
+  const [addRequest, setAddRequest] = useState(0);
+  const welcomeFileRef = useRef(null);                       // 歡迎畫面的「匯入備份」           // 空衣櫃、推薦失敗的「新增」按鈕:換到衣櫃並打開新增
   // 做完一件事的一行回饋:剛加入的、按了「已經買了」、剛加入同步(審查 F18、F55、F63)
   const [notice, setNotice] = useState(() => {
     try {
@@ -919,7 +997,8 @@ export function App() {
     setError(!served && !servedRef.current ? (failed?.message || "衣櫃載入失敗。") : "");
     const edits = readEdits();
     const deleted = readDeletedItems();
-    const merged = [...(served || servedRef.current || []), ...(local || localRef.current || [])].filter((item) => !deleted.has(item.id));
+    const servedList = served || servedRef.current || [];
+    const merged = [...(CAN_EDIT ? servedList : demoSample(servedList)), ...(local || localRef.current || [])].filter((item) => !deleted.has(item.id));
     setItems(merged.map((item) => ({ ...item, ...(edits[item.id] || {}) })));
     setLoading(false);
   }, []);
@@ -980,11 +1059,12 @@ export function App() {
   const selectedItem = liveSelected || (selectedId && lastSelectedRef.current?.id === selectedId ? lastSelectedRef.current : null);
   const selectedGone = Boolean(selectedItem && !liveSelected);
 
-  // 訪客的衣櫃跟站主的 104 件分開:自己加的是「我的衣櫃」,站主那批退成「示範衣櫃」,推薦只在同一個衣櫃裡配。
-  // 站主(?edit)照舊看全部;?public 只看示範。訪客還沒加過衣服時先看示範,加了第一件就換成自己的。
+  // 訪客的衣櫃跟站主的分開:自己加的是「我的衣櫃」,站主那批的一小份樣本是「示範衣櫃」,推薦只在同一個衣櫃裡配。
+  // 站主(?edit)照舊看全部;?public 只看示範。訪客一進來就是自己的衣櫃(還沒有衣服就是歡迎畫面),示範要自己點
+  // (2026-10-05 本人:給朋友試用,入口不要都是站主的衣服;舊版沒有衣服的訪客直接落在示範衣櫃)。
   const mineCount = useMemo(() => items.filter((item) => item.isLocal && !item.wishlist).length, [items]);
   const hasMine = useMemo(() => items.some((item) => item.isLocal), [items]);
-  const closet = CAN_EDIT ? "all" : !CAN_ADD ? "demo" : closetChoice || (hasMine ? "mine" : "demo");
+  const closet = CAN_EDIT ? "all" : !CAN_ADD ? "demo" : closetChoice || "mine";
   const closetItems = useMemo(
     () => (closet === "all" ? items : items.filter((item) => Boolean(item.isLocal) === (closet === "mine"))),
     [items, closet],
@@ -1090,6 +1170,36 @@ export function App() {
   };
 
   // 商品網址留著:之後再貼同一件的連結,才認得出已經有了(審查 F31)。按完講一聲,不然畫面只是安靜地變成編輯表單(F55)
+  // 價錢從網址找到時直接存(跟手動編輯走同一條:edits,開了同步會傳到每一台)。用最新的那份衣服,不用畫面當下那份
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const setItemPrice = useCallback((id, price) => {
+    const target = itemsRef.current.find((item) => item.id === id);
+    if (!target || !price?.amount) return;
+    const updated = { ...target, price: price.amount, priceCurrency: price.currency || "TWD" };
+    setItems((current) => current.map((item) => (item.id === id ? updated : item)));
+    const original = [...(servedRef.current || []), ...(localRef.current || [])].find((item) => item.id === id);
+    persistEdit(updated, original);
+  }, []);
+
+  // 想買的、有網址、還沒標價的:背景一件一件去找(這次打開網站每件只試一次,讀不到就留給人自己填)
+  const priceTried = useRef(new Set());
+  useEffect(() => {
+    if (!CAN_ADD || loading) return undefined;
+    const todo = items.filter((item) => item.wishlist && item.sourceUrl && !item.price && !priceTried.current.has(item.id));
+    if (!todo.length) return undefined;
+    let cancelled = false;
+    (async () => {
+      for (const item of todo.slice(0, 8)) {
+        if (cancelled) return;
+        priceTried.current.add(item.id);
+        const price = await fetchPriceForUrl(item.sourceUrl).catch(() => null);
+        if (price) setItemPrice(item.id, price);   // 中途衣櫃重讀過也照存(用最新的那份);只是不再開始找下一件
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [items, loading, setItemPrice]);
+
   const markBought = async (id) => {
     const target = items.find((item) => item.id === id);
     await updateLocalItem(id, { wishlist: false });
@@ -1142,7 +1252,7 @@ export function App() {
             title={closet === "demo" && CAN_ADD ? "示範衣櫃" : "我的衣櫃"}
             note={closet === "demo" && CAN_ADD ? (
               <>
-                <span className="landing-pitch">把自己的衣服<span className="landing-pitch-more">拍照、或貼 GU、UNIQLO 的連結</span>放進來,每天照台中的天氣配一套。<span className="landing-pitch-more">下面是站主的衣櫃,先拿來示範。</span></span>
+                <span className="landing-pitch">把自己的衣服<span className="landing-pitch-more">拍照、或貼 GU、UNIQLO 的連結</span>放進來,每天照台中的天氣配一套。<span className="landing-pitch-more">下面是從站主衣櫃挑出來的幾件,先拿來示範。</span></span>
                 <button type="button" className="landing-make" onClick={() => { chooseCloset("mine"); if (mineCount) setView("closet"); else requestAdd(); }}>
                   {mineCount ? "回我的衣櫃" : "建立我的衣櫃"}
                 </button>
@@ -1170,6 +1280,9 @@ export function App() {
               <SyncPanel canStart={CAN_EDIT} />
             </div>
           </div>
+        )}
+        {syncOpen && (
+          <ScrollRail target={sheetRef} watch={syncOpen} />
         )}
 
         {(view !== "landing" || (!loading && !ownedItems.length)) && (
@@ -1222,7 +1335,36 @@ export function App() {
         {error && <p className="status error">{error}</p>}
         {view !== "landing" && !error && loading && <p className="status">衣櫃載入中</p>}
         {/* 只看「想買的」分頁時它自己會列出來;入口、搭配、其他分頁仍要講,不然空白一片 */}
-        {!error && !loading && !ownedItems.length && !(view === "closet" && activeType === "wishlist" && wishCount) && (
+        {/* 訪客自己的衣櫃還空著:入口給一個歡迎畫面,不是直接攤開站主的衣服 */}
+        {!error && !loading && !ownedItems.length && !wishCount && view === "landing" && closet === "mine" && (
+          <section className="welcome" aria-labelledby="welcome-title">
+            <h2 id="welcome-title">我的衣櫃</h2>
+            <p>把自己的衣服拍照、或貼品牌的商品連結放進來,每天照台中的天氣配一套。衣服存在你這台裝置裡,別人看不到。</p>
+            <div className="welcome-actions">
+              <button type="button" className="primary-button" onClick={requestAdd}>新增第一件</button>
+              <button type="button" className="secondary-button" onClick={() => chooseCloset("demo")}>先看看示範</button>
+            </div>
+            <p className="welcome-note">
+              在別台同步過了?<button type="button" onClick={() => setSyncOpen(true)}>輸入同步碼</button>
+              <span aria-hidden="true"> · </span>
+              有備份檔?<button type="button" onClick={() => welcomeFileRef.current?.click()}>匯入備份</button>
+              <input
+                ref={welcomeFileRef}
+                type="file"
+                accept="application/zip,.zip,application/json,.json"
+                hidden
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (!file) return;
+                  const message = await importBackupFile(file, Boolean(syncCode()));
+                  if (message) say(message);
+                }}
+              />
+            </p>
+          </section>
+        )}
+        {!error && !loading && !ownedItems.length && !(view === "closet" && activeType === "wishlist" && wishCount) && !(view === "landing" && closet === "mine" && !wishCount) && (
           wishCount ? (
             <p className="status empty">
               你加的 {wishCount} 件在「想買的」裡。還沒買的不算進衣櫃,買了以後點開那件按「已經買了」。
@@ -1237,6 +1379,7 @@ export function App() {
                 <>
                   <br />
                   <button type="button" className="secondary-button" onClick={requestAdd}>新增第一件</button>
+                  {closet === "mine" && <button type="button" className="secondary-button welcome-demo" onClick={() => chooseCloset("demo")}>先看看示範</button>}
                 </>
               )}
             </p>
@@ -1279,6 +1422,7 @@ export function App() {
           onWear={(item) => { wearOutfit({ [item.part]: item }); setSelectedId(null); setView("styling"); }}
           onBought={markBought}
           onSetUrl={setWishUrl}
+          onSetPrice={setItemPrice}
         />
       )}
     </div>

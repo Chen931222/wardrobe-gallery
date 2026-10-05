@@ -75,11 +75,12 @@ export async function loadLocalItems() {
   }
 }
 
-export async function saveLocalItem({ id, name, part, color, secondaryColor, tags, blob, wishlist, sourceUrl }) {
+export async function saveLocalItem({ id, name, part, color, secondaryColor, tags, blob, wishlist, sourceUrl, price, priceCurrency }) {
   await tx("readwrite", (store) => store.put({
     id, name, part, color, secondaryColor: secondaryColor || null,
     tags: tags || [], blob, createdAt: new Date().toISOString(),
     wishlist: Boolean(wishlist), sourceUrl: sourceUrl || null,
+    price: price ?? null, priceCurrency: price ? priceCurrency || "TWD" : null,
   }));
 }
 

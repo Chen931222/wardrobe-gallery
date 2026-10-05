@@ -103,3 +103,20 @@ export async function restoreBackup(backup, files = null) {
     await putLocalRecord({ ...rest, blob });
   }
 }
+
+/** 匯入一個使用者選的備份檔:先講清楚會發生什麼、問過才寫。回傳要顯示的一句話;按取消回 null。
+ *  搭配頁的「匯入備份」和空衣櫃的歡迎畫面共用(換手機的朋友衣櫃還空著,沒有搭配頁可以按)。
+ *  @param syncOn 這台開了同步沒(開了的話,匯入的東西會傳到每一台) */
+export async function importBackupFile(file, syncOn = false) {
+  // 講清楚會發生的三件事(審查 F42):舊版只說「這台瀏覽器」,開了同步其實會傳到每一台
+  const synced = syncOn ? "\n・開了同步,這些會傳到你的每一台裝置。" : "";
+  if (!window.confirm(`匯入這份備份?\n・備份裡的衣服會加回來,包括之後刪掉的。\n・穿著紀錄、收藏、微調會換回備份當時的版本。${synced}`)) return null;
+  try {
+    const { backup, files } = await readBackupFile(file);
+    await restoreBackup(backup, files);
+    setTimeout(() => window.location.reload(), 800);
+    return "已還原,重新整理讓紀錄生效…";
+  } catch (cause) {
+    return `匯入失敗:${cause?.message || "檔案格式不對"}`;
+  }
+}

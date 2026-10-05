@@ -5,6 +5,8 @@ import { cropBlob, deleteLocalItem, findUrl, garmentColors, productUrlProblem, r
 import { fetchBrandProduct, fetchProductPage, parseBrandLink, partFromName, partFromProduct, sameProduct } from "./brandLink.js";
 import { findSimilar, kindLabel } from "./wishCheck.js";
 import { useDialog } from "./useDialog.js";
+import { ScrollRail } from "./ScrollRail.jsx";
+import { CURRENCIES, parsePrice } from "./price.js";
 
 const PARTS = [
   { id: "upperbody", label: "上衣" },
@@ -178,6 +180,30 @@ async function toCutoutFormat(file) {
   }
 }
 
+/** 價錢欄:數字＋幣別。抓得到的已經填好;手動填的預設新台幣。也給單品頁用 */
+export function PriceField({ value, currency, onChange, hint = "選填", id = "price" }) {
+  return (
+    <div className="add-field price-field">
+      <label htmlFor={`${id}-amount`}>價錢</label>
+      <div className="price-row">
+        <select aria-label="幣別" value={currency || "TWD"} onChange={(event) => onChange(value, event.target.value)}>
+          {CURRENCIES.map(([code, symbol]) => <option key={code} value={code}>{symbol}</option>)}
+        </select>
+        <input
+          id={`${id}-amount`}
+          type="text"
+          inputMode="decimal"
+          autoComplete="off"
+          value={value ?? ""}
+          onChange={(event) => onChange(event.target.value, currency || "TWD")}
+          placeholder="例:1290"
+        />
+      </div>
+      {hint && <small className="add-hint">{hint}</small>}
+    </div>
+  );
+}
+
 const PAD = 0.1;
 /** 框往外多留 10% 再去背:框得太貼,模型看不到背景,中間色的條紋會被去成半透明、旁邊留一條陰影(審查 F19)。去背完再裁回原本的框。 */
 function expandBox(region) {
@@ -291,7 +317,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     const timer = setTimeout(() => {
       fetchProductPage(pageUrl, controller.signal).then((data) => {
         const status = data.images.length ? "ok" : data.blocked ? "blocked" : "empty";
-        setPageInfo({ url: pageUrl, status, name: data.name || "", brand: data.brand || "", images: data.images, error: data.error || "" });
+        setPageInfo({ url: pageUrl, status, name: data.name || "", brand: data.brand || "", images: data.images, price: data.price || null, error: data.error || "" });
       }).catch(() => { /* 換了網址,這次的不要了 */ });
     }, 350);
     return () => { clearTimeout(timer); controller.abort(); };
@@ -307,7 +333,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     const name = parsedLink.name || pageName || "";
     // 品名猜不出分類就看網址(LONGINES 的品名沒有「錶」,網址是 /p/watch-longines-…)
     const slug = decodeURIComponent(new URL(parsedLink.url).pathname).replace(/[-_/.]+/g, " ");
-    return { ...parsedLink, brand, name, images: page.images, part: partFromName(name) || partFromName(slug) || null };
+    return { ...parsedLink, brand, name, images: page.images, part: partFromName(name) || partFromName(slug) || null, price: page.price || null };
   })();
   // 貼上連結的那一步就講加過了沒(審查 F31):舊版要等去背完才說,白等一輪
   const linkDupe = useMemo(
@@ -324,10 +350,15 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
         if (!product) return;
         const name = `${product.name}(${chosen.brand})`;
         const part = partFromProduct(product.name, product.categories);
-        setLink((current) => (current?.url === chosen.url ? { ...current, name, part } : current));
-        setDraft((current) => (current && current.sourceUrl === chosen.url && !current.name
-          ? { ...current, name, part: current.part || part || "" }
-          : current));
+        setLink((current) => (current?.url === chosen.url ? { ...current, name, part, price: product.price || current.price || null } : current));
+        setDraft((current) => {
+          if (!current || current.sourceUrl !== chosen.url) return current;
+          const next = { ...current };
+          if (!current.name) { next.name = name; next.part = current.part || part || ""; }
+          // 價錢晚一點才回來:欄位還空著才填,不蓋掉手打的
+          if (!current.price && product.price) { next.price = String(product.price.amount); next.priceCurrency = product.price.currency || "TWD"; }
+          return next;
+        });
       });
     }
     if (chosen?.images.length) setStage("pick");
@@ -416,6 +447,9 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
         // 貼了商品連結才預設「還沒買」;從相簿選的多半是自己已經有的
         wishlist: Boolean(link?.url),
         sourceUrl: link?.url || "",
+        // 價錢:商品頁或 GU、UNIQLO 讀得到就先填好,讀不到留空讓人填
+        price: link?.price?.amount ? String(link.price.amount) : "",
+        priceCurrency: link?.price?.currency || "TWD",
       });
       setStage("review");
       setStatus("");
@@ -465,6 +499,8 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
       blob: draft.blob,
       wishlist: draft.wishlist,
       sourceUrl: draft.wishlist ? findUrl(draft.sourceUrl) : null,
+      price: parsePrice(draft.price),
+      priceCurrency: draft.priceCurrency || "TWD",
     });
     onAdded(draft.wishlist, name);
     reset();
@@ -638,6 +674,13 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
               />
             </label>
 
+            <PriceField
+              value={draft.price}
+              currency={draft.priceCurrency}
+              onChange={(price, priceCurrency) => setDraft((current) => ({ ...current, price, priceCurrency }))}
+              hint={link?.price ? "從商品頁讀到的,可以改" : link?.url ? "商品頁讀不到價錢,知道的話自己填" : "選填"}
+            />
+
             <label className="add-field">
               <span>分類</span>
               <select
@@ -697,6 +740,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
         </div>
       )}
 
+      {showing && <ScrollRail target={dialogRef} watch={stage} />}
       {error && <p className="add-error" role="alert">{error}</p>}
     </>
   );

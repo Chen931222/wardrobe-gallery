@@ -116,6 +116,44 @@ export function cleanName(name, brand) {
   return parts.filter((part, index) => index === 0 || !noise(part)).join(" ").replace(PRICE, "").trim();
 }
 
+/* ---------- 價錢 ----------
+   2026-10-05 實測各品牌放在哪:og:price / product:price(Shopify 店:DW、Timex、Herschel)、
+   itemprop="price"(91APP:MUJI、Levi's)、JSON-LD offers(Lativ、LONGINES)、標題裡的「NT$714」(最後才用)。
+   Nike 頁面裡沒有價錢(是瀏覽器跑起來才載入),就沒有。幣別照頁面寫的,不換算。 */
+const amountOf = (text) => {
+  const n = Number(String(text ?? "").replace(/[^\d.]/g, ""));
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+function guessCurrency(url) {
+  const host = url.hostname, path = url.pathname.toLowerCase();
+  if (/\.tw$/.test(host) || /(^|[/_-])(zh-tw|zh_tw|tw)([/_-]|$)/.test(path) || /^tw\./.test(host)) return "TWD";
+  if (/\.jp$/.test(host) || /\/(ja|jp)([/_-]|$)/.test(path)) return "JPY";
+  if (/\.hk$/.test(host) || /\/(zh-hk|hk)([/_-]|$)/.test(path)) return "HKD";
+  return "USD";
+}
+const SYMBOLS = [["NT$", "TWD"], ["US$", "USD"], ["HK$", "HKD"], ["€", "EUR"], ["£", "GBP"], ["￥", "JPY"], ["¥", "JPY"]];
+function offerPrice(offers) {
+  for (const offer of [].concat(offers || []).flatMap((o) => [o, ...[].concat(o?.offers || [])])) {
+    const amount = amountOf(offer?.price ?? offer?.lowPrice ?? offer?.priceSpecification?.price);
+    if (amount) return { amount, currency: String(offer.priceCurrency || offer.priceSpecification?.priceCurrency || "").toUpperCase() || null };
+  }
+  return null;
+}
+function priceFromPage(html, ldOffers, title, url) {
+  for (const [amountKey, currencyKey] of [["og:price:amount", "og:price:currency"], ["product:price:amount", "product:price:currency"], ["price", "priceCurrency"]]) {
+    const amount = amountOf(metaContents(html, amountKey)[0]);
+    if (amount) return { amount, currency: (metaContents(html, currencyKey)[0] || guessCurrency(url)).toUpperCase() };
+  }
+  const fromLd = offerPrice(ldOffers);
+  if (fromLd) return { amount: fromLd.amount, currency: fromLd.currency || guessCurrency(url) };
+  const inTitle = String(title || "").match(/(NT\$|US\$|HK\$|€|£|￥|¥|\$)\s?([\d,]+(?:\.\d+)?)/);
+  if (inTitle) {
+    const amount = amountOf(inTitle[2]);
+    if (amount) return { amount, currency: SYMBOLS.find(([symbol]) => symbol === inTitle[1])?.[1] || guessCurrency(url) };
+  }
+  return null;
+}
+
 const imageUrls = (value) => [].concat(value || []).flatMap((entry) => (typeof entry === "string" ? [entry] : entry?.url ? [entry.url] : entry?.contentUrl ? [entry.contentUrl] : []));
 
 function productFromLd(html) {
@@ -131,6 +169,7 @@ function productFromLd(html) {
         name: decode(node.name),
         brand: decode(typeof node.brand === "string" ? node.brand : node.brand?.name),
         images: [...imageUrls(node.image), ...variants.flatMap((variant) => imageUrls(variant?.image))],
+        offers: [node.offers, ...variants.map((variant) => variant?.offers)].filter(Boolean),
       };
     }
   }
@@ -184,6 +223,7 @@ export async function readProductPage(pageUrl, secret) {
   }
   const ld = productFromLd(html);
   const ogTitle = metaContents(html, "og:title")[0] || "";
+  const price = priceFromPage(html, ld?.offers, ogTitle, url);
   // 分享標題比 JSON-LD 的品名完整就用它(LONGINES:「巨擘系列」vs「巨擘系列 | Ø 40.00 mm, 銀色 | L2.793.4.73.2 | LONGINES TW」)
   const ldName = ld?.name && ogTitle.includes(ld.name) && ogTitle.length > ld.name.length ? ogTitle : ld?.name;
   name ||= ldName || ogTitle || decode((html.match(/<title[^>]*>([^<]*)<\/title>/i) || [])[1]);
@@ -209,7 +249,7 @@ export async function readProductPage(pageUrl, secret) {
     if (images.length >= MAX_IMAGES) break;
   }
   const blocked = !images.length && !ld && looksBlocked(response.status, html);
-  return { status: 200, body: { name: name.slice(0, 120), brand: brand.slice(0, 60), images, blocked } };
+  return { status: 200, body: { name: name.slice(0, 120), brand: brand.slice(0, 60), images, price, blocked } };
 }
 
 /** 代為下載一張商品圖。只收這裡簽過名的網址。回 { status, body, type }。 */

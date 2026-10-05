@@ -67,6 +67,16 @@ export function parseBrandLink(text) {
   return { brand: "", url: href, name: nameHint, images: [], page: true };
 }
 
+/** 照商品網址找價錢:GU、UNIQLO 問商品 API,其他品牌讀商品頁;找不到(擋機器人、頁面沒寫)回 null。
+ *  回傳 { amount, currency }。給「想買的」補價錢用。 */
+export async function fetchPriceForUrl(url) {
+  const parsed = parseBrandLink(url);
+  if (!parsed || parsed.notProduct) return null;
+  if (parsed.lookup) return (await fetchBrandProduct(parsed.lookup))?.price || null;
+  if (parsed.page) return (await fetchProductPage(parsed.url).catch(() => null))?.price || null;
+  return null;
+}
+
 /** 讀其他品牌的商品頁:{ name, brand, images: [{ thumb, full }] },擋住了回 { blocked: true },其他失敗回 { error }。 */
 export async function fetchProductPage(url, signal) {
   try {
@@ -94,8 +104,8 @@ export async function fetchBrandProduct(lookup) {
   try {
     const response = await fetch(`/api/brand-product?${new URLSearchParams(lookup)}`, { signal: AbortSignal.timeout(10000) });
     if (!response.ok) return null;
-    const { name, categories } = await response.json();
-    return name ? { name, categories: categories || [] } : null;
+    const { name, categories, price } = await response.json();
+    return name ? { name, categories: categories || [], price: price || null } : null;
   } catch {
     return null;
   }
