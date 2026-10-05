@@ -38,7 +38,8 @@ const PROGRESS_CONFIG = {
     if (!currentProgress) return;
     if (key.startsWith("fetch") && current < total) {
       downloading = true;
-      currentProgress(`下載去背模型 ${Math.round((current / total) * 100)}%`, true);
+      // 「已經下載過」的記號不可靠:Safari 會把這麼大的快取清掉,隔天又要重抓。下載中就講明多大、建議 Wi-Fi
+      currentProgress(`下載去背模型 ${Math.round((current / total) * 100)}%(約 80MB,建議用 Wi-Fi)`, true);
     } else if (key.startsWith("fetch")) {
       // 下載到 100% 之後畫面會停 7–9 秒在算(主執行緒忙,文字也動不了),先講清楚接下來在做什麼(審查 F33)
       currentProgress(downloading ? "模型下載好了,開始去背,約 10–20 秒…" : "去背中,約 10–20 秒…", false);
@@ -202,6 +203,33 @@ export function PriceField({ value, currency, onChange, hint = "選填", id = "p
       {hint && <small className="add-hint">{hint}</small>}
     </div>
   );
+}
+
+/** 長邊超過 max 就等比縮小(PNG);沒超過原樣回傳。 */
+async function limitSide(blob, max) {
+  const bitmap = await createImageBitmap(blob);
+  const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
+  if (scale >= 1) { bitmap.close?.(); return blob; }
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  return (await new Promise((resolve) => canvas.toBlob(resolve, "image/png"))) || blob;
+}
+
+/* 去背失敗講真正的原因。舊版一律「可能是照片太大或網路斷線」,真機上壞了也看不出是哪一個
+   (2026-10-05 本人 iPhone 4G 兩格訊號、框皮帶去背失敗)。最後附上原始錯誤,截圖回報才查得到 */
+function cutoutErrorText(cause) {
+  const raw = `${cause?.name || ""} ${cause?.message || cause || ""}`.trim();
+  // 記憶體先判:WASM 記憶體不夠時錯誤長得像「Aborted(OOM)」,不能被下面的 abort 當成斷線
+  if (/memory|oom|allocation|rangeerror|out of bounds|aborted\(/i.test(raw)) {
+    return `這張圖對手機來說太大,記憶體不夠。框小一點、或關掉其他分頁再試。(${raw.slice(0, 80)})`;
+  }
+  if (/load failed|failed to fetch|networkerror|network|fetch|timeout|aborterror/i.test(raw)) {
+    return `去背模型沒下載完(約 80MB,手機訊號弱時常斷掉)。連上 Wi-Fi 再按一次。(${raw.slice(0, 80)})`;
+  }
+  return `去背失敗,再按一次試試;還是不行就換一張。(${raw.slice(0, 80) || "沒有錯誤訊息"})`;
 }
 
 const PAD = 0.1;
@@ -416,7 +444,8 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     arm();
     try {
       const outer = region === FULL ? FULL : expandBox(region);
-      const input = outer === FULL ? source.file : await cropBlob(source.file, outer);
+      // 送去背前先縮到長邊 1600:模型本來就只看 1024,iPhone 的整張截圖(1179×2556)原尺寸丟進去只是吃記憶體
+      const input = await limitSide(outer === FULL ? source.file : await cropBlob(source.file, outer), 1600);
       const cut = await removeBg(input, (text, downloading) => {
         if (!alive()) return;
         setStatus(text);
@@ -457,7 +486,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
       if (!alive()) return;
       clearTimeout(watchdogRef.current);
       console.error(cause);
-      setError("去背失敗,可能是照片太大或網路斷線。換一張試試,或改用離線流程處理。");
+      setError(cutoutErrorText(cause));
       setStage("crop");
     }
   };
