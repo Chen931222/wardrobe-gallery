@@ -16,6 +16,7 @@ import { ScrollRail } from "./ScrollRail.jsx";
 import { fetchPriceForUrl } from "./brandLink.js";
 import { CURRENCIES, formatPrice, parsePrice } from "./price.js";
 import { importBackupFile } from "./backup.js";
+import { Welcome } from "./Welcome.jsx";
 
 const STORAGE_KEY = "open-wardrobe-edits-v1";
 const DELETED_STORAGE_KEY = "open-wardrobe-deleted-v1";
@@ -937,7 +938,6 @@ export function App() {
   const [syncOpen, setSyncOpen] = useState(false);
   const [pendingDaily, setPendingDaily] = useState(null);   // 入口今日推薦的天氣和理由,跟著那套帶進搭配頁(審查 F25)
   const [addRequest, setAddRequest] = useState(0);
-  const welcomeFileRef = useRef(null);                       // 歡迎畫面的「匯入備份」           // 空衣櫃、推薦失敗的「新增」按鈕:換到衣櫃並打開新增
   // 做完一件事的一行回饋:剛加入的、按了「已經買了」、剛加入同步(審查 F18、F55、F63)
   const [notice, setNotice] = useState(() => {
     try {
@@ -1069,7 +1069,8 @@ export function App() {
     () => (closet === "all" ? items : items.filter((item) => Boolean(item.isLocal) === (closet === "mine"))),
     [items, closet],
   );
-  const demoCount = items.length - items.filter((item) => item.isLocal).length;
+  const demoItems = useMemo(() => items.filter((item) => !item.isLocal), [items]);   // 歡迎畫面的示範穿搭用
+  const demoCount = demoItems.length;
 
   // 自己加、按了「已經買了」的衣服沒有保暖度,推薦引擎會整件跳過;從品名補一個。想買的不補,免得被當成已經有的拿去配
   const wearItems = useMemo(() => closetItems.map((item) => !item.wishlist && item.warmth === undefined ? { ...item, warmth: guessWarmth(item) } : item), [closetItems]);
@@ -1106,6 +1107,14 @@ export function App() {
     setPendingOutfit(outfit);
     setPendingDaily(daily);
   };
+
+  // 訪客的衣服沒有同步(同步只給站主),全靠這個瀏覽器存著:加了衣服之後提醒一次留備份
+  const [keepHintOff, setKeepHintOff] = useState(() => { try { return localStorage.getItem("open-wardrobe-keep-hint-v1") === "1"; } catch { return true; } });
+  const keepHint = !CAN_EDIT && CAN_ADD && hasMine && !keepHintOff;
+  const dismissKeepHint = () => { setKeepHintOff(true); try { localStorage.setItem("open-wardrobe-keep-hint-v1", "1"); } catch { /* 存不了就這次關掉 */ } };
+
+  // 訪客自己的衣櫃還空著、人在入口:歡迎畫面。這時把件數和衣櫃切換收起來(都是 0,示範從歡迎畫面的按鈕進去)
+  const showWelcome = !error && !loading && !ownedItems.length && !wishCount && view === "landing" && closet === "mine";
 
   // 「新增第一件」「去新增」:換到衣櫃(新增鈕在那裡的標題列),叫新增自己打開
   const requestAdd = () => {
@@ -1286,10 +1295,11 @@ export function App() {
         )}
 
         {(view !== "landing" || (!loading && !ownedItems.length)) && (
-        <header className="gallery-header">
+        // 歡迎畫面時頂端只留同步那些:件數、新增、三個分頁都收起來(衣櫃、搭配點進去是空的;新增就是歡迎畫面那顆大按鈕)
+        <header className={showWelcome ? "gallery-header is-quiet" : "gallery-header"}>
           <h1 className="visually-hidden">{view === "styling" ? "搭配" : "衣櫃"}</h1>
           <div className="gallery-meta-row">
-            <p className="piece-count">{ownedItems.length} 件單品{wishCount > 0 && <span className="piece-count-wish"> · 想買 {wishCount}</span>}</p>
+            <p className="piece-count" hidden={showWelcome}>{ownedItems.length} 件單品{wishCount > 0 && <span className="piece-count-wish"> · 想買 {wishCount}</span>}</p>
             <div className="header-tools">
               {CAN_ADD && (
                 <AddGarment
@@ -1304,14 +1314,14 @@ export function App() {
                   }}
                 />
               )}
-              <nav className="view-nav" aria-label="切換頁面">
+              <nav className="view-nav" aria-label="切換頁面" hidden={showWelcome}>
                 <button type="button" onClick={() => setView("landing")}>入口</button>
                 <button type="button" className={view === "closet" ? "active" : ""} aria-current={view === "closet" ? "page" : undefined} onClick={() => setView("closet")}>衣櫃</button>
                 <button type="button" className={view === "styling" ? "active" : ""} aria-current={view === "styling" ? "page" : undefined} onClick={() => setView("styling")}>搭配</button>
               </nav>
             </div>
           </div>
-          {closetSwitch}
+          {!showWelcome && closetSwitch}
           {view === "closet" && (
             <nav className="category-nav" aria-label="依類型篩選衣櫃" ref={categoryNavRef}>
               {(wishCount ? [...TYPES, { id: "wishlist", label: `想買的 ${wishCount}` }] : TYPES).map((type) => (
@@ -1330,41 +1340,31 @@ export function App() {
         </header>
         )}
 
+        {keepHint && view === "closet" && (
+          <p className="keep-hint" role="note">
+            你的衣服只存在這個瀏覽器裡,清除瀏覽資料(或 iPhone 久沒打開這個網站)就會不見。到「搭配」頁最下面按「匯出備份」留一份。
+            <button type="button" onClick={dismissKeepHint}>知道了</button>
+          </p>
+        )}
         {/* 浮在畫面上方:入口頁是滿版的、單品頁在手機上蓋滿整個畫面,放在頁面裡會看不到(審查抓到) */}
         {notice && <p className="app-notice" role="status">{notice}</p>}
         {error && <p className="status error">{error}</p>}
         {view !== "landing" && !error && loading && <p className="status">衣櫃載入中</p>}
         {/* 只看「想買的」分頁時它自己會列出來;入口、搭配、其他分頁仍要講,不然空白一片 */}
         {/* 訪客自己的衣櫃還空著:入口給一個歡迎畫面,不是直接攤開站主的衣服 */}
-        {!error && !loading && !ownedItems.length && !wishCount && view === "landing" && closet === "mine" && (
-          <section className="welcome" aria-labelledby="welcome-title">
-            <h2 id="welcome-title">我的衣櫃</h2>
-            <p>把自己的衣服拍照、或貼品牌的商品連結放進來,每天照台中的天氣配一套。衣服存在你這台裝置裡,別人看不到。</p>
-            <div className="welcome-actions">
-              <button type="button" className="primary-button" onClick={requestAdd}>新增第一件</button>
-              <button type="button" className="secondary-button" onClick={() => chooseCloset("demo")}>先看看示範</button>
-            </div>
-            <p className="welcome-note">
-              在別台同步過了?<button type="button" onClick={() => setSyncOpen(true)}>輸入同步碼</button>
-              <span aria-hidden="true"> · </span>
-              有備份檔?<button type="button" onClick={() => welcomeFileRef.current?.click()}>匯入備份</button>
-              <input
-                ref={welcomeFileRef}
-                type="file"
-                accept="application/zip,.zip,application/json,.json"
-                hidden
-                onChange={async (event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = "";
-                  if (!file) return;
-                  const message = await importBackupFile(file, Boolean(syncCode()));
-                  if (message) say(message);
-                }}
-              />
-            </p>
-          </section>
+        {showWelcome && (
+          <Welcome
+            demoItems={demoItems}
+            onAdd={requestAdd}
+            onDemo={() => chooseCloset("demo")}
+            onSync={() => setSyncOpen(true)}
+            onImportFile={async (file) => {
+              const message = await importBackupFile(file, Boolean(syncCode()));
+              if (message) say(message);
+            }}
+          />
         )}
-        {!error && !loading && !ownedItems.length && !(view === "closet" && activeType === "wishlist" && wishCount) && !(view === "landing" && closet === "mine" && !wishCount) && (
+        {!error && !loading && !ownedItems.length && !(view === "closet" && activeType === "wishlist" && wishCount) && !showWelcome && (
           wishCount ? (
             <p className="status empty">
               你加的 {wishCount} 件在「想買的」裡。還沒買的不算進衣櫃,買了以後點開那件按「已經買了」。

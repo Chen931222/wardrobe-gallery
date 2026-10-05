@@ -32,9 +32,7 @@ const modelReady = () => { try { return localStorage.getItem(MODEL_READY_KEY) ==
    所以回呼固定一個,真正要通知誰放在 currentProgress。 */
 let currentProgress = null;
 let downloading = false;
-const PROGRESS_CONFIG = {
-  output: { format: "image/png", quality: 0.9 },
-  progress: (key, current, total) => {
+const onModelProgress = (key, current, total) => {
     if (!currentProgress) return;
     if (key.startsWith("fetch") && current < total) {
       downloading = true;
@@ -46,8 +44,23 @@ const PROGRESS_CONFIG = {
     } else {
       currentProgress("去背中,約 10–20 秒…", false);
     }
-  },
 };
+/* 去背套件把「初始化」照設定內容記起來,失敗的也記:模型下載斷過一次,同一頁之後怎麼按都立刻失敗,
+   網路恢復了也一樣,只能重新整理(2026-10-05 實測;本人 iPhone 4G 去背一直失敗多半就是這個)。
+   它記的鍵是設定轉成的字串,所以失敗後把設定改一個不影響結果的小數(PNG 不看 quality),下一次就會重新初始化。 */
+let modelAttempt = 0;
+const modelConfig = () => ({ output: { format: "image/png", quality: 0.9 + modelAttempt * 1e-6 }, progress: onModelProgress });
+
+/** 一打開新增視窗就在背景先載模型(2026-10-05 本人要的:朋友第一次用,選照片、框衣服的這段時間就載完了),
+ *  選好照片時再叫一次(前一次斷了會重來,載好了的話什麼都不做)。開了省流量模式、或網路是 2G 等級就不先載。 */
+function preloadModel() {
+  const connection = typeof navigator !== "undefined" ? navigator.connection : null;
+  if (connection?.saveData || /2g/.test(connection?.effectiveType || "")) return;
+  const attempt = modelAttempt;
+  import("@imgly/background-removal")
+    .then(({ preload }) => preload(modelConfig()))
+    .catch(() => { if (attempt === modelAttempt) modelAttempt += 1; });
+}
 // 一次只算一張:取消只是不看結果,模型那邊停不下來;馬上再按一次去背,兩張一起算,iPad 的記憶體會撐不住
 let previousRun = Promise.resolve();
 let pending = 0;   // 排隊中加上正在算的張數
@@ -64,9 +77,15 @@ async function removeBg(file, onProgress) {
     const { removeBackground } = await import("@imgly/background-removal");
     downloading = false;
     currentProgress = onProgress;
-    const result = await removeBackground(file, PROGRESS_CONFIG);
-    try { localStorage.setItem(MODEL_READY_KEY, "1"); } catch { /* 存不了就每次都顯示第一次的提示 */ }
-    return result;
+    const attempt = modelAttempt;
+    try {
+      const result = await removeBackground(file, modelConfig());
+      try { localStorage.setItem(MODEL_READY_KEY, "1"); } catch { /* 存不了就每次都顯示第一次的提示 */ }
+      return result;
+    } catch (error) {
+      if (attempt === modelAttempt) modelAttempt += 1;   // 下一次重新初始化,不沿用失敗的那次
+      throw error;
+    }
   } finally {
     if (currentProgress === onProgress) currentProgress = null;
     pending -= 1;
@@ -310,6 +329,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     setError("");
     setStage("source");
     pushHistory();
+    preloadModel();
   };
   useEffect(() => {
     if (!openRequest) return;
@@ -421,6 +441,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     setSource({ file: usable, url: URL.createObjectURL(usable) });
     setBox(FULL);
     setStage("crop");
+    preloadModel();
   };
 
   const cutout = async (region) => {
@@ -531,6 +552,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
       price: parsePrice(draft.price),
       priceCurrency: draft.priceCurrency || "TWD",
     });
+    try { navigator.storage?.persist?.(); } catch { /* 不支援就算了 */ }
     onAdded(draft.wishlist, name);
     reset();
   };

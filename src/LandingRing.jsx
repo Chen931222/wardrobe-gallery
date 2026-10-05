@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Sparkle, X } from "@phosphor-icons/react";
 import { fetchWeather, readWearLog, recommendOutfit } from "./recommend.js";
+import { CitySelect, useCity } from "./CitySelect.jsx";
 
 // 入口導覽頁 v2(2026-07-21 依使用者回饋改版):
 //   - 拿掉滾輪/拖曳/自轉 —— 沒有 rAF 迴圈,平常是純靜態排版,零效能負擔
@@ -152,6 +153,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
 
   // 圓環中央的今日推薦:掛載後背景抓天氣,不擋圓環渲染;失敗就顯示提示不影響其他功能
   const [daily, setDaily] = useState(null);
+  const city = useCity();
   useEffect(() => {
     if (!items.length) return undefined;
     let alive = true;
@@ -165,7 +167,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
       }
     })();
     return () => { alive = false; };
-  }, [idsKey]);   // eslint-disable-line react-hooks/exhaustive-deps -- 同上:清單沒變就不重抽,使用者正要按「穿這套」
+  }, [idsKey, city.key]);   // eslint-disable-line react-hooks/exhaustive-deps -- 同上:清單沒變就不重抽,使用者正要按「穿這套」;換城市是自己按的,才重配
 
   // 聚焦模式的瀏覽:滾輪/方向鍵/上下滑一次跳一件(不是自由旋轉,所以不需要動畫迴圈,
   // 只是換 focusIdx,位移交給 CSS transition)。往下滾 = 順時針。
@@ -392,7 +394,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
             {dailyOutfit && (
               <>
                 <p className="landing-daily-weather">
-                  台中 {daily.weather.temp}° · 體感 {daily.weather.feelsLike}° · 降雨 {daily.weather.rainProb}%
+                  <CitySelect /> {daily.weather.temp}° · 體感 {daily.weather.feelsLike}° · 降雨 {daily.weather.rainProb}%
                 </p>
                 <h2>今日推薦</h2>
                 <ul className="landing-daily-list">
@@ -456,7 +458,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
           {dailyOutfit && (
             <>
               <p className="landing-daily-weather">
-                台中 {daily.weather.temp}° · 體感 {daily.weather.feelsLike}° · 降雨 {daily.weather.rainProb}%
+                <CitySelect /> {daily.weather.temp}° · 體感 {daily.weather.feelsLike}° · 降雨 {daily.weather.rainProb}%
               </p>
               <p className="landing-strip-head">今日推薦</p>
               <ul className="landing-strip-pieces">

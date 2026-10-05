@@ -11,7 +11,7 @@ const FORMAT = "open-wardrobe-backup";
 const LS_PREFIX = "open-wardrobe-";
 const SYNC_PREFIX = "open-wardrobe-sync-";
 // 「這台的去背模型已經下載過」只對這台成立;帶到新裝置會把「第一次要下載 80MB」的提示藏掉
-const DEVICE_ONLY = new Set(["open-wardrobe-bgmodel-v1"]);
+const DEVICE_ONLY = new Set(["open-wardrobe-bgmodel-v1", "open-wardrobe-keep-hint-v1"]);
 const JSON_NAME = "衣櫃備份.json";
 
 function collectLocal() {

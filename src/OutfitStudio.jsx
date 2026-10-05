@@ -1,6 +1,7 @@
 // [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowCounterClockwise, ArrowsClockwise, CalendarCheck, Export, FloppyDisk, ImageSquare, Lock, LockOpen, Microphone, Sparkle, Trash, X } from "@phosphor-icons/react";
+import { CitySelect } from "./CitySelect.jsx";
 import { adjustIntent, fetchWeather, findItemForSwap, parseRequest, randomOutfit, readWearLog, recommendOutfit, recordWear, unrecordWear } from "./recommend.js";
 import { syncCode } from "./sync.js";
 import { downloadBackupZip, importBackupFile } from "./backup.js";
@@ -23,7 +24,7 @@ const DEFAULT_FIT = { dx: 0, dy: 0, scale: 1, rot: 0 };
 const SCALE_MIN = 0.35, SCALE_MAX = 2.4;
 
 // 槽位 = 每件衣服的「起始位置」,使用者拖過之後以 fit 為準。
-const SLOT_STYLE = {
+export const SLOT_STYLE = {
   socks:          { left: 35, top: 70,   width: 30, height: 12,   z: 2 },
   // 鞋子是俯拍的一雙(長寬比 0.6~0.88,偏高),不是側視圖。原本又寬又扁的框會把
   // 高筒鞋壓成 44px 寬的一條(旁邊短褲 144px)。改成窄而高,寬度才回得到 70~101px。
@@ -82,7 +83,7 @@ function useMedia(query) {
 const clampScale = (value) => Math.min(SCALE_MAX, Math.max(SCALE_MIN, value));
 const deg = (rad) => (rad * 180) / Math.PI;
 
-function Silhouette() {
+export function Silhouette() {
   return (
     <svg className="studio-doll" viewBox="0 0 200 340" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <g fill="var(--doll)">
@@ -174,7 +175,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       caption: {
         title: meta.title || meta.understood || "今日穿搭",
         date,
-        subtitle: weather ? `台中 ${weather.temp}° · ${weather.desc} · 降雨 ${weather.rainProb}%` : "",
+        subtitle: weather ? `${weather.city || "台中"} ${weather.temp}° · ${weather.desc} · 降雨 ${weather.rainProb}%` : "",
         items: names.join(" · "),
       },
     });
@@ -517,6 +518,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   //   unknownRaw  沒學過的詞:不死路,照天氣挑一套並老實說
   //   useLocks    鎖住的槽位:把身上那件當固定,引擎圍著它配
   //   notes       要一起講給使用者聽的話(例如「已經最正式了」)
+  const shownRef = useRef([]);   // 最近三次推薦各自的單品 id
   const runRecommend = async (intent = null, pin = null, unknownRaw = null, useLocks = locks, notes = []) => {
     setDailyBusy(true);
     try {
@@ -525,15 +527,19 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       const wearLog = readWearLog();
       const locked = {};
       for (const slot of Object.keys(useLocks)) if (wearing[slot]) locked[slot] = wearing[slot];
-      const result = recommendOutfit(items, weather, wearLog, intent, locked);
+      // 最近三次推薦出現過的往後排:「再推薦一套」才不會換來換去還是那幾件
+      const avoid = new Map();
+      for (const ids of shownRef.current) for (const id of ids) avoid.set(id, (avoid.get(id) || 0) + 1);
+      const result = recommendOutfit(items, weather, wearLog, intent, locked, avoid);
       if (result.error) { setDaily({ error: result.error }); return; }
+      shownRef.current = [Object.values(result.outfit).filter(Boolean).map((item) => item.id), ...shownRef.current].slice(0, 3);
       // 引擎不管眼鏡/手錶/配件,身上有就留著,別每次推薦都被脫掉
       for (const slot of ["eyewear", "wrist", "accessories_up"]) if (wearing[slot]) result.outfit[slot] = wearing[slot];
       if (notes.length) result.reasons.unshift(...notes);
       const lockedLabels = Object.keys(locked).map((slot) => SLOT_LABEL[slot]);
       if (lockedLabels.length) result.reasons.push(`鎖住沒動:${lockedLabels.join("、")}`);
       if (unknownRaw) {
-        result.reasons.push(`「${unknownRaw}」我還沒學過,這套是純照天氣挑的;想更準可以說場合(上班、約會、運動、下雨天上課)或「換成黑色襯衫」`);
+        result.reasons.push(`「${unknownRaw}」我還沒學過,這套是純照天氣挑的;想更準可以說場合(約會、上班、看球賽)、色系(全黑、大地色)或「換成黑色襯衫」`);
       }
       if (pin) {
         const found = findItemForSwap(items, pin, wearLog, null);
@@ -564,6 +570,17 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
 
   const recommendToday = () => runRecommend(null);
   const recommendAgain = () => runRecommend(lastIntentRef.current);   // 「再推薦一套」要記得上次的場合,不能弄丟
+  // 換城市:天氣快取作廢;畫面上正顯示「照天氣配的」那套,就照新城市的天氣重配(不然天氣和衣服對不上)
+  const cityChangeRef = useRef(null);
+  cityChangeRef.current = () => {
+    weatherRef.current = null;
+    if (daily?.weather && !dailyBusy) recommendAgain();
+  };
+  useEffect(() => {
+    const onCity = () => cityChangeRef.current();
+    window.addEventListener("wardrobe-city-change", onCity);
+    return () => window.removeEventListener("wardrobe-city-change", onCity);
+  }, []);
   // 說過「面試」之後想回到純看天氣:點場合標籤的 ✕。身上這套和鎖住的都不動,只是下一套不再沿用(審查 F26)
   const clearIntent = () => {
     lastIntentRef.current = null;
@@ -591,6 +608,28 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       if (next[slot]) delete next[slot]; else next[slot] = true;
       return next;
     });
+  };
+
+  // 換掉一格、其他不動:把其他幾格當成鎖住,讓推薦引擎在這一格挑最搭的(看配色、風格、天氣、場合),身上原本那件排除
+  const swapToMatch = async (slot) => {
+    setDailyBusy(true);
+    try {
+      if (!weatherRef.current) weatherRef.current = await fetchWeather().catch(() => null);
+      const weather = weatherRef.current || { temp: 25, feelsLike: 25, desc: "", rainProb: 0, tMax: 27, tMin: 22 };
+      const locked = {};
+      for (const key of ["upperbody", "lowerbody", "wholebody_up", "shoes", "socks", "bag"]) if (key !== slot && wearing[key]) locked[key] = wearing[key];
+      const avoid = new Map(wearing[slot] ? [[wearing[slot].id, 99]] : []);
+      const result = recommendOutfit(items, weather, readWearLog(), lastIntentRef.current, locked, avoid);
+      const next = result.outfit?.[slot];
+      const label = SLOT_LABEL[slot];
+      if (!next || next.id === wearing[slot]?.id) { setDaily({ understood: `換${label}`, reasons: [`櫃裡沒有別的${label}可以換`] }); return; }
+      setAdjusting(null);
+      pushHistory(wearing); dirtyRef.current = true;
+      setWearing((current) => ({ ...current, [slot]: next }));
+      setDaily({ understood: `換${label}`, reasons: [`換上「${next.name}」,是配著身上其他幾件挑的`] });
+    } finally {
+      setDailyBusy(false);
+    }
   };
 
   // 把輸入框那句話分四路:整套(場合)/換單品/脫一件/聽不懂。換和脫只動那一格,其他衣服不動。
@@ -627,8 +666,15 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     if (req.kind === "outfit") { runRecommend(req.intent, req.pin || null); return; }
 
     if (req.kind === "swap") {
-      const vague = !req.color && !req.category && !(req.descriptors || []).length;   // 「換一件上衣」→ 要跟身上那件不一樣
+      const vague = !req.color && !req.category && !(req.descriptors || []).length && !req.byText;   // 「換一件上衣」→ 要跟身上那件不一樣
+      // 只說「換一件上衣」「褲子不好看」:不是隨便抓一件,而是其他幾件都不動、配著它們和天氣挑最搭的那一件
+      if (vague && ["upperbody", "lowerbody", "shoes", "bag"].includes(req.slot) && wearing.upperbody && wearing.lowerbody) {
+        swapToMatch(req.slot);
+        return;
+      }
       const found = findItemForSwap(items, req, readWearLog(), vague && req.slot ? (wearing[req.slot]?.id || null) : null);
+      // 「穿哈利波特那件」這種點名:品名、標籤裡找不到那幾個字,就當成沒學過的詞,不亂換一件
+      if (req.byText && !found?.textHit) { runRecommend(null, null, req.raw); return; }
       const askedSlotLabel = SLOT_LABEL[req.slot] || "這件";
       if (!found) { setDaily({ understood: `換${askedSlotLabel}`, reasons: [`櫃裡沒有${askedSlotLabel}這一類的單品`] }); return; }
       // 找到的那件可能建檔在別格(「灰色細針織開襟外套」在上衣):放進它自己的格子,不是硬塞進講的那一格
@@ -639,7 +685,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       pushHistory(wearing); dirtyRef.current = true;
       setWearing((current) => ({ ...current, [slot]: found.item }));
       setDaily({
-        understood: `換${label}${vague ? "" : `:${asked}`}`,
+        understood: `換${label}${vague ? "" : `:${req.byText ? req.phrase : asked}`}`,
         reasons: [found.exact ? `換上「${found.item.name}」` : `櫃裡沒有${asked},最接近的是「${found.item.name}」,先換上這件`],
       });
       return;
@@ -970,7 +1016,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
         {/* 例句放在框下面、點了就照著做。舊版全塞在 placeholder,被截斷,「上一步」從來看不到(審查 F51) */}
         <p className="studio-examples">
           <span>例如</span>
-          {["約會", "換成黑色襯衫", "再正式一點", "上衣留著其他重挑", "上一步"].map((example) => (
+          {["約會", "全黑", "帥一點", "換成黑色襯衫", "褲子不好看", "上衣留著其他重挑", "上一步"].map((example) => (
             <button key={example} type="button" disabled={dailyBusy} onClick={() => { setOccasion(example); handleRequest(example); }}>
               {example}
             </button>
@@ -994,7 +1040,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
                 )}
                 {daily.weather && (
                   <p className="studio-daily-weather">
-                    台中 {daily.weather.temp}°(體感 {daily.weather.feelsLike}°)· {daily.weather.desc} · 降雨 {daily.weather.rainProb}%
+                    <CitySelect /> {daily.weather.temp}°(體感 {daily.weather.feelsLike}°)· {daily.weather.desc} · 降雨 {daily.weather.rainProb}%
                   </p>
                 )}
                 {(() => {
