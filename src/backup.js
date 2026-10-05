@@ -6,12 +6,14 @@
 // 解開就能直接拿圖去用;同一個 ZIP 也能「匯入」。舊的 .json 備份(圖用 base64 塞在 JSON 裡)照樣能匯入。
 import { dumpLocalRecords, putLocalRecord } from "./localWardrobe.js";
 import { createZip, isZip, readZip } from "./zip.js";
+import { markBackedUp } from "./keepSafe.js";
 
 const FORMAT = "open-wardrobe-backup";
 const LS_PREFIX = "open-wardrobe-";
 const SYNC_PREFIX = "open-wardrobe-sync-";
 // 「這台的去背模型已經下載過」只對這台成立;帶到新裝置會把「第一次要下載 80MB」的提示藏掉
-const DEVICE_ONLY = new Set(["open-wardrobe-bgmodel-v1", "open-wardrobe-keep-hint-v1"]);
+// 「備份過沒」也只對這台成立(open-wardrobe-backup-mark-v1)
+const DEVICE_ONLY = new Set(["open-wardrobe-bgmodel-v1", "open-wardrobe-keep-hint-v1", "open-wardrobe-backup-mark-v1"]);
 const JSON_NAME = "衣櫃備份.json";
 
 function collectLocal() {
@@ -73,6 +75,7 @@ export async function downloadBackupZip() {
   anchor.click();
   anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);   // iPhone 要等它真的開始下載才能釋放,立刻釋放會下載失敗
+  markBackedUp();
   return count;
 }
 
@@ -102,6 +105,7 @@ export async function restoreBackup(backup, files = null) {
     if (!blob) continue;
     await putLocalRecord({ ...rest, blob });
   }
+  markBackedUp();   // 剛匯入的這份檔就是備份,不用馬上又提醒
 }
 
 /** 匯入一個使用者選的備份檔:先講清楚會發生什麼、問過才寫。回傳要顯示的一句話;按取消回 null。

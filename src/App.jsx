@@ -15,7 +15,8 @@ import { useDialog } from "./useDialog.js";
 import { ScrollRail } from "./ScrollRail.jsx";
 import { fetchPriceForUrl } from "./brandLink.js";
 import { CURRENCIES, formatPrice, parsePrice } from "./price.js";
-import { importBackupFile } from "./backup.js";
+import { downloadBackupZip, importBackupFile } from "./backup.js";
+import { backupReminder, inAppBrowser, isIos, isStandalone, requestPersist, snoozeBackupHint } from "./keepSafe.js";
 import { Welcome } from "./Welcome.jsx";
 
 const STORAGE_KEY = "open-wardrobe-edits-v1";
@@ -1108,10 +1109,23 @@ export function App() {
     setPendingDaily(daily);
   };
 
-  // 訪客的衣服沒有同步(同步只給站主),全靠這個瀏覽器存著:加了衣服之後提醒一次留備份
-  const [keepHintOff, setKeepHintOff] = useState(() => { try { return localStorage.getItem("open-wardrobe-keep-hint-v1") === "1"; } catch { return true; } });
-  const keepHint = !CAN_EDIT && CAN_ADD && hasMine && !keepHintOff;
-  const dismissKeepHint = () => { setKeepHintOff(true); try { localStorage.setItem("open-wardrobe-keep-hint-v1", "1"); } catch { /* 存不了就這次關掉 */ } };
+  // 訪客的衣服沒有同步(同步只給站主),全靠這個瀏覽器存著:加了衣服沒備份就提醒,之後每多 3 件再提醒一次
+  // (2026-10-05 前只提醒一次,按了「知道了」就再也不出現)。匯出鈕直接放在提醒裡,不用再跑去搭配頁最下面找。
+  const [keepTick, setKeepTick] = useState(0);
+  const keepHint = useMemo(
+    () => (!CAN_EDIT && CAN_ADD && hasMine ? backupReminder(items.filter((item) => item.isLocal)) : null),
+    [items, hasMine, keepTick],   // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const dismissKeepHint = () => { snoozeBackupHint(); setKeepTick((n) => n + 1); };
+  const exportFromHint = async () => {
+    try {
+      const count = await downloadBackupZip();
+      say(`已匯出備份:${count} 件衣服,在你的下載裡。換手機或衣服不見時,按「匯入備份」選這個檔。`);
+    } catch { say("匯出失敗,再試一次"); }
+    setKeepTick((n) => n + 1);
+  };
+  // 有自己的衣服了:跟瀏覽器要「不要自動清」
+  useEffect(() => { if (hasMine) requestPersist(); }, [hasMine]);
 
   // 訪客自己的衣櫃還空著、人在入口:歡迎畫面。這時把件數和衣櫃切換收起來(都是 0,示範從歡迎畫面的按鈕進去)
   const showWelcome = !error && !loading && !ownedItems.length && !wishCount && view === "landing" && closet === "mine";
@@ -1340,12 +1354,23 @@ export function App() {
         </header>
         )}
 
-        {keepHint && view === "closet" && (
-          <p className="keep-hint" role="note">
-            你的衣服只存在這個瀏覽器裡,清除瀏覽資料(或 iPhone 久沒打開這個網站)就會不見。到「搭配」頁最下面按「匯出備份」留一份。
-            <button type="button" onClick={dismissKeepHint}>知道了</button>
-          </p>
-        )}
+        {keepHint && view === "closet" && (() => {
+          const app = inAppBrowser();
+          return (
+            <p className="keep-hint" role="note">
+              {keepHint.backedUp && `上次備份之後又加了 ${keepHint.fresh} 件。`}
+              {app
+                ? `你現在是在 ${app} 裡面開的,這些衣服只存在 ${app} 裡,改用 Safari 或 Chrome 打開會是空的。之後請固定從同一個地方打開,或先留一份備份。`
+                : isIos() && !isStandalone()
+                  ? "iPhone 的 Safari 大約一週沒開這個網站,就可能把這些衣服清掉(加到主畫面的不會)。先留一份備份;之後想改用主畫面版,在那邊按「匯入備份」選這個檔就搬過去了。"
+                  : "你的衣服只存在這台裝置的這個瀏覽器裡,清除瀏覽資料或換手機就會不見。留一份備份,不見了可以匯入回來。"}
+              <span className="keep-hint-actions">
+                <button type="button" className="is-main" onClick={exportFromHint}>匯出備份</button>
+                <button type="button" onClick={dismissKeepHint}>知道了</button>
+              </span>
+            </p>
+          );
+        })()}
         {/* 浮在畫面上方:入口頁是滿版的、單品頁在手機上蓋滿整個畫面,放在頁面裡會看不到(審查抓到) */}
         {notice && <p className="app-notice" role="status">{notice}</p>}
         {error && <p className="status error">{error}</p>}

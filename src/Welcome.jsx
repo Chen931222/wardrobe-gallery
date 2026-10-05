@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { SLOT_STYLE, Silhouette } from "./OutfitStudio.jsx";
 import { fetchWeather, recommendOutfit } from "./recommend.js";
 import { CitySelect, useCity } from "./CitySelect.jsx";
+import { inAppBrowser, isIos, isStandalone } from "./keepSafe.js";
 
 const FALLBACK_WEATHER = { temp: null, feelsLike: 25, desc: "", rainProb: 0, tMax: 27, tMin: 22 };
 
@@ -56,10 +57,16 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile }) {
 
   // iPhone 的 Safari(不是從主畫面開的):資料久沒用可能被系統清掉,而且主畫面版和 Safari 的資料是分開的,
   // 所以要在還沒加衣服的這個時候講,加完才搬就看不到了
-  const ios = typeof navigator !== "undefined"
-    && (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
-  const standalone = typeof window !== "undefined"
-    && (window.navigator.standalone === true || window.matchMedia?.("(display-mode: standalone)").matches);
+  const ios = isIos();
+  const standalone = isStandalone();
+  // 從 LINE／IG 點連結進來的:其實開在那個 app 自己的瀏覽器裡,在這裡加的衣服 Safari 看不到。一樣要在加之前講
+  const app = inAppBrowser();
+  const here = typeof window === "undefined" ? "" : window.location.origin;
+  const [copied, setCopied] = useState("");
+  const copyLink = async () => {
+    try { await navigator.clipboard.writeText(here); setCopied("已複製,到 Safari 或 Chrome 貼上"); }
+    catch { setCopied(`複製不了,手動輸入:${here.replace(/^https?:\/\//, "")}`); }
+  };
 
   return (
     <section className="welcome" aria-labelledby="welcome-title">
@@ -67,11 +74,23 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile }) {
         <h2 id="welcome-title">我的衣櫃</h2>
         <p>把自己的衣服拍照、或貼品牌的商品連結放進來,每天照你那邊的天氣配一套。</p>
         <p className="welcome-steps">先加<b>一件上衣</b>和<b>一件下身</b>,就能配出第一套。衣服只存在你這台裝置裡,別人看不到。</p>
+        {app && (
+          <p className="welcome-tip is-warning" role="note">
+            你現在是在 {app} 裡面開的。在這裡加的衣服只存在 {app} 裡,之後用 Safari 或 Chrome 打開會是空的。
+            先從 {app} 的選單選「用瀏覽器開啟」,再開始加。
+            <span className="welcome-tip-actions">
+              {/* LINE 認這個參數:帶著它的連結會改用手機的預設瀏覽器開 */}
+              {app === "LINE" && <a href={`${here}/?openExternalBrowser=1`}>用瀏覽器開啟</a>}
+              <button type="button" onClick={copyLink}>複製網址</button>
+            </span>
+            {copied && <span className="welcome-tip-status" role="status">{copied}</span>}
+          </p>
+        )}
         <div className="welcome-actions">
           <button type="button" className="primary-button" onClick={onAdd}>新增第一件</button>
           {!!demoItems.length && <button type="button" className="secondary-button" onClick={onDemo}>先看看示範</button>}
         </div>
-        {ios && !standalone && (
+        {ios && !standalone && !app && (
           <p className="welcome-tip">
             用 iPhone 建議先按分享鈕 →「加入主畫面」,之後從主畫面打開再加衣服。只放在 Safari 裡久沒開,資料可能被系統清掉。
           </p>
