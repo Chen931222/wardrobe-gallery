@@ -118,25 +118,33 @@ const stable = (value) => JSON.stringify(value, (key, inner) => (
 ));
 const same = (a, b) => stable(a ?? null) === stable(b ?? null);
 
-/** 這台現在的樣子。圖用 HMAC 編號代表,每次重算(換過圖就會不同,不靠記錄)。 */
-async function entryOf(keys, { blob, ...meta }) {
-  const img = blob ? hex(await crypto.subtle.sign("HMAC", keys.mac, await blob.arrayBuffer())) : null;
-  return { entry: { meta, img, type: blob?.type || null }, blob };
+/** 這台現在的樣子。圖用 HMAC 編號代表,每次重算(換過圖就會不同,不靠記錄)。
+ *  圖讀不到(iPhone Safari 的 WebKit bug 235687,見 localWardrobe.js):舊版整個同步在這裡出錯。
+ *  現在當作圖沒變(用上次同步那張的編號 knownImg),不推也不刪;runSync 再從雲端把那張拿回來。 */
+async function entryOf(keys, { blob, ...meta }, knownImg = null) {
+  if (!blob) return { entry: { meta, img: null, type: null }, blob, readable: true };
+  try {
+    const img = hex(await crypto.subtle.sign("HMAC", keys.mac, await blob.arrayBuffer()));
+    return { entry: { meta, img, type: blob.type || null }, blob, readable: true };
+  } catch {
+    return { entry: { meta, img: knownImg, type: blob.type || null }, blob: null, readable: false };
+  }
 }
 
-async function snapshot(keys) {
-  const items = {}, blobs = {};
+async function snapshot(keys, baseItems = {}) {
+  const items = {}, blobs = {}, unreadable = new Set();
   for (const record of await readLocalRecords()) {
-    const { entry, blob } = await entryOf(keys, record);
+    const { entry, blob, readable } = await entryOf(keys, record, baseItems[record.id]?.img ?? null);
     items[record.id] = entry;
-    if (entry.img) blobs[entry.img] = blob;
+    if (!readable) unreadable.add(record.id);
+    if (entry.img && blob) blobs[entry.img] = blob;
   }
   const values = {};
   for (const key of SYNC_KEYS) {
     const value = storageGet(key);
     if (value !== null) values[key] = value;
   }
-  return { items, keys: values, blobs };
+  return { items, keys: values, blobs, unreadable };
 }
 
 /* 帶 id 的物件清單合併完,要照寫入那邊的規則排、截,不然下次存檔時兩邊對不上。
@@ -288,7 +296,7 @@ export async function hasLocalChanges() {
   const code = syncCode();
   const base = JSON.parse(storageGet(BASE_KEY) || "null");
   if (!code || !base) return Boolean(code);
-  const { items, keys } = await snapshot(await keysFor(code));
+  const { items, keys } = await snapshot(await keysFor(code), base.items);
   return !same(items, base.items) || !same(keys, base.keys);
 }
 
@@ -462,7 +470,7 @@ async function runSync(options = {}) {
       ? JSON.parse(new TextDecoder().decode(await open(keys, fromBase64(cloud.data))))
       : { items: {}, keys: {} };
     const rev = cloud.rev || 0;
-    const mine = await snapshot(keys);
+    const mine = await snapshot(keys, base.items);
 
     // 上次同步還在、這台現在沒有、雲端也還有 = 這台要推出去的刪除
     const leaving = Object.keys(base.items).filter((id) => !mine.items[id] && remote.items?.[id]);
@@ -505,7 +513,7 @@ async function runSync(options = {}) {
     for (const id of items.pull) {
       const entry = items.result[id];
       const current = await readLocalRecord(id).catch(() => { throw new Error("讀不到這台存的衣服,先不同步(免得把雲端當成全刪了)"); });
-      const now = current ? (await entryOf(keys, current)).entry : undefined;
+      const now = current ? (await entryOf(keys, current, base.items[id]?.img ?? null)).entry : undefined;
       if (!same(now, mine.items[id])) { skipped.push(id); changedWhileRunning = true; continue; }
       if (!entry) { await deleteLocalItem(id, { fromSync: true }); pulled += 1; continue; }
       let blob = entry.img ? mine.blobs[entry.img] : null;
@@ -517,6 +525,21 @@ async function runSync(options = {}) {
       }
       await putLocalRecord({ ...entry.meta, blob }, { fromSync: true });
       pulled += 1;
+    }
+    // 這台讀不到圖、雲端還有那張的(WebKit bug 235687 弄壞的):把那張拿回來寫進這台。
+    // 上面已經從雲端拉的那幾件不用再拿;拿失敗就算了,下次同步再試,不讓整次同步出錯
+    for (const id of mine.unreadable || []) {
+      const entry = items.result[id];
+      if (items.pull.includes(id) || !entry?.img || !(cloud.imgs || []).includes(entry.img)) continue;
+      try {
+        const response = await api(code, { img: entry.img });
+        if (!response.ok) continue;
+        const plain = await open(keys, new Uint8Array(await response.arrayBuffer()));
+        const current = await readLocalRecord(id);
+        if (!current) continue;
+        await putLocalRecord({ ...current, blob: new Blob([plain], { type: entry.type || "image/png" }) }, { fromSync: true });
+        pulled += 1;
+      } catch { /* 下次再試 */ }
     }
     for (const key of values.pull) {
       // 網路來回那幾秒裡這台又改了這個鍵(剛按收藏、今天穿這套、存了名稱):把剛改的跟合併結果再合一次,

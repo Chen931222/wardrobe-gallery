@@ -55,8 +55,12 @@ export async function buildBackupZip() {
   for (const { blob, ...rest } of records) {
     let imageFile = null;
     if (blob) {
-      imageFile = fileNameFor(rest.name, used);
-      files.push({ name: imageFile, data: new Uint8Array(await (await asPng(blob)).arrayBuffer()) });
+      // 讀不到的圖(iPhone Safari 的 WebKit bug 235687)跳過那一張,紀錄照樣留著;不讓整份備份失敗
+      try {
+        const data = new Uint8Array(await (await asPng(blob)).arrayBuffer());
+        imageFile = fileNameFor(rest.name, used);
+        files.push({ name: imageFile, data });
+      } catch { /* 這張讀不到 */ }
     }
     items.push({ ...rest, imageFile });
   }

@@ -43,17 +43,38 @@ async function tx(mode, run, { fromSync = false } = {}) {
   }
 }
 
-/* 圖的 object URL 依 id 重用:同步後會常常重讀,每次都新建網址的話,舊的一直不釋放、
-   格子和人台上的圖也會整批重新載入。圖換了(大小或格式不同)才換網址,不在清單裡的才釋放。 */
-const urlCache = new Map();   // id → { size, type, url }
+/* iPhone Safari 的地雷(WebKit bug 235687,2026-10-06 本人回報「圖片有時候跑不出來」):
+   從 IndexedDB 讀出來的 Blob 原封不動再存回去(改欄位、丟垃圾桶、搬分類都會整筆 put),之後這張圖就讀不到
+   (WebKitBlobResource error 1),畫面出現「?」。電腦上的 Chrome 不會,所以自動測試一直沒抓到。兩道防線:
+   ① 存回去之前先讀進記憶體做一份新的(updateLocalItem);② 畫面用的網址從記憶體那份做,不指向資料庫裡的檔。 */
+async function freshCopy(blob) {
+  return new Blob([await blob.arrayBuffer()], { type: blob.type });
+}
 
-function urlFor(record) {
+/* 讀不到的圖用這張代替(不是「?」),點開那件可以「換圖」;開了同步的會從雲端拿回原本那張 */
+export const BROKEN_IMAGE = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 240"><rect x="1" y="1" width="198" height="238" fill="none" stroke="#5a4c3a" stroke-dasharray="6 6"/>'
+  + '<text x="100" y="116" text-anchor="middle" font-family="serif" font-size="17" fill="#9b8c73">圖讀不到</text>'
+  + '<text x="100" y="142" text-anchor="middle" font-family="serif" font-size="12" fill="#9b8c73">點開按「換圖」</text></svg>',
+)}`;
+
+/* 圖的 object URL 依 id 重用:同步後會常常重讀,每次都新建網址的話,舊的一直不釋放、
+   格子和人台上的圖也會整批重新載入。圖換了(大小或格式不同)才換網址,不在清單裡的才釋放。
+   網址是從記憶體裡的那份做的(見上面的地雷),所以資料庫那筆被重寫也不會壞。 */
+const urlCache = new Map();   // id → { size, type, url, broken }
+
+async function urlFor(record) {
   const hit = urlCache.get(record.id);
-  if (hit && hit.size === record.blob.size && hit.type === record.blob.type) return hit.url;
-  if (hit) URL.revokeObjectURL(hit.url);
-  const url = URL.createObjectURL(record.blob);
-  urlCache.set(record.id, { size: record.blob.size, type: record.blob.type, url });
-  return url;
+  if (hit && !hit.broken && hit.size === record.blob.size && hit.type === record.blob.type) return hit;
+  if (hit?.url) URL.revokeObjectURL(hit.url);
+  let next;
+  try {
+    next = { size: record.blob.size, type: record.blob.type, url: URL.createObjectURL(await freshCopy(record.blob)), broken: false };
+  } catch {
+    next = { size: record.blob.size, type: record.blob.type, url: null, broken: true };
+  }
+  urlCache.set(record.id, next);
+  return next;
 }
 
 /** 讀出全部本機衣物,轉成和伺服器格式一致的物件(image 為 object URL)。
@@ -64,12 +85,14 @@ export async function loadLocalItems() {
     const records = (await tx("readonly", (store) => store.getAll())) || [];
     const ids = new Set(records.map((record) => record.id));
     for (const [id, hit] of urlCache) {
-      if (!ids.has(id)) { URL.revokeObjectURL(hit.url); urlCache.delete(id); }
+      if (!ids.has(id)) { if (hit.url) URL.revokeObjectURL(hit.url); urlCache.delete(id); }
     }
-    return records.map((record) => {
-      const url = urlFor(record);
-      return { ...record, image: url, thumbnail: url, isLocal: true };
-    });
+    return Promise.all(records.map(async (record) => {
+      if (!record.blob) return { ...record, image: BROKEN_IMAGE, thumbnail: BROKEN_IMAGE, imageBroken: true, isLocal: true };
+      const { url, broken } = await urlFor(record);
+      const image = broken ? BROKEN_IMAGE : url;
+      return { ...record, image, thumbnail: image, ...(broken ? { imageBroken: true } : {}), isLocal: true };
+    }));
   } catch {
     return null;
   }
@@ -135,7 +158,14 @@ export async function cropBlob(file, box) {
 
 export async function updateLocalItem(id, patch) {
   const record = await tx("readonly", (store) => store.get(id));
-  if (record) await tx("readwrite", (store) => store.put({ ...record, ...patch }));
+  if (!record) return;
+  const next = { ...record, ...patch };
+  // 圖沒換的話,先讀進記憶體做一份新的再存(WebKit bug 235687:讀出來的 Blob 原封不動存回去,之後就讀不到)。
+  // 已經讀不到的就照舊存回去,不會更糟;開了同步的話,下次同步會從雲端拿回來
+  if (!("blob" in patch) && record.blob) {
+    try { next.blob = await freshCopy(record.blob); } catch { /* 已經壞了 */ }
+  }
+  await tx("readwrite", (store) => store.put(next));
 }
 
 export async function deleteLocalItem(id, options) {
