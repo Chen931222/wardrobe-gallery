@@ -1,0 +1,15 @@
+# wardrobe-gallery(2026-10-06)。搜尋與 AI 引用照常放行;只擋拿網頁內容去訓練模型的三隻。
+# 衣服的資料檔和 API 不讓任何爬蟲抓(示範衣櫃的圖本來就公開,站主的衣櫃要同步碼,這裡是多一層)。
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: Applebot-Extended
+Disallow: /
+
+User-agent: *
+Disallow: /api/
+Disallow: /data/
+Allow: /

@@ -774,6 +774,22 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     }
     catch { setBackupMsg("匯出失敗,再試一次"); }
   };
+  // 加密匯出:兩次密碼,至少 8 個字(2026-10-06 資安盤點)
+  const [lockOpen, setLockOpen] = useState(false);
+  const [lockPass, setLockPass] = useState(["", ""]);
+  const exportLocked = async (event) => {
+    event.preventDefault();
+    const [first, second] = lockPass;
+    if (first.length < 8) { setBackupMsg("密碼至少 8 個字"); return; }
+    if (first !== second) { setBackupMsg("兩次密碼不一樣"); return; }
+    setBackupMsg("加密中…");
+    try {
+      const count = await downloadBackupZip({ password: first });
+      setBackupMsg(`已匯出加密備份(${count} 件衣服的圖和紀錄),在你的下載。要用的時候按「匯入備份」選它、輸入這組密碼;密碼忘了就打不開。`);
+      setLockPass(["", ""]);
+      setLockOpen(false);
+    } catch { setBackupMsg("匯出失敗,再試一次"); }
+  };
   const importBackup = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -1168,9 +1184,24 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
           <div className="studio-backup-controls">
             <span className="studio-backup-label">紀錄備份</span>
             <button type="button" onClick={exportBackup}>匯出備份</button>
+            <button type="button" onClick={() => setLockOpen((on) => !on)} aria-expanded={lockOpen}>加密匯出</button>
             <button type="button" onClick={() => backupFileRef.current?.click()}>匯入備份</button>
             <input ref={backupFileRef} type="file" accept="application/zip,.zip,application/json,.json" onChange={importBackup} hidden />
           </div>
+          {lockOpen && (
+            <form className="studio-backup-lock" onSubmit={exportLocked}>
+              <label>
+                <span>設一組密碼(至少 8 個字)</span>
+                <input type="password" autoComplete="new-password" value={lockPass[0]} onChange={(event) => setLockPass([event.target.value, lockPass[1]])} />
+              </label>
+              <label>
+                <span>再輸入一次</span>
+                <input type="password" autoComplete="new-password" value={lockPass[1]} onChange={(event) => setLockPass([lockPass[0], event.target.value])} />
+              </label>
+              <button type="submit">匯出加密備份</button>
+              <small>加密的備份解開只看得到一份說明,圖和紀錄都要回這裡輸入密碼才打得開。密碼忘了就打不開,誰都救不回來。</small>
+            </form>
+          )}
           {backupMsg && <p className="studio-backup-msg" role="status">{backupMsg}</p>}
           <p className="studio-backup-note">備份是一個 ZIP,存在你自己手上、不經過雲端:解開有每件自己加的衣服的去背圖(PNG),和穿著紀錄、收藏、微調。換裝置或清資料前先「匯出」,到新裝置「匯入」這個 ZIP。同步碼不會寫進備份檔。</p>
         </div>

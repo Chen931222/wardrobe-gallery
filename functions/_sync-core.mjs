@@ -46,15 +46,46 @@ async function readRegistry(store, fresh) {
 }
 const writeRegistry = (store, spaces) => store.write(REGISTRY, new TextEncoder().encode(JSON.stringify({ spaces: [...spaces] })), "application/json");
 
-async function isOpen(store, space, { fresh = false } = {}) {
-  if (!fresh && (await readRegistry(store, false)).has(space)) return true;
-  return (await readRegistry(store, true)).has(space);
+/* 防灌爆額度(2026-10-06 資安盤點):格式正確的假同步碼,舊版每打一次都會繞過快取讀一次最新的開通名單,
+   每次都算 Vercel Blob 的額度。Hobby 免費額度用完 Blob 停 30 天,站主的同步和完整衣櫃一起停。
+   真的同步碼在快取的名單裡就查得到,一次額度都不花;只有「快取裡沒有」的才可能要讀最新的那份:
+   ① 同一台 function 30 秒最多讀一次;節流中回「忙」(503),不回「碼失效」——前端收到失效會停掉那台的同步
+   ② 確認過不存在的空間記 10 分鐘,同一組假碼重打不再讀
+   ③ 剛開通的空間記 2 分鐘(快取的名單最多舊 60 秒),開通完馬上同步不會被當成不存在
+   記在 function 的記憶體裡,換一台 function 就重算;擋的是大量亂打,不是精準攻擊。 */
+const FRESH_GAP = 30 * 1000;
+const MISSING_FOR = 10 * 60 * 1000;
+const OPENED_FOR = 2 * 60 * 1000;
+let lastFresh = 0;
+const knownMissing = new Map();    // space → 記到什麼時候
+const recentlyOpened = new Map();  // space → 記到什麼時候
+export class RegistryBusy extends Error {}
+
+const remember = (map, space, ms) => {
+  if (map.size > 2000) map.clear();   // 被亂打時不讓記憶體一直長
+  map.set(space, Date.now() + ms);
+};
+const stillValid = (map, space) => (map.get(space) || 0) > Date.now();
+
+async function isOpen(store, space, { fresh = false, cachedOnly = false } = {}) {
+  const cached = (await readRegistry(store, false)).has(space);
+  if (cached && !fresh) return true;
+  if (!cached) {
+    if (!fresh && stillValid(recentlyOpened, space)) return true;
+    if (cachedOnly || stillValid(knownMissing, space)) return false;
+    if (Date.now() - lastFresh < FRESH_GAP) throw new RegistryBusy("同步服務有點忙,等一下會自動再試");
+    lastFresh = Date.now();
+  }
+  const open = (await readRegistry(store, true)).has(space);
+  if (open) knownMissing.delete(space); else remember(knownMissing, space, MISSING_FOR);
+  return open;
 }
 
-/** 這組同步碼是不是開通名單裡的。給 /api/closet 用:站主完整的衣櫃只給已經開通同步的裝置。 */
+/** 這組同步碼是不是開通名單裡的。給 /api/closet 用:站主完整的衣櫃只給已經開通同步的裝置。
+ *  只看快取的名單,不讀最新的(假碼完全不花額度);剛換新碼的那一分鐘會先看到示範衣櫃,下次打開就好。 */
 export async function isOpenCode(store, rawCode) {
   const code = normalizeCode(rawCode);
-  return CODE.test(code) && isOpen(store, spaceOf(code));
+  return CODE.test(code) && isOpen(store, spaceOf(code), { cachedOnly: true });
 }
 
 function imgsOf(manifest) {
@@ -78,23 +109,36 @@ export async function handleSync(request, store) {
   const { method } = request;
   const img = new URL(request.url).searchParams.get("img");
 
-  // 開一個新空間
+  // 開一個新空間。先看快取的名單:已經有、或帶來的舊碼(換新碼時)在名單上,才讀最新的那份;
+  // 名單已經有空間、又沒帶有效舊碼的(亂打的),不花額度直接擋
   if (method === "POST" && img === null) {
+    const cachedSpaces = await readRegistry(store, false);
+    if (cachedSpaces.has(space)) return json({ ok: true });
+    const parent = normalizeCode(request.headers.get("x-sync-parent"));
+    const parentOk = CODE.test(parent) && cachedSpaces.has(spaceOf(parent));
+    if (cachedSpaces.size > 0 && !parentOk) return json({ error: "這個衣櫃已經開通過同步了。到已經在同步的那台按「看同步碼」,用那組碼加入", reason: "taken" }, 403);
     const spaces = await readRegistry(store, true);
     if (spaces.has(space)) return json({ ok: true });
-    const parent = normalizeCode(request.headers.get("x-sync-parent"));
     const allowed = spaces.size === 0 || (CODE.test(parent) && spaces.has(spaceOf(parent)));
     if (!allowed) return json({ error: "這個衣櫃已經開通過同步了。到已經在同步的那台按「看同步碼」,用那組碼加入", reason: "taken" }, 403);
     spaces.add(space);
     await writeRegistry(store, spaces);
+    knownMissing.delete(space);
+    remember(recentlyOpened, space, OPENED_FOR);
     return json({ ok: true });
   }
 
-  // 以下都要已開通的空間;寫清單、整個刪除時一定讀最新名單
+  // 以下都要已開通的空間;寫清單、整個刪除時一定讀最新名單(真的碼在快取裡,才會走到讀最新的那步)
   const fresh = (method === "PUT" && img === null) || method === "DELETE";
-  if (!(await isOpen(store, space, { fresh }))) return json(GONE, 403);
+  try {
+    if (!(await isOpen(store, space, { fresh }))) return json(GONE, 403);
+  } catch (error) {
+    if (error instanceof RegistryBusy) return json({ error: error.message, reason: "busy" }, 503);
+    throw error;
+  }
 
   if (method === "DELETE" && img === null) {
+    recentlyOpened.delete(space);
     await store.remove(await store.list(`${root}/`));
     const spaces = await readRegistry(store, true);
     spaces.delete(space);

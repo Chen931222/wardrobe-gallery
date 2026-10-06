@@ -111,9 +111,15 @@ const SECURITY_HEADERS = [
   // 麥克風給搭配頁的「用說的」。相機不關:新增衣服的選照片在 Android 上會給「拍照」,不確定會不會被這條擋到
   { key: "Permissions-Policy", value: "geolocation=(), payment=(), usb=(), microphone=(self)" },
 ];
+// 衣服的資料檔和 API 不進搜尋引擎、不被封存(robots.txt 之外多一層;2026-10-06 資安盤點)
+const NO_INDEX = [{ key: "X-Robots-Tag", value: "noindex, noarchive, nosnippet" }];
 await writeFile(join(OUT, "vercel.json"), JSON.stringify({
   git: { deploymentEnabled: false },
-  headers: [{ source: "/(.*)", headers: SECURITY_HEADERS }],
+  headers: [
+    { source: "/(.*)", headers: SECURITY_HEADERS },
+    { source: "/data/(.*)", headers: NO_INDEX },
+    { source: "/api/(.*)", headers: NO_INDEX },
+  ],
 }, null, 2) + "\n");
 
 const dataDir = join(OUT, "data");

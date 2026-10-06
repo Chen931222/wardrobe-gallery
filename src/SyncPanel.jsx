@@ -26,6 +26,16 @@ export function SyncPanel({ canStart = true }) {
   const [joining, setJoining] = useState(!canStart);
   const [typed, setTyped] = useState("");
   const [showCode, setShowCode] = useState(false);
+  // 同步碼等於整個衣櫃的鑰匙(2026-10-06 資安盤點):打開 60 秒自動收起;切到別的 app 馬上收起,
+  // iPhone 的多工畫面會把當下的頁面截成縮圖,碼不該留在上面
+  useEffect(() => {
+    if (!showCode) return undefined;
+    const timer = setTimeout(() => setShowCode(false), 60000);
+    const onHide = () => { if (document.visibilityState === "hidden") setShowCode(false); };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", onHide);
+    return () => { clearTimeout(timer); document.removeEventListener("visibilitychange", onHide); window.removeEventListener("pagehide", onHide); };
+  }, [showCode]);
 
   useEffect(() => {
     const onSynced = (event) => {
@@ -137,7 +147,10 @@ export function SyncPanel({ canStart = true }) {
             <button type="button" disabled={Boolean(busy)} onClick={rotate}>換新碼</button>
             <button type="button" disabled={Boolean(busy)} onClick={removeCloud}>刪除雲端那份</button>
           </div>
-          <p className="studio-backup-note">碼不小心給了別人,就按「換新碼」,舊碼立刻失效。</p>
+          <p className="studio-backup-note studio-sync-warning">
+            這組碼等於整個衣櫃的鑰匙:拿到的人看得到也改得到你的衣服。不要截圖、不要用訊息傳;要加新裝置,看著這裡打進去。
+            給錯人或覺得外流了,按「換新碼」,舊碼立刻失效。一分鐘後、或切到別的 app 時會自動收起。
+          </p>
         </div>
       )}
 
