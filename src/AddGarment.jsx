@@ -267,7 +267,13 @@ function expandBox(region) {
  * @param openRequest 大於 0 就打開新增(空衣櫃、推薦失敗的「新增第一件」按鈕用);打開後叫 onOpenHandled 讓呼叫端歸零,
  *        不然切到入口再回來、這個元件重新掛上時又會自己打開
  */
-export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHandled = null }) {
+/**
+ * 新增衣物;也能換掉一件衣服的圖(2026-10-06 本人要的)。
+ * @param replaceRequest { item, n }:n 每次換新就打開「換圖」;流程一樣(照片/商品圖 → 框 → 去背),最後只把圖換上去
+ * @param onReplaced (item, blob) 換好的那張
+ * @param hideButton 不畫自己的「新增」鈕(換圖專用的那一份)
+ */
+export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHandled = null, replaceRequest = null, onReplaced = null, hideButton = false }) {
   const inputRef = useRef(null);
   const dialogRef = useRef(null);
   const [stage, setStage] = useState("idle"); // idle | source | pick | crop | working | review
@@ -278,6 +284,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
   const [draft, setDraft] = useState(null);
   const [linkText, setLinkText] = useState("");
   const [link, setLink] = useState(null); // parseBrandLink 的結果,貼了連結才有
+  const [replacing, setReplacing] = useState(null);   // 換圖模式:要換掉圖的那件
   const runRef = useRef(0);                // 每次下載商品圖、去背都換一號;取消或逾時就換號,晚回來的結果丟掉
   const watchdogRef = useRef(null);
 
@@ -301,6 +308,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     setStatus("");
     setLinkText("");
     setLink(null);
+    setReplacing(null);
   };
   const reset = () => {
     clear();
@@ -336,10 +344,15 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     open();
     onOpenHandled?.();
   }, [openRequest]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!replaceRequest?.item) return;
+    setReplacing(replaceRequest.item);
+    open();
+  }, [replaceRequest?.n]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Esc、✕、取消、返回手勢:去背好的那一步先問(焦點一進來就在 ✕ 上,按一下 Enter 不該把算了半分鐘的結果丟掉),其他直接關
   const requestClose = () => {
-    if (stage === "review" && !window.confirm(draft?.blob ? "要放棄剛去背好的這件嗎?" : "要放棄這件嗎?填好的不會留著。")) return;
+    if (stage === "review" && !window.confirm(replacing ? "不換這張圖了?" : draft?.blob ? "要放棄剛去背好的這件嗎?" : "要放棄這件嗎?填好的不會留著。")) return;
     reset();
   };
   // 處理中按取消:回到上一步,照片和框都留著(審查 F4)。模型那邊停不下來,晚回來的結果丟掉
@@ -567,6 +580,12 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     return `想買的裡已經有 ${wished} 件同色的${kind},確定還要再加?`;
   };
 
+  const replace = () => {
+    if (!draft?.blob || !replacing) return;
+    onReplaced?.(replacing, draft.blob);
+    reset();
+  };
+
   const save = async () => {
     const name = draft.name.trim() || (draft.wishlist ? "想買的單品" : "新單品");
     await saveLocalItem({
@@ -603,25 +622,28 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
         onChange={(event) => { pick(event.target.files?.[0]); event.target.value = ""; }}
       />
 
-      <button
-        type="button"
-        className="add-garment-button"
-        onClick={open}
-        disabled={stage === "working"}
-      >
-        {stage === "working"
-          ? <><SpinnerGap size={14} className="add-spinner" aria-hidden="true" /> 處理中</>
-          : <><Plus size={14} weight="bold" aria-hidden="true" /> 新增</>}
-      </button>
+      {!hideButton && (
+        <button
+          type="button"
+          className="add-garment-button"
+          onClick={open}
+          disabled={stage === "working"}
+        >
+          {stage === "working"
+            ? <><SpinnerGap size={14} className="add-spinner" aria-hidden="true" /> 處理中</>
+            : <><Plus size={14} weight="bold" aria-hidden="true" /> 新增</>}
+        </button>
+      )}
 
       {stage === "source" && (
-        <div className="add-overlay" role="dialog" aria-modal="true" aria-label="新增衣物" ref={dialogRef}>
+        <div className="add-overlay" role="dialog" aria-modal="true" aria-label={replacing ? "換一張圖" : "新增衣物"} ref={dialogRef}>
           <form
             className="add-panel add-panel-review"
             onSubmit={(event) => { event.preventDefault(); if (parsedLink && !parsedLink.notProduct && !pageLoading) applyLink(); }}
           >
             {closeButton()}
-            <p className="add-step">新增一件</p>
+            <p className="add-step">{replacing ? `換一張圖:${replacing.name || "這件"}` : "新增一件"}</p>
+            {replacing && <small className="add-hint">選一張照片或貼商品連結,框出衣服、去背之後換上。名稱、分類、顏色都不會變。</small>}
             <label className="add-field">
               <span>貼商品連結</span>
               {/* type="text" 不是 "url":App「分享」拷出來的是「快來看看【品名】… https://…」整段,
@@ -718,7 +740,47 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
         </div>
       )}
 
-      {stage === "review" && draft && (
+      {stage === "review" && draft && replacing && (
+        <div className="add-overlay" role="dialog" aria-modal="true" aria-label="確認換圖" ref={dialogRef}>
+          <div className="add-panel add-panel-review">
+            {closeButton()}
+            <p className="add-step">換掉「{replacing.name || "這件"}」的圖</p>
+            <div className="add-replace-compare">
+              <figure>
+                <img src={replacing.thumbnail || replacing.image} alt="" />
+                <figcaption>現在的</figcaption>
+              </figure>
+              <figure className={draft.blob ? "" : "is-pending"}>
+                <img src={draft.preview} alt={draft.blob ? "新的圖" : "框起來的照片,還沒去背"} />
+                <figcaption>{draft.blob ? "新的" : "去背中"}</figcaption>
+              </figure>
+            </div>
+            {draft.pending && (
+              <p className="add-preview-status" role="status" aria-live="polite">
+                <SpinnerGap size={16} className="add-spinner" aria-hidden="true" />{status}
+              </p>
+            )}
+            {!draft.pending && !draft.blob && (
+              <div className="add-retry" role="alert">
+                <p>{error || "去背沒有完成。"}</p>
+                <div className="add-actions">
+                  <button type="button" className="secondary-button" onClick={backToCrop}>重新框</button>
+                  <button type="button" className="primary-button" onClick={retryCutout}>再試一次</button>
+                </div>
+              </div>
+            )}
+            <small className="add-hint">名稱、分類、顏色都不變;顏色要跟著新圖改的話,換好後在編輯裡按吸色。</small>
+            <div className="add-actions">
+              <button type="button" className="secondary-button" onClick={requestClose}>取消</button>
+              <button type="button" className="primary-button" onClick={replace} disabled={!draft.blob}>
+                {draft.blob ? "換上這張" : "去背好就能換"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {stage === "review" && draft && !replacing && (
         <div className="add-overlay" role="dialog" aria-modal="true" aria-label="確認新增的衣物" ref={dialogRef}>
           <div className="add-panel add-panel-review">
             {closeButton()}

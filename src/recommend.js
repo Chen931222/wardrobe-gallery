@@ -8,6 +8,7 @@
  * 穿著紀錄存 localStorage,和微調紀錄一樣跟著瀏覽器走。 */
 
 import { readCity } from "./city.js";
+import { pairScore } from "./taste.js";
 
 const WEARLOG_KEY = "open-wardrobe-wearlog-v1";
 
@@ -642,7 +643,7 @@ export function parseRequest(text) {
   const phrase = phraseOf(t, color?.word);
   const spec = { slot: slotHit?.slot || null, category: slotHit?.category || null, color, descriptors, phrase };
   // 嫌身上這件(「不要這件上衣」「褲子不好看」):換一件別的。上衣、褲子、鞋沒明講「脫」就不脫(不要這件上衣 ≠ 打赤膊)
-  const another = { kind: "swap", raw, slot: slotHit?.slot, category: null, color: null, descriptors: [], phrase: null, another: true };
+  const another = { kind: "swap", raw, slot: slotHit?.slot, category: null, color: null, descriptors: [], phrase: null, another: true, disliked: dislikes };
   if (slotHit && wantsRemove && !wantsSwap) {
     if (CORE_SLOT.has(slotHit.slot) && !has(STRIP_HINTS)) return another;
     return { kind: "remove", raw, slot: slotHit.slot };
@@ -811,7 +812,9 @@ export function randomOutfit(items, weather = null) {
  *        剛剛看過的往後排,不然只靠抖動,常常換來換去還是那幾件
  * @returns {{ outfit: Object, reasons: string[] } | { error: string, missing: string }}
  */
-export function recommendOutfit(items, weather, wearLog, intent = null, locked = {}, avoid = null) {
+/** @param taste 自己穿過、收藏過、嫌過的組合(taste.js 的 readTaste);沒給就只看規則
+ *  回傳的 recalled = 這套是「回味」穿過、收藏過的組合(三成的推薦會這樣挑) */
+export function recommendOutfit(items, weather, wearLog, intent = null, locked = {}, avoid = null, taste = null) {
   // 次數 ≥ 99 = 這件一定不要(「換一件上衣」時身上那件)
   const seen = (item, weight) => {
     const count = (avoid && item && avoid.get(item.id)) || 0;
@@ -870,6 +873,15 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
   if (locked.wholebody_up) { outers = [locked.wholebody_up]; useOpenLayer = false; }   // 鎖住的外套就是外套
   const target = targetWarmth(weather.feelsLike);
 
+  // 自己的選擇(taste.js):嫌過的組合每次都扣;喜歡的(穿過、收藏過)不是每次都加。
+  // 上衣×下身有幾百種組合、分數差都在抖動範圍內,每次都加的話,加 0.3 分就從 1% 變 30%、加 1.5 分變 94%
+  // (2026-10-06 量的),等於天天推舊的。所以擲骰子:三成的推薦「回味」穿過、收藏過的組合,七成照規則找新的
+  const recall = Boolean(taste?.size) && Math.random() < 0.3;
+  const tasteOf = (a, b) => {
+    const value = pairScore(taste, a, b);
+    return value < 0 ? value : recall && value > 0 ? 2 : 0;
+  };
+
   let best = null;
   for (const top of tops) {
     for (const bottom of bottoms) {
@@ -906,6 +918,9 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
         // 4.7) 指定的色系(「全黑」「大地色」)
         if (inPalette) for (const item of worn) score += paletteItemScore(item, inPalette, strict);
 
+        // 4.8) 自己的選擇:穿過、收藏過的組合加分,說過不好看的扣分(taste.js)
+        if (taste) score += tasteOf(top, bottom) + tasteOf(top, outer) + tasteOf(bottom, outer);
+
         // 5) 最近穿過降權;剛剛推薦過的也往後排(鎖住的那格不算)
         for (const item of worn) score += recencyPenalty(item, wearLog);
         if (!locked.upperbody) score += seen(top, 1.4);
@@ -936,6 +951,7 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
   for (const shoe of shoePool) {
     let score = colorScore([...chosen, shoe]).score + recencyPenalty(shoe, wearLog) + intentItemScore(shoe, intent) + Math.random() * 1.2;
     score += shoeClash(shoe, best.top, best.bottom, best.outer, intent?.formality === "sporty");   // 拖鞋不配襯衫、皮鞋不配運動褲
+    if (taste) score += tasteOf(shoe, best.top) + tasteOf(shoe, best.bottom);
     score += paletteItemScore(shoe, inPalette, strict) + seen(shoe, 0.8);
     if (weather.feelsLike >= 30 && shoe.warmth <= 1) score += 0.8;   // 熱到爆就別穿包腳的
     if (weather.feelsLike < 20 && shoe.warmth <= 1) score -= 3;      // 反過來,涼了別穿薄鞋
@@ -1038,6 +1054,9 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
     ].filter(Boolean);
     reasons.push(`會下雨,${avoided.join("和")}先收著`);
   }
+  // 這套裡有自己穿過、收藏過的組合:講出來,知道推薦是看過你的選擇的
+  const recalled = recall && pairScore(taste, best.top, best.bottom) > 0;
+  if (recalled) reasons.push(`「${best.top.name}」配「${best.bottom.name}」你之前穿過或收藏過`);
   const colorInfo = colorScore([best.top, best.bottom, best.outer].filter(Boolean));
   if (inPalette) {
     // 說了色系就講做到幾成;櫃裡湊不齊也照實講,不假裝
@@ -1088,5 +1107,5 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
     reasons.push(`看到的線索:${shown.join(";")}`);
   }
 
-  return { outfit, reasons };
+  return { outfit, reasons, recalled };
 }

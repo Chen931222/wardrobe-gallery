@@ -6,6 +6,7 @@ import { adjustIntent, fetchWeather, findItemForSwap, parseRequest, randomOutfit
 import { syncCode } from "./sync.js";
 import { downloadBackupZip, importBackupFile } from "./backup.js";
 import { LookCard } from "./LookCard.jsx";
+import { noteDislike, noteRecommendation, noteWear, readTaste, recoStats, unnoteWear } from "./taste.js";
 
 // 搭配工作室:把去背衣物疊在人形上組穿搭。
 //
@@ -530,8 +531,9 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       // 最近三次推薦出現過的往後排:「再推薦一套」才不會換來換去還是那幾件
       const avoid = new Map();
       for (const ids of shownRef.current) for (const id of ids) avoid.set(id, (avoid.get(id) || 0) + 1);
-      const result = recommendOutfit(items, weather, wearLog, intent, locked, avoid);
+      const result = recommendOutfit(items, weather, wearLog, intent, locked, avoid, readTaste());
       if (result.error) { setDaily({ error: result.error }); return; }
+      noteRecommendation(result.outfit, result.recalled);
       shownRef.current = [Object.values(result.outfit).filter(Boolean).map((item) => item.id), ...shownRef.current].slice(0, 3);
       // 眼鏡、手錶、配件現在引擎也會挑(2026-10-06);這次沒挑到的那格,身上有就留著,別每次推薦都被脫掉
       for (const slot of ["eyewear", "wrist", "accessories_up"]) if (wearing[slot] && !result.outfit[slot]) result.outfit[slot] = wearing[slot];
@@ -619,13 +621,14 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       const locked = {};
       for (const key of ["upperbody", "lowerbody", "wholebody_up", "shoes", "socks", "bag"]) if (key !== slot && wearing[key]) locked[key] = wearing[key];
       const avoid = new Map(wearing[slot] ? [[wearing[slot].id, 99]] : []);
-      const result = recommendOutfit(items, weather, readWearLog(), lastIntentRef.current, locked, avoid);
+      const result = recommendOutfit(items, weather, readWearLog(), lastIntentRef.current, locked, avoid, readTaste());
       const next = result.outfit?.[slot];
       const label = SLOT_LABEL[slot];
       if (!next || next.id === wearing[slot]?.id) { setDaily({ understood: `換${label}`, reasons: [`櫃裡沒有別的${label}可以換`] }); return; }
       setAdjusting(null);
       pushHistory(wearing); dirtyRef.current = true;
       setWearing((current) => ({ ...current, [slot]: next }));
+      noteRecommendation({ ...wearing, [slot]: next });
       setDaily({ understood: `換${label}`, reasons: [`換上「${next.name}」,是配著身上其他幾件挑的`] });
     } finally {
       setDailyBusy(false);
@@ -667,6 +670,10 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
 
     if (req.kind === "swap") {
       const vague = !req.color && !req.category && !(req.descriptors || []).length && !req.byText;   // 「換一件上衣」→ 要跟身上那件不一樣
+      // 「褲子不好看」:記下這件配身上其他幾件不好,之後推薦少推這個組合(taste.js)
+      if (req.disliked && wearing[req.slot]) {
+        noteDislike(wearing[req.slot].id, Object.entries(wearing).filter(([key, item]) => key !== req.slot && item).map(([, item]) => item.id));
+      }
       // 只說「換一件上衣」「褲子不好看」:不是隨便抓一件,而是其他幾件都不動、配著它們和天氣挑最搭的那一件
       if (vague && ["upperbody", "lowerbody", "shoes", "bag"].includes(req.slot) && wearing.upperbody && wearing.lowerbody) {
         swapToMatch(req.slot);
@@ -771,20 +778,32 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     if (message) setBackupMsg(message);
   };
 
+  // 推薦準不準(taste.js):有按過「今天穿這套」才顯示,同步拉到別台的紀錄時一起更新
+  const [stats, setStats] = useState(() => recoStats());
+  useEffect(() => {
+    const refresh = () => setStats(recoStats());
+    window.addEventListener("wardrobe-synced", refresh);
+    return () => window.removeEventListener("wardrobe-synced", refresh);
+  }, []);
+
   // 按了「今天穿這套」可以取消(審查 F29):記之前每件的日期留著,取消時換回去。只留到換一套或離開這頁
-  const [wearUndo, setWearUndo] = useState(null);   // { ids: "a|b|c", before: { id: 日期|null } }
+  const [wearUndo, setWearUndo] = useState(null);   // { ids: "a|b|c", before: { id: 日期|null }, note: taste 那筆的 id }
   const wornKey = wornItems.map((item) => item.id).sort().join("|");
   const canUndoWear = Boolean(wearUndo && wearUndo.ids === wornKey);
   const wearToday = () => {
     if (!wornItems.length) return;
     if (recorded && canUndoWear) {   // 過了午夜、或別台改過日期,就不是「剛記的那一下」,照常記
       setWornDates(unrecordWear(wearUndo.before));
+      unnoteWear(wearUndo.note);
       setWearUndo(null);
+      setStats(recoStats());
       return;
     }
+    const note = noteWear(wearing);   // 先記「照不照推薦穿」:recordWear 會通知同步,兩份一起推
     const { log, before } = recordWear(wornItems);
     setWornDates(log);
-    setWearUndo({ ids: wornKey, before });
+    setWearUndo({ ids: wornKey, before, note });
+    setStats(recoStats());
   };
 
   // 收藏:同一套(同樣幾件)不重複存,按完要看得出存了(審查 F54)
@@ -1132,6 +1151,14 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
           </div>
         )}
 
+        {stats && (
+          <p className="studio-stats">
+            <span className="studio-backup-label">推薦準不準</span>
+            近 30 天記了 {stats.days} 天:照推薦穿 {stats.fromRec} 天{stats.fromRec > 0 && `,其中 ${stats.first} 天是第一套就穿,平均看到第 ${stats.avgMatch.toFixed(1).replace(/\.0$/, "")} 套`}
+            {stats.days > stats.fromRec && `;其他 ${stats.days - stats.fromRec} 天是自己換過或隨機配的`}。
+            推薦會記得你穿過、收藏過的組合,說「褲子不好看」的組合會少推。
+          </p>
+        )}
         {/* 紀錄備份:資料 local-first,換裝置或防 iOS 清 storage 前先匯出,到新裝置匯入。全程本機。 */}
         <div className="studio-backup">
           <div className="studio-backup-controls">

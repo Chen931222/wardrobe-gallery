@@ -38,7 +38,8 @@ function MiniLook({ outfit }) {
  * @param demoItems 示範衣櫃的那份樣本(沒有就不畫示範穿搭)
  * @param onAdd / onDemo / onSync 三個出口;onImportFile(file) 匯入備份檔
  */
-export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile }) {
+/** @param trashCount 垃圾桶裡有幾件(刪光了回到這裡,還要找得到);onOpenTrash 打開垃圾桶 */
+export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashCount = 0, onOpenTrash = null }) {
   const fileRef = useRef(null);
   const [weather, setWeather] = useState(null);
   const city = useCity();
@@ -99,6 +100,12 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile }) {
           在別台同步過了?<button type="button" onClick={onSync}>輸入同步碼</button>
           <span aria-hidden="true"> · </span>
           有備份檔?<button type="button" onClick={() => fileRef.current?.click()}>匯入備份</button>
+          {trashCount > 0 && onOpenTrash && (
+            <>
+              <span aria-hidden="true"> · </span>
+              垃圾桶裡有 {trashCount} 件<button type="button" onClick={onOpenTrash}>打開</button>
+            </>
+          )}
           <input
             ref={fileRef}
             type="file"

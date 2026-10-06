@@ -111,6 +111,12 @@ button { font: inherit; }
 }
 
 /* 做完一件事的一行回饋(剛加入、買了、加入同步):固定浮在上方,入口、單品頁、新增視窗之上都看得到,6 秒後消失 */
+/* 平常那行點不到(不擋底下);帶「復原」按鈕時要點得到 */
+.app-notice.has-action { display: flex; align-items: center; gap: 12px; pointer-events: auto; }
+.app-notice button {
+  flex: none; min-height: 32px; padding: 2px 12px;
+  border: 1px solid var(--ink); background: transparent; color: var(--ink); font: inherit; font-size: 12.5px; cursor: pointer;
+}
 .app-notice {
   position: fixed;
   top: max(14px, env(safe-area-inset-top));
@@ -1511,6 +1517,20 @@ h1, h2, h3 {
 /* 每張卡片右上角的刪除鈕:平常淡出,hover/聚焦才明顯,避免誤觸 */
 .gallery-cell { position: relative; }
 
+/* 垃圾桶:格子下面寫剩幾天、復原/永久刪除 */
+.trash-note { margin: 18px 56px 0; font-size: 13px; line-height: 1.7; color: var(--muted); }
+.trash .gallery-grid { padding-top: 16px; }   /* 說明那行已經跟上面隔開,格子不用再空一大段 */
+.trash-thumb { cursor: default; opacity: .7; }
+.trash-name { margin: 6px 0 0; font-size: 13px; color: var(--ink); line-height: 1.4; }
+.trash-left { margin: 2px 0 0; font-size: 11.5px; color: var(--muted); }
+.trash-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.trash-actions .secondary-button { min-height: 36px; padding: 6px 14px; font-size: 12.5px; }
+.trash-purge {
+  min-height: 36px; padding: 6px 10px; border: 0; background: none;
+  color: var(--danger); font: inherit; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+@media (max-width: 760px) { .trash-note { margin: 16px 18px 0; } }
+
 .gallery-delete {
   position: absolute; top: 4px; right: 4px;
   width: 28px; height: 28px; display: grid; place-items: center;
@@ -1590,6 +1610,12 @@ h1, h2, h3 {
 .add-preview-wrap.is-pending .add-preview { opacity: .55; }
 .add-preview-status { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; font-size: 13px; color: var(--ink); }
 .add-preview-status .add-spinner { flex: none; }
+/* 換圖:現在的和新的並排 */
+.add-replace-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.add-replace-compare figure { margin: 0; }
+.add-replace-compare img { width: 100%; height: 160px; object-fit: contain; background: var(--paper); border: 1px solid var(--line); }
+.add-replace-compare figure.is-pending img { opacity: .55; }
+.add-replace-compare figcaption { margin-top: 4px; font-size: 12px; color: var(--muted); text-align: center; }
 .add-retry { padding: 10px 12px; border: 1px solid var(--danger); }
 .add-retry p { margin: 0 0 8px; font-size: 13px; color: var(--danger); }
 
@@ -2017,6 +2043,14 @@ h1, h2, h3 {
 
 /* 紀錄備份:低調的頁尾,不搶戲但找得到 */
 .studio-sync,
+/* 推薦準不準(taste.js):紀錄備份上面一小段,跟它同一種安靜的樣子 */
+.studio-stats {
+  margin: 24px auto 0; padding-top: 16px; max-width: 440px;
+  border-top: 1px solid var(--line);
+  text-align: center; font-size: 12px; line-height: 1.7; color: var(--body);
+}
+.studio-stats .studio-backup-label { display: block; margin-bottom: 4px; }
+.studio-stats + .studio-backup { border-top: 0; margin-top: 8px; }
 .studio-backup {
   margin-top: 24px;
   padding-top: 16px;
@@ -2692,7 +2726,8 @@ h1, h2, h3 {
 }
 
 /* 單品頁:可以編輯的衣服也有「在搭配頁穿上」(審查 F30) */
-.viewer-wear-row { margin: 0 0 18px; }
+.viewer-wear-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; }
+.viewer-wear-row:empty { display: none; }
 
 /* 去背處理中可以取消(審查 F4) */
 .add-panel .add-cancel { margin-top: 8px; min-height: 40px; }

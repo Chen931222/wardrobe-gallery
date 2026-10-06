@@ -22,6 +22,7 @@ const ERROR_KEY = "open-wardrobe-sync-error";        // 最近一次同步失敗
 const SYNC_KEYS = [
   "open-wardrobe-wearlog-v1", "open-wardrobe-looks-v1", "open-wardrobe-fit-v1",
   "open-wardrobe-edits-v1", "open-wardrobe-deleted-v1",
+  "open-wardrobe-taste-v1",   // 穿過哪套、嫌過哪個組合(taste.js);一天最多幾筆,不燒額度
 ];
 // 不同步「身上這套」(open-wardrobe-wearing-v1):搭配頁每換一件就寫一次,同步它會把免費寫入額度
 // (每月 2,000 次)燒在試穿上,而且兩台各自試穿本來就不該互相干擾。
@@ -143,6 +144,7 @@ async function snapshot(keys) {
 const idTime = (id) => Number(String(id).match(/(\d+)$/)?.[1]) || 0;
 const LIST_RULES = {
   "open-wardrobe-looks-v1": { order: (a, b) => idTime(b.id) - idTime(a.id), limit: 30 },
+  "open-wardrobe-taste-v1": { order: (a, b) => idTime(b.id) - idTime(a.id), limit: 300 },
 };
 const hasId = (x) => Boolean(x) && typeof x === "object" && !Array.isArray(x)
   && (typeof x.id === "string" || (typeof x.id === "number" && Number.isFinite(x.id)));

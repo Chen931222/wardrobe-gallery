@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Sparkle, X } from "@phosphor-icons/react";
 import { fetchWeather, readWearLog, recommendOutfit } from "./recommend.js";
 import { CitySelect, useCity } from "./CitySelect.jsx";
+import { readTaste } from "./taste.js";
 
 // 入口導覽頁 v2(2026-07-21 依使用者回饋改版):
 //   - 拿掉滾輪/拖曳/自轉 —— 沒有 rAF 迴圈,平常是純靜態排版,零效能負擔
@@ -160,7 +161,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
     (async () => {
       try {
         const weather = await fetchWeather();
-        const result = recommendOutfit(items, weather, readWearLog());
+        const result = recommendOutfit(items, weather, readWearLog(), null, {}, null, readTaste());
         if (alive) setDaily(result.error ? { error: result.error, missing: result.missing } : { weather, ...result });
       } catch {
         if (alive) setDaily({ error: "抓不到天氣" });

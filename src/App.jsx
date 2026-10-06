@@ -6,7 +6,7 @@ import { OutfitStudio, rememberWearing } from "./OutfitStudio.jsx";
 import { LandingRing } from "./LandingRing.jsx";
 import { AddGarment } from "./AddGarment.jsx";
 import { SyncPanel } from "./SyncPanel.jsx";
-import { deleteLocalItem, findUrl, loadLocalItems, productUrlProblem, updateLocalItem } from "./localWardrobe.js";
+import { deleteLocalItem, findUrl, loadLocalItems, productUrlProblem, putLocalRecord, updateLocalItem } from "./localWardrobe.js";
 import { CAN_ADD, CAN_EDIT, canEditItem } from "./ownerMode.js";
 import { hasLocalChanges, lastSyncError, noteDeliberateDelete, scheduleSync, syncCode, syncNotice, syncNow } from "./sync.js";
 import { findSimilar, fitOf, guessWarmth, kindLabel, wishOutfits } from "./wishCheck.js";
@@ -19,6 +19,7 @@ import { downloadBackupZip, importBackupFile } from "./backup.js";
 import { backupReminder, inAppBrowser, isIos, isStandalone, requestPersist, snoozeBackupHint } from "./keepSafe.js";
 import { Welcome } from "./Welcome.jsx";
 import { demoCloset } from "./demoCloset.js";
+import { noteRecommendation } from "./taste.js";
 
 const STORAGE_KEY = "open-wardrobe-edits-v1";
 const DELETED_STORAGE_KEY = "open-wardrobe-deleted-v1";
@@ -149,6 +150,16 @@ function readDeletedItems() {
     return new Set();
   }
 }
+
+/** 垃圾桶的「復原」:站主衣櫃那件從隱藏名單拿掉。 */
+function unpersistDeletedItem(id) {
+  const deleted = readDeletedItems();
+  if (!deleted.delete(id)) return;
+  localStorage.setItem(DELETED_STORAGE_KEY, JSON.stringify([...deleted]));
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));
+}
+const IS_LOCALHOST = typeof window !== "undefined" && ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
+const TRASH_DAYS = 30;
 
 function persistDeletedItem(id) {
   const deleted = readDeletedItems();
@@ -283,6 +294,39 @@ function GalleryItem({ item, selected, onOpen, onDelete }) {
         </button>
       )}
     </div>
+  );
+}
+
+/* 垃圾桶(2026-10-06 本人要的:刪錯了要有復原的機會)。自己加的放 30 天再真的刪,站主衣櫃的只是隱藏。 */
+function TrashGrid({ items, onRestore, onPurge, canPurge }) {
+  const hasServed = items.some((item) => !item.isLocal);
+  return (
+    <section className="trash" aria-label="垃圾桶">
+      <p className="trash-note">
+        刪掉的先放在這裡,按「復原」就回到衣櫃。自己加的 {TRASH_DAYS} 天後自動刪掉{hasServed ? ";站主衣櫃的只是隱藏,一直留著" : ""}。
+      </p>
+      <div className="gallery-grid">
+        {items.map((item) => {
+          const left = item.trashedAt ? Math.max(0, TRASH_DAYS - Math.floor((Date.now() - Date.parse(item.trashedAt)) / 864e5)) : null;
+          const label = item.name || TYPE_MAP[item.part]?.singular || "衣物";
+          return (
+            <div key={item.id} className="gallery-cell trash-cell">
+              <div className="gallery-item trash-thumb">
+                <OptimizedImage src={item.thumbnail || item.image} alt="" sizes="(max-width: 520px) calc(50vw - 16px), 180px" breakpoints={[120, 180, 240, 320]} />
+              </div>
+              <p className="trash-name">{label}</p>
+              <p className="trash-left">{left === null ? "隱藏中" : left === 0 ? "今天會自動刪掉" : `${left} 天後自動刪掉`}</p>
+              <div className="trash-actions">
+                <button type="button" className="secondary-button" onClick={() => onRestore(item.id)} aria-label={`復原${label}`}>復原</button>
+                {canPurge(item) && (
+                  <button type="button" className="trash-purge" onClick={() => onPurge(item.id)} aria-label={`永久刪除${label}`}>永久刪除</button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -656,7 +700,7 @@ function rebaseDraft(draft, before, after) {
 }
 
 /** @param gone 這件在別台被刪掉或隱藏了:頁面留著(草稿還在、可以複製),但存檔、刪除、穿上這些動作都關掉 */
-function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWear, onBought, onSetUrl, onSetPrice, onOpen, onWearOutfit }) {
+function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWear, onBought, onSetUrl, onSetPrice, onOpen, onWearOutfit, onReplaceImage, onRestoreImage }) {
   const closeButtonRef = useRef(null);
   const dialogRef = useRef(null);
   // 焦點圈在單品頁裡、關掉後回到原本點的那格(審查 F46)。Esc 照下面自己的處理(先取消吸色、有沒存的先擋)
@@ -900,13 +944,20 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
         {canEditItem(item) ? (
           <>
             {/* 站主和自己加的衣服,單品頁原本只有編輯表單,要穿上得回搭配頁找(審查 F30) */}
-            {!item.wishlist && (
-              <div className="viewer-wear-row">
+            <div className="viewer-wear-row">
+              {!item.wishlist && (
                 <button className="secondary-button" type="button" onClick={wearHere} disabled={gone}>
                   <Sparkle size={15} weight="regular" aria-hidden="true" /> 在搭配頁穿上
                 </button>
-              </div>
-            )}
+              )}
+              {/* 換圖(2026-10-06):去背沒去乾淨、拍得不好,換一張;站主衣櫃的換過可以換回原圖 */}
+              {onReplaceImage && (
+                <button className="secondary-button" type="button" onClick={() => onReplaceImage(item)} disabled={gone}>換一張圖</button>
+              )}
+              {item.overridden && onRestoreImage && (
+                <button className="secondary-button" type="button" onClick={() => onRestoreImage(item)} disabled={gone}>換回原圖</button>
+              )}
+            </div>
             <ItemEditor
               draft={draft}
               setDraft={setDraft}
@@ -963,10 +1014,13 @@ export function App() {
     } catch { return ""; }
   });
   const noticeTimer = useRef(null);
-  const say = useCallback((text) => {
+  const [noticeAction, setNoticeAction] = useState(null);   // { label, run }:刪除後的「復原」
+  const say = useCallback((text, action = null) => {
     setNotice(text);
+    setNoticeAction(action);
     clearTimeout(noticeTimer.current);
-    noticeTimer.current = setTimeout(() => setNotice(""), 6000);
+    // 帶按鈕的多留一下,來得及按
+    noticeTimer.current = setTimeout(() => { setNotice(""); setNoticeAction(null); }, action ? 9000 : 6000);
   }, []);
   useEffect(() => {
     if (notice) noticeTimer.current = setTimeout(() => setNotice(""), 6000);
@@ -991,6 +1045,7 @@ export function App() {
   const localSeq = useRef(0);
   const appliedComplete = useRef(false);   // 畫面上那份兩邊都有讀到
   const [ownerLocked, setOwnerLocked] = useState(false);   // 擁有者模式但沒有開通的同步碼:看到的是示範衣櫃
+  const [trash, setTrash] = useState([]);                   // 垃圾桶:刪掉、還沒真的刪的
   const refresh = useCallback(async () => {
     const seq = ++refreshSeq.current;
     let failed = null;
@@ -1013,9 +1068,19 @@ export function App() {
     setError(!served && !servedRef.current ? (failed?.message || "衣櫃載入失敗。") : "");
     const edits = readEdits();
     const deleted = readDeletedItems();
-    const servedList = served || servedRef.current || [];
-    const merged = [...servedList, ...(local || localRef.current || [])].filter((item) => !deleted.has(item.id));
-    setItems(merged.map((item) => ({ ...item, ...(edits[item.id] || {}) })));
+    const localAll = local || localRef.current || [];
+    // 換過圖的站主衣服:override-<id> 這種 record 只帶一張圖,蓋到那件上,本身不是一件衣服(2026-10-06)
+    const overrides = new Map(localAll.filter((record) => record.overrideFor).map((record) => [record.overrideFor, record]));
+    const servedList = (served || servedRef.current || []).map((item) => {
+      const override = overrides.get(item.id);
+      return override ? { ...item, image: override.image, thumbnail: override.image, overridden: true } : item;
+    });
+    const mine = localAll.filter((record) => !record.overrideFor);
+    const withEdits = (item) => ({ ...item, ...(edits[item.id] || {}) });
+    // 垃圾桶:自己加的標了 trashedAt、站主衣櫃的在隱藏名單裡;都不出現在衣櫃,另外列
+    const merged = [...servedList, ...mine.filter((item) => !item.trashedAt)].filter((item) => !deleted.has(item.id));
+    setItems(merged.map(withEdits));
+    setTrash([...mine.filter((item) => item.trashedAt), ...servedList.filter((item) => deleted.has(item.id))].map(withEdits));
     setLoading(false);
   }, []);
 
@@ -1096,6 +1161,9 @@ export function App() {
   const wearItems = useMemo(() => closetItems.map((item) => !item.wishlist && item.warmth === undefined ? { ...item, warmth: guessWarmth(item) } : item), [closetItems]);
   const ownedItems = useMemo(() => wearItems.filter((item) => !item.wishlist), [wearItems]);
   const wishCount = closetItems.length - ownedItems.length;
+  // 垃圾桶跟著衣櫃走:站主看全部,訪客只看自己加的(示範衣櫃刪不了)
+  const trashItems = useMemo(() => (closet === "all" ? trash : closet === "mine" ? trash.filter((item) => item.isLocal) : []), [trash, closet]);
+  const trashCount = trashItems.length;
 
   const visibleItems = useMemo(() => {
     const filtered = activeType === "all" ? ownedItems
@@ -1123,6 +1191,7 @@ export function App() {
 
   // 帶一套進搭配頁:先記成「身上這套」,進去後手動重新整理也穿得回來。daily = 入口今日推薦的天氣和理由
   const wearOutfit = (outfit, daily = null) => {
+    if (daily) noteRecommendation(outfit);   // 入口的今日推薦按「穿上看看」:算看過一套推薦(taste.js)
     rememberWearing(outfit, closet);
     setPendingOutfit(outfit);
     setPendingDaily(daily);
@@ -1183,7 +1252,8 @@ export function App() {
   // 想買的全買了或刪光,那顆分類就消失了;停在上面會一片空白、沒有任何一顆亮著,退回「全部」
   useEffect(() => {
     if (!loading && activeType === "wishlist" && !wishCount) setActiveType("all");
-  }, [loading, activeType, wishCount]);
+    if (!loading && activeType === "trash" && !trashCount) setActiveType("all");
+  }, [loading, activeType, wishCount, trashCount]);
 
   const chooseCloset = (next) => {
     setClosetChoice(next);
@@ -1254,36 +1324,78 @@ export function App() {
     await refresh();
   };
 
+  // 刪除:先進垃圾桶,不再先問(2026-10-06 本人要的:刪錯了要能復原)。按錯了按回饋那行的「復原」,
+  // 或到衣櫃的「垃圾桶」。自己加的 30 天後才真的刪;站主衣櫃的只是隱藏(本機版以前會直接刪檔,現在也只隱藏,
+  // 要真的刪到垃圾桶按「永久刪除」)。開了同步,垃圾桶也跟著同步。
+  const settleRefresh = () => {
+    appliedSeq.current = ++refreshSeq.current;   // 還在跑的 refresh 讀的是改之前的本機清單,作廢,免得那件又冒出來
+    localSeq.current = appliedSeq.current;        // 它也不能拿來當備用清單
+    return refresh();                              // 再補一次讀改過的
+  };
+  // name:從刪除後那行的「復原」呼叫時,這裡的 trash 還是刪除前的,找不到那件,名字由呼叫端帶
+  const restoreItem = async (id, name = trash.find((item) => item.id === id)?.name) => {
+    if (id.startsWith("local-")) await updateLocalItem(id, { trashedAt: null });
+    else unpersistDeletedItem(id);
+    await settleRefresh();
+    say(`「${name || "這件"}」放回衣櫃了。`);
+  };
   const deleteItem = async (id) => {
-    // 刪除一律先問(格子上的垃圾桶和單品頁的「刪除」都走這裡);開了同步,刪了會傳到每一台
     const target = items.find((item) => item.id === id);
-    const note = syncCode() ? "\n開了同步,其他裝置也會一起刪掉。" : "";
-    if (!window.confirm(`確定刪除「${target?.name || "這件"}」?${note}`)) return;
     if (id.startsWith("local-")) {
-      noteDeliberateDelete(id);   // 同步不用再問一次「這台少了幾件」
-      // 自己加的:直接從 IndexedDB 移除,不需要記到「已刪除」名單
-      await deleteLocalItem(id);
-      appliedSeq.current = ++refreshSeq.current;   // 還在跑的 refresh 讀的是刪除前的本機清單,作廢,免得那件又冒出來
-      localSeq.current = appliedSeq.current;        // 它也不能拿來當備用清單
-      refresh();                                     // 再補一次讀刪除後的:作廢的那次如果帶著剛同步到的新衣服,不補就看不到
+      await updateLocalItem(id, { trashedAt: new Date().toISOString() });
       // 訪客刪掉自己唯一一件時留在「我的衣櫃」(空的那個),不要自動跳去示範衣櫃,像站主的衣服跑進來
       if (!CAN_EDIT) setClosetChoice("mine");
-      setItems((current) => current.filter((item) => item.id !== id));
-      setSelectedId(null);
-      return;
-    }
-    if (id.startsWith("import-")) {
-      // 本機有 dev server 時真的刪檔;線上唯讀版刪不動,就只記在瀏覽器端隱藏
-      try {
-        await fetch(`/api/import/wardrobe/${id}`, { method: "DELETE" });
-      } catch {
-        /* 線上唯讀版沒有這個端點,靠下面的 persistDeletedItem 隱藏即可 */
-      }
+    } else {
+      persistDeletedItem(id);
     }
     setItems((current) => current.filter((item) => item.id !== id));
-    removePersistedEdit(id);
-    persistDeletedItem(id);
     setSelectedId(null);
+    await settleRefresh();
+    say(`「${target?.name || "這件"}」移到垃圾桶了。`, { label: "復原", run: () => restoreItem(id, target?.name) });
+  };
+  // 永久刪除:只在垃圾桶裡,這時才問。站主衣櫃的只有本機版刪得了(真的刪檔),線上只能一直隱藏
+  const canPurge = (item) => Boolean(item.isLocal) || IS_LOCALHOST;
+  const purgeItem = async (id) => {
+    const target = trash.find((item) => item.id === id);
+    const note = syncCode() ? "\n開了同步,其他裝置也會一起刪掉。" : "";
+    if (!window.confirm(`永久刪除「${target?.name || "這件"}」?刪了就救不回來。${note}`)) return;
+    if (id.startsWith("local-")) {
+      noteDeliberateDelete(id);   // 同步不用再問一次「這台少了幾件」
+      await deleteLocalItem(id);
+    } else if (IS_LOCALHOST) {
+      try { await fetch(`/api/import/wardrobe/${id}`, { method: "DELETE" }); } catch { /* 沒有開發伺服器就算了,照舊隱藏 */ }
+      removePersistedEdit(id);
+      if (target?.overridden) { noteDeliberateDelete(`override-${id}`); await deleteLocalItem(`override-${id}`); }
+    }
+    await settleRefresh();
+  };
+  // 放超過 30 天的自己加的:打開網站時真的刪掉(一次瀏覽只做一次)
+  const purgedOldRef = useRef(false);
+  useEffect(() => {
+    if (loading || purgedOldRef.current) return;
+    purgedOldRef.current = true;
+    const cutoff = Date.now() - TRASH_DAYS * 864e5;
+    const expired = trash.filter((item) => item.isLocal && item.trashedAt && Date.parse(item.trashedAt) < cutoff);
+    if (!expired.length) return;
+    (async () => {
+      for (const item of expired) { noteDeliberateDelete(item.id); await deleteLocalItem(item.id); }
+      settleRefresh();
+    })();
+  }, [loading, trash]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 換一張圖(2026-10-06):自己加的直接換掉那件的圖;站主衣櫃的另存一張 override-<id>(跟著同步),可以換回原圖
+  const [replaceRequest, setReplaceRequest] = useState(null);
+  const replaceImage = async (item, blob) => {
+    if (item.isLocal) await updateLocalItem(item.id, { blob });
+    else await putLocalRecord({ id: `override-${item.id}`, overrideFor: item.id, blob, createdAt: new Date().toISOString() });
+    await settleRefresh();
+    say(`「${item.name || "這件"}」換好新圖了。`);
+  };
+  const restoreOriginalImage = async (item) => {
+    noteDeliberateDelete(`override-${item.id}`);
+    await deleteLocalItem(`override-${item.id}`);
+    await settleRefresh();
+    say(`「${item.name || "這件"}」換回原本的圖了。`);
   };
 
   return (
@@ -1357,7 +1469,7 @@ export function App() {
           {!showWelcome && closetSwitch}
           {view === "closet" && (
             <nav className="category-nav" aria-label="依類型篩選衣櫃" ref={categoryNavRef}>
-              {(wishCount ? [...TYPES, { id: "wishlist", label: `想買的 ${wishCount}` }] : TYPES).map((type) => (
+              {[...TYPES, ...(wishCount ? [{ id: "wishlist", label: `想買的 ${wishCount}` }] : []), ...(trashCount ? [{ id: "trash", label: `垃圾桶 ${trashCount}` }] : [])].map((type) => (
                 <button
                   key={type.id}
                   type="button"
@@ -1399,7 +1511,14 @@ export function App() {
           </p>
         )}
         {/* 浮在畫面上方:入口頁是滿版的、單品頁在手機上蓋滿整個畫面,放在頁面裡會看不到(審查抓到) */}
-        {notice && <p className="app-notice" role="status">{notice}</p>}
+        {notice && (
+          <p className={noticeAction ? "app-notice has-action" : "app-notice"} role="status">
+            {notice}
+            {noticeAction && (
+              <button type="button" onClick={() => { const { run } = noticeAction; setNotice(""); setNoticeAction(null); run(); }}>{noticeAction.label}</button>
+            )}
+          </p>
+        )}
         {error && <p className="status error">{error}</p>}
         {view !== "landing" && !error && loading && <p className="status">衣櫃載入中</p>}
         {/* 只看「想買的」分頁時它自己會列出來;入口、搭配、其他分頁仍要講,不然空白一片 */}
@@ -1410,13 +1529,15 @@ export function App() {
             onAdd={requestAdd}
             onDemo={() => chooseCloset("demo")}
             onSync={() => setSyncOpen(true)}
+            trashCount={trashCount}
+            onOpenTrash={() => { setView("closet"); setActiveType("trash"); }}
             onImportFile={async (file) => {
               const message = await importBackupFile(file, Boolean(syncCode()));
               if (message) say(message);
             }}
           />
         )}
-        {!error && !loading && !ownedItems.length && !(view === "closet" && activeType === "wishlist" && wishCount) && !showWelcome && (
+        {!error && !loading && !ownedItems.length && !(view === "closet" && activeType === "wishlist" && wishCount) && !(view === "closet" && activeType === "trash" && trashCount) && !showWelcome && (
           wishCount ? (
             <p className="status empty">
               你加的 {wishCount} 件在「想買的」裡。還沒買的不算進衣櫃,買了以後點開那件按「已經買了」。
@@ -1443,10 +1564,13 @@ export function App() {
         )}
 
         {/* 示範衣櫃的眼鏡、手錶這幾類是 0 件,點下去整頁空白(審查 F52) */}
-        {view === "closet" && !!ownedItems.length && !visibleItems.length && activeType !== "wishlist" && (
+        {view === "closet" && !!ownedItems.length && !visibleItems.length && activeType !== "wishlist" && activeType !== "trash" && (
           <p className="status empty">這一類還沒有單品。</p>
         )}
-        {view === "closet" && !!closetItems.length && (
+        {view === "closet" && activeType === "trash" && !!trashCount && (
+          <TrashGrid items={trashItems} onRestore={restoreItem} onPurge={purgeItem} canPurge={canPurge} />
+        )}
+        {view === "closet" && !!closetItems.length && activeType !== "trash" && (
           <section className="gallery-grid" aria-label={`${activeType === "wishlist" ? "想買的" : TYPE_MAP[activeType]?.label || "全部"}衣物`}>
             {visibleItems.map((item) => (
               <GalleryItem
@@ -1460,6 +1584,10 @@ export function App() {
           </section>
         )}
       </main>
+
+      {CAN_ADD && (
+        <AddGarment hideButton replaceRequest={replaceRequest} onReplaced={replaceImage} onAdded={() => {}} />
+      )}
 
       {selectedItem && (
         <ItemViewer
@@ -1475,6 +1603,8 @@ export function App() {
           onBought={markBought}
           onSetUrl={setWishUrl}
           onSetPrice={setItemPrice}
+          onReplaceImage={CAN_ADD && canEditItem(selectedItem) ? (item) => setReplaceRequest({ item, n: Date.now() }) : null}
+          onRestoreImage={restoreOriginalImage}
         />
       )}
     </div>
