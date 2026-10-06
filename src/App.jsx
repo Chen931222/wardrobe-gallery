@@ -1,6 +1,6 @@
 // [本 fork 修改] 上游 tandpfun/wardrobe 既有檔案。本 fork 的改動:介面全繁中化並擴充分類,新增入口環/衣櫃/搭配三頁切換、IndexedDB 本機衣物合併與格子刪除鈕。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Plus, Sparkle, Star, Trash, X } from "@phosphor-icons/react";
+import { Camera, Check, Plus, Sparkle, Star, Trash, X } from "@phosphor-icons/react";
 import { OptimizedImage } from "./OptimizedImage.jsx";
 import { OutfitStudio, rememberWearing } from "./OutfitStudio.jsx";
 import { LandingRing } from "./LandingRing.jsx";
@@ -876,7 +876,8 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
       price, priceCurrency: price ? draft.priceCurrency || "TWD" : null,
     });
     setSampling(null);
-    setSampleStatus("已儲存。");
+    // 存完就關掉,回到原本那一格(2026-10-06 本人要的;舊版存完停在原地,只在表單裡寫一行「已儲存」)
+    onClose();
   };
 
   const handleImageLoad = (event) => {
@@ -929,6 +930,12 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
         onClick={handleImageClick}
       />
       {sampling && <span className="sample-hint">點衣服吸色</span>}
+      {/* 換圖放在圖上(2026-10-06):本人在下面那一排沒找到;想換圖時眼睛本來就在看圖 */}
+      {onReplaceImage && !sampling && (
+        <button type="button" className="viewer-art-replace" onClick={() => onReplaceImage(item)} disabled={gone}>
+          <Camera size={15} weight="regular" aria-hidden="true" /> 換圖
+        </button>
+      )}
     </div>
   );
 
@@ -1002,10 +1009,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
                   <Sparkle size={15} weight="regular" aria-hidden="true" /> 在搭配頁穿上
                 </button>
               )}
-              {/* 換圖(2026-10-06):去背沒去乾淨、拍得不好,換一張;站主衣櫃的換過可以換回原圖 */}
-              {onReplaceImage && (
-                <button className="secondary-button" type="button" onClick={() => onReplaceImage(item)} disabled={gone}>換一張圖</button>
-              )}
+              {/* 換圖的按鈕在圖的右下角;站主衣櫃的換過,這裡可以換回原圖 */}
               {item.overridden && onRestoreImage && (
                 <button className="secondary-button" type="button" onClick={() => onRestoreImage(item)} disabled={gone}>換回原圖</button>
               )}
@@ -1341,6 +1345,7 @@ export function App() {
 
   const saveItem = (updatedItem) => {
     setItems((current) => current.map((item) => item.id === updatedItem.id ? updatedItem : item));
+    say(`「${updatedItem.name || "這件"}」存好了。`);   // 單品頁存完就關掉,「存好了」改在上方講
     // 原本的樣子 = 還沒套任何編輯的那份(站主的從 wardrobe.json、自己加的從 IndexedDB)
     const original = [...(servedRef.current || []), ...(localRef.current || [])].find((item) => item.id === updatedItem.id);
     persistEdit(updatedItem, original);

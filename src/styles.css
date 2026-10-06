@@ -495,6 +495,20 @@ h1, h2, h3 {
   position: relative;
 }
 
+/* 圖右下角的「換圖」:半透明紙底,不搶衣服的戲,但一眼看得到 */
+.viewer-art-replace {
+  position: absolute; right: 0; bottom: 10px; z-index: 2;
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 36px; padding: 6px 12px;
+  border: 1px solid var(--line); border-radius: 0;
+  background: var(--paper-veil); color: var(--ink);
+  font: inherit; font-size: 12.5px; white-space: nowrap; cursor: pointer;
+  transition: border-color 160ms ease;
+}
+.viewer-art-replace:hover { border-color: var(--ink); }
+.viewer-art-replace:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.viewer-art-replace:disabled { opacity: .5; cursor: default; }
+
 .viewer-art img {
   width: 100%;
   height: 100%;
