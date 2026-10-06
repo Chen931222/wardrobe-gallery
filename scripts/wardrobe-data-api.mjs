@@ -22,6 +22,11 @@ import { demoCloset } from "../src/demoCloset.js";
 const LIBRARY = path.resolve("data/library.json");
 const ASSET_DIR = path.resolve("data/imported");
 
+// 這些端點只給本機(2026-10-06):開發版不驗證,完整的衣櫃、原圖、刪檔都在這裡。
+// vite.config 已經只聽 127.0.0.1;這是第二道,哪天有人加了 --host 也不會把資料端給區網上的人
+const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
+const fromThisMachine = (req) => LOOPBACK.has(req.socket?.remoteAddress);
+
 const MIME = { ".webp": "image/webp", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg" };
 
 const sendJson = (res, status, body) => {
@@ -47,6 +52,7 @@ export function wardrobeDataApi() {
         const url = new URL(req.url, "http://localhost");
         const isRead = url.pathname === "/data/wardrobe.json" || url.pathname === "/api/closet" || url.pathname.startsWith("/data/library/");
         if (!isRead && !url.pathname.startsWith("/api/import/")) return next();
+        if (!fromThisMachine(req)) return sendJson(res, 403, { error: "開發用的衣櫃資料只給這台電腦" });
 
         try {
           if (url.pathname === "/data/wardrobe.json" && req.method === "GET") {
