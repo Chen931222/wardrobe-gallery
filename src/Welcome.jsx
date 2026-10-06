@@ -23,7 +23,7 @@ function MiniLook({ outfit }) {
           <img
             key={slot}
             className="studio-garment"
-            src={item.image}
+            src={item.thumbnail || item.image /* 人台只有 128–240px 寬,縮圖(長邊 460px)就夠;原圖一張 ~150KB,新訪客第一眼要下載四張 */}
             alt=""
             draggable={false}
             style={{ left: `${place.left}%`, top: `${place.top}%`, width: `${place.width}%`, height: `${place.height}%`, zIndex: place.z }}

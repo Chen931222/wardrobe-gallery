@@ -113,10 +113,14 @@ const SECURITY_HEADERS = [
 ];
 // 衣服的資料檔和 API 不進搜尋引擎、不被封存(robots.txt 之外多一層;2026-10-06 資安盤點)
 const NO_INDEX = [{ key: "X-Robots-Tag", value: "noindex, noarchive, nosnippet" }];
+// /assets/ 的檔名帶內容雜湊(Vite 打包),內容變了檔名就變:存一年、不用再問。
+// Vercel 預設是 max-age=0,手機每次打開都要把 JS、CSS、十幾個字型檔一個個問過伺服器才肯用(2026-10-06 本人回報「載入有點慢」)
+const IMMUTABLE = [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }];
 await writeFile(join(OUT, "vercel.json"), JSON.stringify({
   git: { deploymentEnabled: false },
   headers: [
     { source: "/(.*)", headers: SECURITY_HEADERS },
+    { source: "/assets/(.*)", headers: IMMUTABLE },
     { source: "/data/(.*)", headers: NO_INDEX },
     { source: "/api/(.*)", headers: NO_INDEX },
   ],

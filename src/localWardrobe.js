@@ -61,7 +61,9 @@ export const BROKEN_IMAGE = `data:image/svg+xml;charset=utf-8,${encodeURICompone
 /* 圖的 object URL 依 id 重用:同步後會常常重讀,每次都新建網址的話,舊的一直不釋放、
    格子和人台上的圖也會整批重新載入。圖換了(大小或格式不同)才換網址,不在清單裡的才釋放。
    網址是從記憶體裡的那份做的(見上面的地雷),所以資料庫那筆被重寫也不會壞。 */
-const urlCache = new Map();   // id → { size, type, url, broken }
+const urlCache = new Map();   // id → { size, type, url, broken }    原圖
+const thumbCache = new Map(); // id → { sig, url }                    縮圖(下面)
+const sigOf = (blob) => `${blob.size}:${blob.type}`;
 
 async function urlFor(record) {
   const hit = urlCache.get(record.id);
@@ -77,25 +79,169 @@ async function urlFor(record) {
   return next;
 }
 
-/** 讀出全部本機衣物,轉成和伺服器格式一致的物件(image 為 object URL)。
+/* 縮圖與原圖分開(2026-10-06 本人回報「載入有點慢、有時候卡卡的」):
+   格子、圓環、衣架上一格只有 ~170px 寬,舊版直接放原圖(長邊 1400px 上下的 PNG,一張動輒 1MB),
+   打開時還要把每一張原圖讀進記憶體(上面的地雷②)。實測(Chromium、CPU 慢 4 倍):100 件自己加的衣服
+   打開到看到衣櫃 1.1–1.8 秒,1 件時 0.3 秒;光是把原圖讀進記憶體就佔 0.5 秒,而且件數越多越慢。
+   現在:格子用長邊 460px 的縮圖(跟站主衣櫃的縮圖一樣大),存在另一個資料庫 —— 衣服那個資料庫不動,
+   同步、備份都碰不到;縮圖不見了、或圖換過,就從原圖重做一張。原圖等真的要用(點開那件、穿上人台、
+   做穿搭卡)才讀進記憶體:清單裡的 image 先放縮圖、標 fullImageId,要原圖的地方用 useFullImage.js。 */
+const THUMB_DB = "open-wardrobe-thumbs";
+const THUMB_STORE = "thumbs";
+const THUMB_SIDE = 460;
+
+function thumbTx(mode, run) {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(THUMB_DB, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(THUMB_STORE)) request.result.createObjectStore(THUMB_STORE, { keyPath: "id" });
+    };
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      try {
+        const transaction = db.transaction(THUMB_STORE, mode);
+        const result = run(transaction.objectStore(THUMB_STORE));
+        transaction.oncomplete = () => { db.close(); resolve(result?.result); };
+        transaction.onerror = () => { db.close(); reject(transaction.error); };
+        transaction.onabort = () => { db.close(); reject(transaction.error); };
+      } catch (error) {
+        db.close();
+        reject(error);
+      }
+    };
+  });
+}
+
+async function readThumbs() {
+  try {
+    return new Map(((await thumbTx("readonly", (store) => store.getAll())) || []).map((thumb) => [thumb.id, thumb]));
+  } catch {
+    return new Map();   // 縮圖的資料庫打不開:全部當作沒有,用原圖(跟舊版一樣)
+  }
+}
+
+/** 縮圖的網址。也從記憶體那份做(縮圖小,一件幾十 KB);沒有、跟原圖對不上、讀不到 → null,改用原圖並重做 */
+async function thumbUrl(id, sig, stored) {
+  const hit = thumbCache.get(id);
+  if (hit && hit.sig === sig) return hit.url;
+  if (!stored?.blob || stored.sig !== sig) return null;
+  try {
+    const url = URL.createObjectURL(await freshCopy(stored.blob));
+    if (hit) URL.revokeObjectURL(hit.url);
+    thumbCache.set(id, { sig, url });
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+async function makeThumb(blob) {
+  const bitmap = await createImageBitmap(blob);
+  try {
+    const scale = Math.min(1, THUMB_SIDE / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext("2d");
+    context.imageSmoothingQuality = "high";
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    // WebP 小很多;iPhone 的 Safari 做不出 WebP,會默默給 PNG(看 type 才知道),那就用 PNG
+    const webp = await new Promise((resolve) => canvas.toBlob(resolve, "image/webp", 0.86));
+    if (webp?.type === "image/webp") return webp;
+    return await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+  } finally {
+    bitmap.close?.();
+  }
+}
+
+/* 背景做縮圖:一次一張、每張之間讓出主執行緒;做好的最多每 4 秒通知一次(wardrobe-thumbs-ready),App 重讀,
+   格子一批批換成縮圖。這次打開做不出來的(原圖讀不到)記著,不一直重試。 */
+const thumbWanted = new Map();   // id → record
+const thumbFailed = new Set();
+let thumbBusy = null;            // 正在做的那件
+let thumbWork = null;
+
+function scheduleThumbs(records) {
+  for (const record of records) {
+    if (record.id !== thumbBusy && !thumbFailed.has(record.id)) thumbWanted.set(record.id, record);
+  }
+  if (thumbWork || !thumbWanted.size) return;
+  thumbWork = (async () => {
+    let made = 0, told = Date.now();
+    const tell = () => { made = 0; told = Date.now(); window.dispatchEvent(new Event("wardrobe-thumbs-ready")); };
+    while (thumbWanted.size) {
+      const [id, record] = thumbWanted.entries().next().value;
+      thumbWanted.delete(id);
+      thumbBusy = id;
+      try {
+        const blob = await makeThumb(record.blob);
+        if (!blob) throw new Error("做不出縮圖");
+        await thumbTx("readwrite", (store) => store.put({ id, sig: sigOf(record.blob), blob }));
+        made += 1;
+      } catch {
+        thumbFailed.add(id);
+      }
+      thumbBusy = null;
+      if (made && Date.now() - told > 4000) tell();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    }
+    if (made) tell();
+  })().finally(() => {
+    thumbWork = null;
+    if (thumbWanted.size) scheduleThumbs([]);
+  });
+}
+
+/** 讀出全部本機衣物,轉成和伺服器格式一致的物件(image、thumbnail 為 object URL)。
  *  讀不到回 null,不是 []:呼叫端要分得出「沒有衣服」和「這次讀不到」,不然會把畫面上的衣服清光。 */
 export async function loadLocalItems() {
   if (typeof indexedDB === "undefined") return [];
   try {
-    const records = (await tx("readonly", (store) => store.getAll())) || [];
+    const [records, thumbs] = await Promise.all([tx("readonly", (store) => store.getAll()).then((list) => list || []), readThumbs()]);
     const ids = new Set(records.map((record) => record.id));
-    for (const [id, hit] of urlCache) {
-      if (!ids.has(id)) { if (hit.url) URL.revokeObjectURL(hit.url); urlCache.delete(id); }
+    for (const cache of [urlCache, thumbCache]) {
+      for (const [id, hit] of cache) {
+        if (!ids.has(id)) { if (hit.url) URL.revokeObjectURL(hit.url); cache.delete(id); }
+      }
     }
-    return Promise.all(records.map(async (record) => {
+    const orphans = [...thumbs.keys()].filter((id) => !ids.has(id));
+    if (orphans.length) thumbTx("readwrite", (store) => { orphans.forEach((id) => store.delete(id)); }).catch(() => {});
+    const missing = [];
+    const items = await Promise.all(records.map(async (record) => {
       if (!record.blob) return { ...record, image: BROKEN_IMAGE, thumbnail: BROKEN_IMAGE, imageBroken: true, isLocal: true };
+      const full = urlCache.get(record.id);
+      const fullReady = full && !full.broken && full.size === record.blob.size && full.type === record.blob.type;
+      const thumb = await thumbUrl(record.id, sigOf(record.blob), thumbs.get(record.id));
+      if (thumb) {
+        // 原圖這次已經讀過就直接給;還沒讀過先拿縮圖頂著
+        return { ...record, image: fullReady ? full.url : thumb, thumbnail: thumb, ...(fullReady ? {} : { fullImageId: record.id }), isLocal: true };
+      }
+      // 還沒有縮圖(剛加的、這版之前加的、換過圖的):跟舊版一樣用原圖,背景做縮圖
+      if (!thumbFailed.has(record.id)) missing.push(record);
       const { url, broken } = await urlFor(record);
       const image = broken ? BROKEN_IMAGE : url;
       return { ...record, image, thumbnail: image, ...(broken ? { imageBroken: true } : {}), isLocal: true };
     }));
+    if (missing.length) scheduleThumbs(missing);
+    return items;
   } catch {
     return null;
   }
+}
+
+/** 一件自己加的衣服的原圖網址,要用時才讀進記憶體(同一件同時要好幾次只讀一次)。讀不到回 null,呼叫的地方繼續用縮圖。 */
+const fullPending = new Map();
+export function localFullImage(id) {
+  if (!fullPending.has(id)) {
+    fullPending.set(id, (async () => {
+      const record = await readLocalRecord(id);
+      if (!record?.blob) return null;
+      const { url, broken } = await urlFor(record);
+      return broken ? null : url;
+    })().catch(() => null).finally(() => fullPending.delete(id)));
+  }
+  return fullPending.get(id);
 }
 
 export async function saveLocalItem({ id, name, part, color, secondaryColor, tags, blob, wishlist, sourceUrl, price, priceCurrency }) {

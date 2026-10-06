@@ -8,6 +8,7 @@ import { downloadBackupZip, importBackupFile } from "./backup.js";
 import { LookCard } from "./LookCard.jsx";
 import { PART_ORDER, PARTS } from "./parts.js";
 import { noteDislike, noteRecommendation, noteWear, readTaste, recoStats, unnoteWear } from "./taste.js";
+import { useFullImages } from "./useFullImage.js";
 
 // 搭配工作室:把去背衣物疊在人形上組穿搭。
 //
@@ -239,6 +240,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   }, [items]);
 
   const wornItems = Object.values(wearing).filter(Boolean);
+  const fullImage = useFullImages(wornItems);   // 人台上的用原圖(自己加的衣服清單裡是縮圖)
 
   /* ---------- 幾何:算出一件衣服「未旋轉縮放前」的內容框(px) ---------- */
   // 圖片以 object-fit: contain、object-position: center top 放進槽位框,
@@ -952,7 +954,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
                 key={slot}
                 data-item={item.id}
                 className={`studio-garment${isActive ? " is-adjusting" : ""}${adjusting && !isActive ? " is-dimmed" : ""}`}
-                src={item.image}
+                src={fullImage(item)}
                 alt={item.name || SLOT_LABEL[slot]}
                 draggable={false}
                 crossOrigin="anonymous"

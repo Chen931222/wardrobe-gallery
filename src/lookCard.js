@@ -6,6 +6,8 @@
 //
 // 顏色與字型直接讀站上的 CSS 變數,卡片跟網站同一個味道(印刷品,不是 AI 生圖)。
 
+import { fullImageOf } from "./useFullImage.js";
+
 const W = 1080, H = 1350, PAD = 80, CAPTION_H = 200;
 
 function readTheme() {
@@ -239,7 +241,7 @@ export async function renderLookCard({ style = "flatlay", outfit, fits = {}, slo
   await ensureFonts();
   const entries = Object.entries(outfit).filter(([, item]) => item);
   if (!entries.length) throw new Error("身上沒有衣服");
-  const pieces = await Promise.all(entries.map(async ([slot, item]) => ({ slot, item, img: await loadImage(item.image) })));
+  const pieces = await Promise.all(entries.map(async ([slot, item]) => ({ slot, item, img: await loadImage(await fullImageOf(item)) })));
 
   const canvas = document.createElement("canvas");
   canvas.width = W; canvas.height = H;

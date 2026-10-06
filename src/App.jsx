@@ -21,6 +21,7 @@ import { Welcome } from "./Welcome.jsx";
 import { demoCloset } from "./demoCloset.js";
 import { PART_GROUPS, PART_ORDER, PARTS } from "./parts.js";
 import { FAVORITES_KEY, readFavorites, toggleFavorite } from "./favorites.js";
+import { useFullImage } from "./useFullImage.js";
 import { partFromName } from "./brandLink.js";
 import { noteRecommendation } from "./taste.js";
 
@@ -72,9 +73,11 @@ const tagLabel = (tag) => TAG_ZH[String(tag).toLowerCase()] || tag;
    網路斷、伺服器錯 → 丟錯,refresh 沿用上一份,不讓衣服從畫面上消失。
    完整的那份一次瀏覽只抓一次:它只在重新部署時才會變,同步事件一來就重抓只是白打 function。 */
 let ownerCloset = null;   // 抓完整衣櫃的那一次(Promise);同時發的幾次 refresh 共用,抓到了這次瀏覽就不再抓
+let ownerClosetDone = false;   // 這次瀏覽已經抓到了(之後直接用,不再先給存著的那份)
 function fetchOwnerCloset() {
   if (!ownerCloset) {
     const code = syncCode();
+    ownerClosetDone = false;
     ownerCloset = fetch("/api/closet", { cache: "no-store", headers: code ? { "x-sync-code": code } : {} }).then(async (response) => {
       if (response.ok) return { list: await response.json(), locked: false };
       await response.text().catch(() => "");   // 沒用到的回應也要讀完,不然那條連線一直掛著(只取消不算數)
@@ -82,10 +85,38 @@ function fetchOwnerCloset() {
       throw new Error("衣櫃載入失敗。");
     });
     // 沒拿到的(還沒輸入同步碼、網路斷)不記住:輸入碼之後、網路回來的下一次 refresh 再抓
-    ownerCloset.then((result) => { if (result.locked) ownerCloset = null; }, () => { ownerCloset = null; });
+    ownerCloset.then((result) => { if (result.locked) ownerCloset = null; else ownerClosetDone = true; }, () => { ownerCloset = null; });
   }
   return ownerCloset;
 }
+
+/* 站主的衣櫃先給上次那份(2026-10-06 本人回報「載入有點慢」):/api/closet 是 Vercel function,
+   實測熱的 0.35 秒、冷啟動 1.2 秒,舊版每次打開都等它回來才畫得出衣櫃。那份只在重新部署時才變,
+   所以存一份在這台:打開先畫存著的,背景照樣抓最新的,不一樣才重讀一次(發 wardrobe-closet-updated)。
+   只存在有同步碼的這台;碼沒了、或伺服器說碼不對(locked),存的那份馬上丟掉。不進備份(backup.js 的 DEVICE_ONLY)。 */
+const CLOSET_CACHE_KEY = "open-wardrobe-closet-cache-v1";
+const readClosetCache = () => {
+  try { const list = JSON.parse(localStorage.getItem(CLOSET_CACHE_KEY) || "null"); return Array.isArray(list) ? list : null; } catch { return null; }
+};
+const writeClosetCache = (list) => {
+  try {
+    const text = JSON.stringify(list);
+    if (localStorage.getItem(CLOSET_CACHE_KEY) === text) return false;
+    localStorage.setItem(CLOSET_CACHE_KEY, text);
+    return true;
+  } catch { return false; }   // 私密瀏覽、空間滿:不存就是每次等網路,跟舊版一樣
+};
+const clearClosetCache = () => { try { localStorage.removeItem(CLOSET_CACHE_KEY); } catch { /* 私密瀏覽 */ } };
+let watchingFresh = null;   // 正在等哪一次抓取回來比對(同時幾次 refresh 只比一次)
+function watchFreshCloset(pending) {
+  if (watchingFresh === pending) return;
+  watchingFresh = pending;
+  pending.then((result) => {
+    const changed = result.locked ? (clearClosetCache(), true) : writeClosetCache(result.list);
+    if (changed) window.dispatchEvent(new Event("wardrobe-closet-updated"));
+  }, () => {});   // 網路斷:畫面上那份照用,下次打開再抓
+}
+
 async function loadServed() {
   const demo = async () => {
     const response = await fetch("/data/wardrobe.json", { cache: "no-store" });
@@ -93,7 +124,16 @@ async function loadServed() {
     return demoCloset(await response.json());
   };
   if (!CAN_EDIT) return { list: await demo(), locked: false };
-  const result = await fetchOwnerCloset();
+  const code = syncCode();
+  if (!code) clearClosetCache();
+  const pending = fetchOwnerCloset();
+  const cached = !ownerClosetDone && code ? readClosetCache() : null;
+  if (cached) {
+    watchFreshCloset(pending);
+    return { list: cached, locked: false };
+  }
+  const result = await pending;
+  if (result.locked || !code) clearClosetCache(); else writeClosetCache(result.list);
   return result.locked ? { list: await demo(), locked: true } : result;
 }
 const TYPE_ORDER = Object.fromEntries(TYPES.slice(1).map((type, index) => [type.id, index]));
@@ -806,6 +846,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
   // 焦點圈在單品頁裡、關掉後回到原本點的那格(審查 F46)。Esc 照下面自己的處理(先取消吸色、有沒存的先擋)
   useDialog(dialogRef, null, { initialFocus: closeButtonRef });
   const imageRef = useRef(null);
+  const viewImage = useFullImage(item);   // 自己加的衣服:清單裡是縮圖,這裡換成原圖
   const samplingCanvasRef = useRef(null);
   const shakeTimerRef = useRef(null);
   const [sampling, setSampling] = useState(null);
@@ -1002,7 +1043,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
     >
       <OptimizedImage
         ref={imageRef}
-        src={item.image}
+        src={viewImage}
         alt={`選中的${type}`}
         sizes="(max-width: 520px) 40vw, 300px"
         breakpoints={[160, 240, 320, 480, 640]}
@@ -1213,7 +1254,8 @@ export function App() {
     const overrides = new Map(localAll.filter((record) => record.overrideFor).map((record) => [record.overrideFor, record]));
     const servedList = (served || servedRef.current || []).map((item) => {
       const override = overrides.get(item.id);
-      return override ? { ...item, image: override.image, thumbnail: override.image, overridden: true } : item;
+      // 換上的那張也是這台的圖:清單裡先放縮圖,單品頁、人台用 fullImageId 讀原圖(useFullImage.js)
+      return override ? { ...item, image: override.image, thumbnail: override.thumbnail || override.image, fullImageId: override.fullImageId, overridden: true } : item;
     });
     const mine = localAll.filter((record) => !record.overrideFor);
     const withEdits = (item) => ({ ...item, ...(edits[item.id] || {}) });
@@ -1225,6 +1267,16 @@ export function App() {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+  // 站主的衣櫃先畫了存著的那份,背景抓到的不一樣(重新部署過、碼失效):重讀一次
+  // 自己加的衣服縮圖做好了(localWardrobe.js):重讀一次,格子換成縮圖
+  useEffect(() => {
+    window.addEventListener("wardrobe-closet-updated", refresh);
+    window.addEventListener("wardrobe-thumbs-ready", refresh);
+    return () => {
+      window.removeEventListener("wardrobe-closet-updated", refresh);
+      window.removeEventListener("wardrobe-thumbs-ready", refresh);
+    };
+  }, [refresh]);
   // 入口頁是滿版的,上面那條提示看不到:打開時講一次
   useEffect(() => {
     if (CAN_EDIT && ownerLocked) say("這台還沒輸入同步碼,看到的是示範衣櫃。到右上「同步」輸入同步碼,就會打開你的衣櫃。");
