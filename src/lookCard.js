@@ -90,17 +90,20 @@ function flatlayBoxes(has) {
   b.lowerbody = { x: 0.06, y: 0.50, w: 0.46, h: 0.50 };
 
   const column = [
-    ...["accessories_up", "eyewear", "wrist", "socks"].filter(has).map((slot) => ({ slot, x: 0.70, w: 0.26, h: 0.14 })),
+    ...["accessories_up", "eyewear", "necklace", "wrist", "ring", "belt", "carry", "socks"].filter(has).map((slot) => ({ slot, x: 0.70, w: 0.26, h: 0.14 })),
     ...(has("bag") ? [{ slot: "bag", x: 0.64, w: 0.32, h: 0.30 }] : []),
     ...(has("shoes") ? [{ slot: "shoes", x: 0.60, w: 0.36, h: 0.32 }] : []),
   ];
+  // 小東西多了(皮帶、戒指、項鍊都戴上)一欄會疊出畫面:整欄等比例縮到放得下
   const gap = 0.04;
-  const total = column.reduce((sum, c) => sum + c.h, 0) + gap * Math.max(0, column.length - 1);
+  const raw = column.reduce((sum, c) => sum + c.h, 0);
+  const fit = Math.min(1, (1 - gap * Math.max(0, column.length - 1)) / (raw || 1));
+  const total = raw * fit + gap * Math.max(0, column.length - 1);
   let y = Math.max(0, (1 - total) / 2);
-  for (const c of column) { b[c.slot] = { x: c.x, y, w: c.w, h: c.h }; y += c.h + gap; }
+  for (const c of column) { b[c.slot] = { x: c.x, y, w: c.w, h: c.h * fit }; y += c.h * fit + gap; }
   return b;
 }
-const FLATLAY_ORDER = ["wholebody_up", "lowerbody", "upperbody", "shoes", "bag", "accessories_up", "eyewear", "wrist", "socks"];
+const FLATLAY_ORDER = ["wholebody_up", "lowerbody", "upperbody", "shoes", "bag", "accessories_up", "eyewear", "necklace", "wrist", "ring", "belt", "carry", "socks"];
 
 function drawFlatlay(ctx, area, pieces) {
   const has = (slot) => pieces.some((p) => p.slot === slot);

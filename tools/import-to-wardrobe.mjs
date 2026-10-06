@@ -7,7 +7,7 @@ import path from "node:path";
 import process from "node:process";
 import sharp from "sharp";
 
-const PARTS = new Set(["upperbody", "wholebody_up", "lowerbody", "socks", "shoes", "bag", "eyewear", "wrist", "accessories_up"]);
+const PARTS = new Set(["upperbody", "wholebody_up", "lowerbody", "socks", "shoes", "bag", "eyewear", "wrist", "belt", "necklace", "ring", "accessories_up", "carry"]);
 const HEX = /^#[0-9a-f]{6}$/i;
 
 function usage(message) {

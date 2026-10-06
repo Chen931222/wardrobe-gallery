@@ -2,23 +2,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, SpinnerGap, X } from "@phosphor-icons/react";
 import { cropBlob, deleteLocalItem, findUrl, garmentColors, productUrlProblem, refillGaps, saveLocalItem, shrinkImage, trimTransparent } from "./localWardrobe.js";
+import { PART_GROUPS, PARTS } from "./parts.js";
 import { fetchBrandProduct, fetchProductPage, parseBrandLink, partFromName, partFromProduct, sameProduct } from "./brandLink.js";
 import { findSimilar, kindLabel } from "./wishCheck.js";
 import { useDialog } from "./useDialog.js";
 import { ScrollRail } from "./ScrollRail.jsx";
 import { CURRENCIES, parsePrice } from "./price.js";
 
-const PARTS = [
-  { id: "upperbody", label: "上衣" },
-  { id: "wholebody_up", label: "外套" },
-  { id: "lowerbody", label: "下身" },
-  { id: "socks", label: "襪子" },
-  { id: "shoes", label: "鞋子" },
-  { id: "bag", label: "包款" },
-  { id: "eyewear", label: "眼鏡" },
-  { id: "wrist", label: "手錶手環" },
-  { id: "accessories_up", label: "其他配件" },
-];
+// 分類清單在 src/parts.js(新增的選單照組排:衣服、鞋襪、配件、小物)
 
 const FULL = { x: 0, y: 0, w: 1, h: 1 };
 
@@ -854,7 +845,13 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
                 aria-invalid={!draft.part}
               >
                 <option value="" disabled>選一個</option>
-                {PARTS.map((part) => <option key={part.id} value={part.id}>{part.label}</option>)}
+                {PART_GROUPS.map((group) => (
+                  <optgroup key={group.id} label={group.label}>
+                    {group.parts.map((part) => (
+                      <option key={part} value={part}>{PARTS[part].label}{PARTS[part].hint ? `(${PARTS[part].hint})` : ""}</option>
+                    ))}
+                  </optgroup>
+                ))}
               </select>
               {!draft.part && <small className="add-hint">選好分類才能存。</small>}
             </label>

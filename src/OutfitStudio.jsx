@@ -6,6 +6,7 @@ import { adjustIntent, fetchWeather, findItemForSwap, parseRequest, randomOutfit
 import { syncCode } from "./sync.js";
 import { downloadBackupZip, importBackupFile } from "./backup.js";
 import { LookCard } from "./LookCard.jsx";
+import { PART_ORDER, PARTS } from "./parts.js";
 import { noteDislike, noteRecommendation, noteWear, readTaste, recoStats, unnoteWear } from "./taste.js";
 
 // 搭配工作室:把去背衣物疊在人形上組穿搭。
@@ -33,21 +34,24 @@ export const SLOT_STYLE = {
   shoes:          { left: 36, top: 82,   width: 28, height: 18,   z: 3 },
   lowerbody:      { left: 31, top: 51,   width: 38, height: 44,   z: 4 },
   upperbody:      { left: 25, top: 16,   width: 50, height: 36,   z: 5 },
-  wholebody_up:   { left: 22, top: 14.5, width: 56, height: 42,   z: 6 },
+  // 2026-10-06 加的皮帶、項鍊、戒指、隨身小物(位置對著 Silhouette 的 200×340:腰 y≈165–178、脖子 y≈46–60、
+  // 右手下緣 y≈150–165、胸前口袋 x≈108–122)。皮帶壓在上衣下擺上面,不然整條被上衣蓋住;外套還是在它上面
+  belt:           { left: 34, top: 48.5, width: 32, height: 5.5,  z: 6 },
+  wholebody_up:   { left: 22, top: 14.5, width: 56, height: 42,   z: 7 },
+  necklace:       { left: 41, top: 15,   width: 18, height: 9,    z: 8 },
   // 包的長寬比從 0.84(後背包)到 1.40(半月斜背包)都有。框開 38% 寬時全部都會
   // 撐到 144px = 跟寬褲一樣寬,像揹了個行李箱。收到 26% 後一律渲染 98px 寬,
   // 約寬褲的七成,才像掛在右腰的包。
-  bag:            { left: 54, top: 46,   width: 26, height: 19,   z: 7 },
-  eyewear:        { left: 38, top: 3.5,  width: 24, height: 8,    z: 8 },
-  wrist:          { left: 23, top: 41,   width: 15, height: 8,    z: 8 },
-  accessories_up: { left: 62, top: 1,    width: 30, height: 15,   z: 8 },
+  bag:            { left: 54, top: 46,   width: 26, height: 19,   z: 9 },
+  eyewear:        { left: 38, top: 3.5,  width: 24, height: 8,    z: 10 },
+  wrist:          { left: 23, top: 41,   width: 15, height: 8,    z: 10 },
+  ring:           { left: 66, top: 44,   width: 8,  height: 5,    z: 10 },
+  carry:          { left: 56, top: 20,   width: 6,  height: 10,   z: 10 },
+  accessories_up: { left: 62, top: 1,    width: 30, height: 15,   z: 10 },
 };
 
-const SLOT_LABEL = {
-  upperbody: "上衣", wholebody_up: "外套", lowerbody: "下身",
-  socks: "襪子", shoes: "鞋子", bag: "包款",
-  eyewear: "眼鏡", wrist: "手錶手環", accessories_up: "其他配件",
-};
+// 衣架的分類、理由裡的名稱:跟衣櫃同一份(src/parts.js),順序也一樣
+const SLOT_LABEL = Object.fromEntries(PART_ORDER.map((part) => [part, PARTS[part].label]));
 
 function readLooks() {
   try {
@@ -536,7 +540,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       noteRecommendation(result.outfit, result.recalled);
       shownRef.current = [Object.values(result.outfit).filter(Boolean).map((item) => item.id), ...shownRef.current].slice(0, 3);
       // 眼鏡、手錶、配件現在引擎也會挑(2026-10-06);這次沒挑到的那格,身上有就留著,別每次推薦都被脫掉
-      for (const slot of ["eyewear", "wrist", "accessories_up"]) if (wearing[slot] && !result.outfit[slot]) result.outfit[slot] = wearing[slot];
+      for (const slot of ["eyewear", "wrist", "belt", "necklace", "ring", "accessories_up", "carry"]) if (wearing[slot] && !result.outfit[slot]) result.outfit[slot] = wearing[slot];
       if (notes.length) result.reasons.unshift(...notes);
       const lockedLabels = Object.keys(locked).map((slot) => SLOT_LABEL[slot]);
       if (lockedLabels.length) result.reasons.push(`鎖住沒動:${lockedLabels.join("、")}`);
@@ -1174,7 +1178,8 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
 
       <aside className="studio-rack">
         <nav className="studio-rack-nav" aria-label="依類型挑衣服">
-          {Object.entries(SLOT_LABEL).map(([slot, label]) => (
+          {/* 沒有衣服的分類不列(正在看的那類除外):分類多了,一整排 0 只是擋路 */}
+          {Object.entries(SLOT_LABEL).filter(([slot]) => wardrobeByType[slot]?.length || stripType === slot).map(([slot, label]) => (
             <button
               key={slot}
               type="button"

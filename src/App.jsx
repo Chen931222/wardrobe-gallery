@@ -1,6 +1,6 @@
 // [本 fork 修改] 上游 tandpfun/wardrobe 既有檔案。本 fork 的改動:介面全繁中化並擴充分類,新增入口環/衣櫃/搭配三頁切換、IndexedDB 本機衣物合併與格子刪除鈕。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Plus, Sparkle, Trash, X } from "@phosphor-icons/react";
+import { Check, Plus, Sparkle, Star, Trash, X } from "@phosphor-icons/react";
 import { OptimizedImage } from "./OptimizedImage.jsx";
 import { OutfitStudio, rememberWearing } from "./OutfitStudio.jsx";
 import { LandingRing } from "./LandingRing.jsx";
@@ -19,23 +19,19 @@ import { downloadBackupZip, importBackupFile } from "./backup.js";
 import { backupReminder, inAppBrowser, isIos, isStandalone, requestPersist, snoozeBackupHint } from "./keepSafe.js";
 import { Welcome } from "./Welcome.jsx";
 import { demoCloset } from "./demoCloset.js";
+import { PART_GROUPS, PART_ORDER, PARTS } from "./parts.js";
+import { FAVORITES_KEY, readFavorites, toggleFavorite } from "./favorites.js";
+import { partFromName } from "./brandLink.js";
 import { noteRecommendation } from "./taste.js";
 
 const STORAGE_KEY = "open-wardrobe-edits-v1";
 const DELETED_STORAGE_KEY = "open-wardrobe-deleted-v1";
 
 // 由上到下、由主到次排列,和穿搭頁的槽位順序一致
+// 分類只有 src/parts.js 一份(2026-10-06 加了皮帶、項鍊、戒指、隨身小物)
 const TYPES = [
   { id: "all", label: "全部" },
-  { id: "upperbody", label: "上衣", singular: "上衣" },
-  { id: "wholebody_up", label: "外套", singular: "外套" },
-  { id: "lowerbody", label: "下身", singular: "下身" },
-  { id: "socks", label: "襪子", singular: "襪子" },
-  { id: "shoes", label: "鞋子", singular: "鞋子" },
-  { id: "bag", label: "包款", singular: "包" },
-  { id: "eyewear", label: "眼鏡", singular: "眼鏡" },
-  { id: "wrist", label: "手錶手環", singular: "腕上配件" },
-  { id: "accessories_up", label: "其他配件", singular: "配件" },
+  ...PART_ORDER.map((id) => ({ id, label: PARTS[id].label, singular: PARTS[id].singular })),
 ];
 
 const TYPE_MAP = Object.fromEntries(TYPES.map((type) => [type.id, type]));
@@ -260,7 +256,7 @@ function sampleImageColor(image, canvas, event) {
   return null;
 }
 
-function GalleryItem({ item, selected, onOpen, onDelete }) {
+function GalleryItem({ item, selected, onOpen, onDelete, favorite = false }) {
   const type = TYPE_MAP[item.part]?.singular || "衣物";
   const label = item.name || type;
 
@@ -270,7 +266,7 @@ function GalleryItem({ item, selected, onOpen, onDelete }) {
         className="gallery-item"
         type="button"
         onClick={() => onOpen(item.id)}
-        aria-label={`查看${label}${item.wishlist ? "(還沒買)" : ""}`}
+        aria-label={`查看${label}${item.wishlist ? "(還沒買)" : ""}${favorite ? "(最愛)" : ""}`}
         aria-pressed={selected}
         data-testid={`wardrobe-item-${item.id}`}
       >
@@ -281,6 +277,7 @@ function GalleryItem({ item, selected, onOpen, onDelete }) {
           breakpoints={[120, 180, 240, 320, 480]}
         />
         {item.wishlist && <span className="wish-badge">想買</span>}
+        {favorite && <span className="fav-mark" aria-hidden="true"><Star size={13} weight="fill" /></span>}
       </button>
       {Boolean(item.price) && <span className="gallery-price">{formatPrice(item.price, item.priceCurrency)}</span>}
       {canEditItem(item) && (
@@ -294,6 +291,41 @@ function GalleryItem({ item, selected, onOpen, onDelete }) {
         </button>
       )}
     </div>
+  );
+}
+
+/* 衣櫃目錄(2026-10-06 本人選的)。舊版是一長排橫向捲動的分類:iPhone 上只看得到 5–7 顆,
+   「想買的」「垃圾桶」排在最後面最難找,再加皮帶、戒指就更長。改成像書的目錄:每組一行、每類標件數,
+   一眼看完不用滑;沒有衣服的分類不列(正在看的那類除外),想加的時候新增的選單裡都有。 */
+function ClosetIndex({ activeType, onChoose, counts, total, favCount = 0, wishCount, trashCount }) {
+  const entry = (id, label, count) => (
+    <button key={id} type="button" className={activeType === id ? "active" : ""} aria-pressed={activeType === id} onClick={() => onChoose(id)}>
+      <span className="closet-index-label">{label}</span><span className="closet-index-count">{count}</span>
+    </button>
+  );
+  return (
+    <nav className="closet-index" aria-label="衣櫃目錄">
+      <div className="closet-index-top">
+        {entry("all", "全部", total)}
+        {(favCount > 0 || wishCount > 0 || trashCount > 0) && (
+          <span className="closet-index-extra">
+            {favCount > 0 && entry("favorites", "最愛", favCount)}
+            {wishCount > 0 && entry("wishlist", "想買的", wishCount)}
+            {trashCount > 0 && entry("trash", "垃圾桶", trashCount)}
+          </span>
+        )}
+      </div>
+      {PART_GROUPS.map((group) => {
+        const parts = group.parts.filter((part) => counts[part] || activeType === part);
+        if (!parts.length) return null;
+        return (
+          <div key={group.id} className="closet-index-row" role="group" aria-label={group.label}>
+            <span className="closet-index-group" aria-hidden="true">{group.label}</span>
+            <span className="closet-index-items">{parts.map((part) => entry(part, PARTS[part].short || PARTS[part].label, counts[part] || 0))}</span>
+          </div>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -450,7 +482,11 @@ function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleSta
       <label className="field">
         <span>分類</span>
         <select value={draft.part} onChange={(event) => setDraft((current) => ({ ...current, part: event.target.value }))}>
-          {TYPES.slice(1).map((type) => <option value={type.id} key={type.id}>{type.label}</option>)}
+          {PART_GROUPS.map((group) => (
+            <optgroup key={group.id} label={group.label}>
+              {group.parts.map((part) => <option value={part} key={part}>{PARTS[part].label}</option>)}
+            </optgroup>
+          ))}
         </select>
       </label>
 
@@ -700,7 +736,7 @@ function rebaseDraft(draft, before, after) {
 }
 
 /** @param gone 這件在別台被刪掉或隱藏了:頁面留著(草稿還在、可以複製),但存檔、刪除、穿上這些動作都關掉 */
-function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWear, onBought, onSetUrl, onSetPrice, onOpen, onWearOutfit, onReplaceImage, onRestoreImage }) {
+function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWear, onBought, onSetUrl, onSetPrice, onOpen, onWearOutfit, onReplaceImage, onRestoreImage, favorite = false, onToggleFavorite = null }) {
   const closeButtonRef = useRef(null);
   const dialogRef = useRef(null);
   // 焦點圈在單品頁裡、關掉後回到原本點的那格(審查 F46)。Esc 照下面自己的處理(先取消吸色、有沒存的先擋)
@@ -863,6 +899,20 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
     setSampling(null);
   };
 
+  // 最愛(2026-10-06):名稱旁邊一顆星,點了加入;衣櫃目錄的「最愛」只看這些
+  const favoriteButton = onToggleFavorite && (
+    <button
+      type="button"
+      className={favorite ? "viewer-fav is-on" : "viewer-fav"}
+      aria-pressed={favorite}
+      aria-label={favorite ? "從最愛拿掉" : "加到最愛"}
+      title={favorite ? "從最愛拿掉" : "加到最愛"}
+      onClick={() => onToggleFavorite(item.id)}
+    >
+      <Star size={20} weight={favorite ? "fill" : "regular"} aria-hidden="true" />
+    </button>
+  );
+
   const garmentArtwork = (
     <div
       className={`viewer-art${hasModeledImage ? " viewer-art-floating" : ""}${sampling ? " sampling" : ""}`}
@@ -905,6 +955,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
             <div>
               <h2>{draft.name || TYPE_MAP[draft.part]?.singular}</h2>
             </div>
+            {favoriteButton}
           </div>
           {garmentArtwork}
         </div>
@@ -914,6 +965,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
             <div>
               <h2>{draft.name || TYPE_MAP[draft.part]?.singular}</h2>
             </div>
+            {favoriteButton}
           </div>
           {garmentArtwork}
         </>
@@ -1046,6 +1098,7 @@ export function App() {
   const appliedComplete = useRef(false);   // 畫面上那份兩邊都有讀到
   const [ownerLocked, setOwnerLocked] = useState(false);   // 擁有者模式但沒有開通的同步碼:看到的是示範衣櫃
   const [trash, setTrash] = useState([]);                   // 垃圾桶:刪掉、還沒真的刪的
+  const [favorites, setFavorites] = useState(readFavorites); // 最愛的 id(favorites.js)
   const refresh = useCallback(async () => {
     const seq = ++refreshSeq.current;
     let failed = null;
@@ -1164,10 +1217,24 @@ export function App() {
   // 垃圾桶跟著衣櫃走:站主看全部,訪客只看自己加的(示範衣櫃刪不了)
   const trashItems = useMemo(() => (closet === "all" ? trash : closet === "mine" ? trash.filter((item) => item.isLocal) : []), [trash, closet]);
   const trashCount = trashItems.length;
+  const favCount = useMemo(() => closetItems.filter((item) => favorites.has(item.id)).length, [closetItems, favorites]);
+  const onToggleFavorite = (id) => {
+    const next = toggleFavorite(id);
+    setFavorites(next);
+    const name = items.find((item) => item.id === id)?.name || "這件";
+    say(next.has(id) ? `「${name}」加到最愛了。` : `「${name}」從最愛拿掉了。`);
+  };
+  // 別台改了最愛(同步拉下來):重讀
+  useEffect(() => {
+    const onSynced = (event) => { if ((event.detail?.keys || []).includes(FAVORITES_KEY)) setFavorites(readFavorites()); };
+    window.addEventListener("wardrobe-synced", onSynced);
+    return () => window.removeEventListener("wardrobe-synced", onSynced);
+  }, []);
 
   const visibleItems = useMemo(() => {
     const filtered = activeType === "all" ? ownedItems
       : activeType === "wishlist" ? closetItems.filter((item) => item.wishlist)
+      : activeType === "favorites" ? closetItems.filter((item) => favorites.has(item.id))
       : closetItems.filter((item) => item.part === activeType);
     return [...filtered].sort((a, b) => {
       // 自己加的排最前面,越新越前面;站主那批沒有建立時間,接在後面照原本的類型順序
@@ -1176,13 +1243,13 @@ export function App() {
         if (!b.createdAt) return -1;
         return b.createdAt.localeCompare(a.createdAt);
       }
-      if (activeType === "all" || activeType === "wishlist") {
+      if (activeType === "all" || activeType === "wishlist" || activeType === "favorites") {
         const typeDifference = (TYPE_ORDER[a.part] ?? 99) - (TYPE_ORDER[b.part] ?? 99);
         if (typeDifference) return typeDifference;
       }
       return a.id.localeCompare(b.id);
     });
-  }, [activeType, closetItems, ownedItems]);
+  }, [activeType, closetItems, ownedItems, favorites]);
 
   // 帶進搭配頁的那套只用一次:離開搭配頁就清掉,不然回來時又被套回入口那套,蓋掉後來自己換的
   useEffect(() => {
@@ -1239,21 +1306,19 @@ export function App() {
   // 亮著的分類一律露出來:手機上「想買的」在分類列最右邊要橫滑才看得到,
   // 停在它上面卻看不到哪顆亮著,會以為衣服不見了(切去搭配再回來時分類列也會捲回最左邊)。
   // 只動分類列自己的橫向捲動;不用 scrollIntoView,它會連整頁一起捲,在格子中間刪一件就被拉回頂端
-  const categoryNavRef = useRef(null);
-  useEffect(() => {
-    const nav = categoryNavRef.current;
-    const button = nav?.querySelector("button.active");
-    if (view !== "closet" || !button) return;
-    const left = button.offsetLeft - nav.offsetLeft;
-    if (left < nav.scrollLeft) nav.scrollLeft = left - 16;
-    else if (left + button.offsetWidth > nav.scrollLeft + nav.clientWidth) nav.scrollLeft = left + button.offsetWidth - nav.clientWidth + 16;
-  }, [view, activeType, wishCount]);
+  // 目錄每一類的件數:點進去看到幾件就寫幾件(分類頁連想買的一起列)
+  const partCounts = useMemo(() => {
+    const counts = {};
+    for (const item of closetItems) counts[item.part] = (counts[item.part] || 0) + 1;
+    return counts;
+  }, [closetItems]);
 
   // 想買的全買了或刪光,那顆分類就消失了;停在上面會一片空白、沒有任何一顆亮著,退回「全部」
   useEffect(() => {
     if (!loading && activeType === "wishlist" && !wishCount) setActiveType("all");
     if (!loading && activeType === "trash" && !trashCount) setActiveType("all");
-  }, [loading, activeType, wishCount, trashCount]);
+    if (!loading && activeType === "favorites" && !favCount) setActiveType("all");
+  }, [loading, activeType, wishCount, trashCount, favCount]);
 
   const chooseCloset = (next) => {
     setClosetChoice(next);
@@ -1383,6 +1448,28 @@ export function App() {
     })();
   }, [loading, trash]);   // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 2026-10-06 加了皮帶、項鍊、戒指、隨身小物。之前只能放「其他配件」的,照品名搬過去(每台做一次,改了會跟著同步)
+  const partsMigratedRef = useRef(false);
+  useEffect(() => {
+    // 這台的衣服真的讀到了才做(讀失敗的那次記成「做過了」,之後就永遠不搬)
+    // 還沒有任何自己的衣服也先不記:空衣櫃記成「做過了」,之後放進「其他配件」的皮帶就永遠不搬(正式站實測抓到)
+    if (loading || partsMigratedRef.current || !localRef.current?.length) return;
+    partsMigratedRef.current = true;
+    try { if (localStorage.getItem("open-wardrobe-parts-v2") === "1") return; } catch { return; }
+    const moves = [...items, ...trash]
+      .filter((item) => item.isLocal && item.part === "accessories_up")
+      .map((item) => ({ item, part: partFromName(item.name) }))
+      .filter(({ part }) => ["belt", "necklace", "ring", "carry"].includes(part));
+    (async () => {
+      for (const { item, part } of moves) await updateLocalItem(item.id, { part });
+      try { localStorage.setItem("open-wardrobe-parts-v2", "1"); } catch { /* 存不了就下次再看一次,搬過的不會再搬 */ }
+      if (!moves.length) return;
+      await settleRefresh();
+      const where = [...new Set(moves.map(({ part }) => PARTS[part].label))].join("、");
+      say(`${moves.length} 件「其他配件」照品名搬到「${where}」了。`);
+    })();
+  }, [loading, items]);   // eslint-disable-line react-hooks/exhaustive-deps
+
   // 換一張圖(2026-10-06):自己加的直接換掉那件的圖;站主衣櫃的另存一張 override-<id>(跟著同步),可以換回原圖
   const [replaceRequest, setReplaceRequest] = useState(null);
   const replaceImage = async (item, blob) => {
@@ -1444,7 +1531,8 @@ export function App() {
         <header className={showWelcome ? "gallery-header is-quiet" : "gallery-header"}>
           <h1 className="visually-hidden">{view === "styling" ? "搭配" : "衣櫃"}</h1>
           <div className="gallery-meta-row">
-            <p className="piece-count" hidden={showWelcome}>{ownedItems.length} 件單品{wishCount > 0 && <span className="piece-count-wish"> · 想買 {wishCount}</span>}</p>
+            {/* 衣櫃頁的件數、想買的在目錄第一行,這裡只在搭配頁出現 */}
+            <p className="piece-count" hidden={showWelcome || view === "closet"}>{ownedItems.length} 件單品{wishCount > 0 && <span className="piece-count-wish"> · 想買 {wishCount}</span>}</p>
             <div className="header-tools">
               {CAN_ADD && (
                 <AddGarment
@@ -1468,19 +1556,15 @@ export function App() {
           </div>
           {!showWelcome && closetSwitch}
           {view === "closet" && (
-            <nav className="category-nav" aria-label="依類型篩選衣櫃" ref={categoryNavRef}>
-              {[...TYPES, ...(wishCount ? [{ id: "wishlist", label: `想買的 ${wishCount}` }] : []), ...(trashCount ? [{ id: "trash", label: `垃圾桶 ${trashCount}` }] : [])].map((type) => (
-                <button
-                  key={type.id}
-                  type="button"
-                  className={activeType === type.id ? "active" : ""}
-                  onClick={() => chooseType(type.id)}
-                  aria-pressed={activeType === type.id}
-                >
-                  {type.label}
-                </button>
-              ))}
-            </nav>
+            <ClosetIndex
+              activeType={activeType}
+              onChoose={chooseType}
+              counts={partCounts}
+              total={ownedItems.length}
+              favCount={favCount}
+              wishCount={wishCount}
+              trashCount={trashCount}
+            />
           )}
         </header>
         )}
@@ -1571,7 +1655,7 @@ export function App() {
           <TrashGrid items={trashItems} onRestore={restoreItem} onPurge={purgeItem} canPurge={canPurge} />
         )}
         {view === "closet" && !!closetItems.length && activeType !== "trash" && (
-          <section className="gallery-grid" aria-label={`${activeType === "wishlist" ? "想買的" : TYPE_MAP[activeType]?.label || "全部"}衣物`}>
+          <section className="gallery-grid" aria-label={`${activeType === "wishlist" ? "想買的" : activeType === "favorites" ? "最愛的" : TYPE_MAP[activeType]?.label || "全部"}衣物`}>
             {visibleItems.map((item) => (
               <GalleryItem
                 key={item.id}
@@ -1579,6 +1663,7 @@ export function App() {
                 selected={selectedId === item.id}
                 onOpen={setSelectedId}
                 onDelete={deleteItem}
+                favorite={favorites.has(item.id)}
               />
             ))}
           </section>
@@ -1605,6 +1690,8 @@ export function App() {
           onSetPrice={setItemPrice}
           onReplaceImage={CAN_ADD && canEditItem(selectedItem) ? (item) => setReplaceRequest({ item, n: Date.now() }) : null}
           onRestoreImage={restoreOriginalImage}
+          favorite={favorites.has(selectedItem.id)}
+          onToggleFavorite={onToggleFavorite}
         />
       )}
     </div>

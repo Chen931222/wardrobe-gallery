@@ -23,6 +23,7 @@ const SYNC_KEYS = [
   "open-wardrobe-wearlog-v1", "open-wardrobe-looks-v1", "open-wardrobe-fit-v1",
   "open-wardrobe-edits-v1", "open-wardrobe-deleted-v1",
   "open-wardrobe-taste-v1",   // 穿過哪套、嫌過哪個組合(taste.js);一天最多幾筆,不燒額度
+  "open-wardrobe-favorites-v1",   // 最愛(favorites.js):字串清單,兩台取聯集
 ];
 // 不同步「身上這套」(open-wardrobe-wearing-v1):搭配頁每換一件就寫一次,同步它會把免費寫入額度
 // (每月 2,000 次)燒在試穿上,而且兩台各自試穿本來就不該互相干擾。

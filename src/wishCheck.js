@@ -92,7 +92,7 @@ export function findSimilar(wish, owned) {
 }
 
 export function kindLabel(item) {
-  return kindOf(item) || { upperbody: "上衣", lowerbody: "下身", wholebody_up: "外套", shoes: "鞋", bag: "包", socks: "襪子", eyewear: "眼鏡", wrist: "錶" }[item.part] || "單品";
+  return kindOf(item) || { upperbody: "上衣", lowerbody: "下身", wholebody_up: "外套", shoes: "鞋", bag: "包", socks: "襪子", eyewear: "眼鏡", wrist: "錶", belt: "皮帶", necklace: "項鍊", ring: "戒指", accessories_up: "配件", carry: "小物" }[item.part] || "單品";
 }
 
 /* 自己加的衣服(想買的、按了「已經買了」的)沒有保暖度(那是離線流程替衣櫃補的),從品名猜。1 最薄、5 最厚,跟衣櫃同一把尺。 */

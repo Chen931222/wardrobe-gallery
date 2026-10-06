@@ -147,7 +147,6 @@ h1, h2, h3 {
    字距收在 .08em,CJK 拉太開會鬆散。 */
 .piece-count,
 .view-nav button,
-.category-nav button,
 .studio-actions button,
 .studio-dock button,
 .studio-rack-nav button,
@@ -187,68 +186,71 @@ h1, h2, h3 {
   text-transform: uppercase;
 }
 
-.category-nav {
-  width: max-content;
-  max-width: 100%;
-  display: flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  gap: 0;
-  margin: 48px 0 0;
-  border: 0;
-  border-radius: 0;
-  padding: 0;
-  overflow-x: auto;
-  background: transparent;
-  box-shadow: none;
-  scrollbar-width: none;
-}
-
-.category-nav::-webkit-scrollbar { display: none; }
-
-.category-nav button {
-  position: relative;
-  flex: 0 0 auto;
-  min-height: 40px;
-  border: 0;
-  border-top: 1px solid var(--line);
+/* 衣櫃目錄(2026-10-06,取代橫向捲動的分類列):像書的目錄。第一行「全部」和想買的、垃圾桶;
+   下面每組一行,組名在左一欄,分類照順序排、排不下就換行。行與行之間一條髮絲線,選中的那類墨色加一道金線。 */
+.closet-index {
+  max-width: 760px;
+  margin: 40px 0 0;
   border-bottom: 1px solid var(--line);
+}
+.closet-index button {
+  appearance: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-height: 38px;
+  padding: 8px 0;
+  border: 0;
   border-radius: 0;
-  padding: 10px 18px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 520;
-  letter-spacing: .055em;
-  text-transform: uppercase;
+  background: none;
+  color: var(--body);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: nowrap;
   cursor: pointer;
-  transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+  transition: color 160ms ease;
 }
-
-.category-nav button:first-child { border-left: 1px solid var(--line); }
-.category-nav button + button { border-left: 1px solid var(--line); }
-.category-nav button:last-child { border-right: 1px solid var(--line); }
-.category-nav button:last-child {
-  border-right: 1px solid var(--line);
+.closet-index button:hover { color: var(--ink); }
+.closet-index button.active { color: var(--ink); }
+/* 底線只畫在名稱下:畫在整顆按鈕上會在名稱和件數中間斷成兩段 */
+.closet-index button.active .closet-index-label {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 7px;
 }
-
-.category-nav button::after {
-  content: none;
+.closet-index button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.closet-index-count {
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: lining-nums tabular-nums;
 }
-
-.category-nav button:hover,
-.category-nav button:focus-visible { color: var(--ink); background: var(--hover-tint); }
-
-.category-nav button.active {
-  background: var(--ink);
-  color: var(--paper);
-  box-shadow: inset 0 0 0 1px var(--ink);
+.closet-index button.active .closet-index-count { color: var(--accent); }
+.closet-index-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
 }
-
-.category-nav button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+.closet-index-top > button { font-family: var(--font-display); font-size: 17px; letter-spacing: .02em; }
+.closet-index-extra { display: inline-flex; gap: 20px; }
+.closet-index-row {
+  display: grid;
+  grid-template-columns: 3em 1fr;
+  align-items: baseline;
+  column-gap: 14px;
 }
+.closet-index-row + .closet-index-row { border-top: 1px solid var(--line); }
+.closet-index-group {
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: .14em;
+  color: var(--muted);
+}
+.closet-index-items { display: flex; flex-wrap: wrap; column-gap: 24px; }
 
 .gallery-grid {
   display: grid;
@@ -995,15 +997,13 @@ h1, h2, h3 {
 @media (max-width: 1180px) {
   .gallery-header { padding-inline: 34px; }
   .gallery-grid { padding-inline: 32px; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap-inline: 18px; }
-  .category-nav { max-width: 100%; }
   .viewer { padding-inline: 30px; }
   .has-modeled-image .viewer-details.editing { padding-inline: 30px; }
 }
 
 @media (max-width: 860px) {
   .gallery-header { padding: 38px 24px 0; }
-  .category-nav { width: 100%; margin: 38px 0 0; }
-  .category-nav button { min-height: 38px; padding: 9px 15px; font-size: 11px; }
+  .closet-index { margin-top: 34px; }
   /* iPad 直向原本固定 3 欄、一格 247×384,104 件要捲將近 12 屏(審查 F47);照寬度排,iPad 直向是 4 欄 */
   .gallery-grid {
     grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
@@ -1039,8 +1039,9 @@ h1, h2, h3 {
 @media (max-width: 520px) {
   .gallery-header { padding: max(24px, env(safe-area-inset-top)) 18px 0; }
   .piece-count { font-size: 12px; }
-  .category-nav { margin: 24px 0 0; }
-  .category-nav button { min-height: 44px; padding: 9px 14px; font-size: 10px; }
+  .closet-index { margin-top: 22px; }
+  .closet-index button { min-height: 40px; }
+  .closet-index-items { column-gap: 20px; }
   .gallery-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px 8px;
@@ -1066,12 +1067,15 @@ h1, h2, h3 {
   .viewer-actions { margin-top: 18px; }
   .color-controls { align-items: flex-start; flex-direction: column; }
   .sample-button { width: 100%; }
-  .gallery-meta-row { align-items: flex-start; }
+  /* 手機:件數(搭配頁才有)自己一行;新增在左、頁面切換在右,寬 320 也排得下、字不會被擠成直的 */
+  .gallery-meta-row { flex-direction: column; align-items: stretch; gap: 14px; }
+  .header-tools { margin-left: 0; justify-content: space-between; }
+  .view-nav button { padding: 8px 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .gallery-item img,
-  .category-nav button::after,
+  .closet-index button,
   .viewer-art-floating { transition: none; }
   .viewer-overlay,
   .viewer-entry { animation: none; }
@@ -1103,7 +1107,7 @@ h1, h2, h3 {
 .view-nav button + button { border-left: 1px solid var(--line); }
 /* 我的衣櫃/示範衣櫃:跟頁面切換同一套樣式,放在件數那排下面,靠左 */
 .closet-switch { width: fit-content; margin-top: 14px; }
-.closet-switch small { margin-left: 4px; font-size: 11px; opacity: .7; }
+.closet-switch small { margin-left: 4px; font-size: 11px; }   /* 不再半透明:數字對比只有 3.5:1(axe 2026-10-06) */
 .view-nav button:hover { color: var(--ink); background: var(--hover-tint); }
 
 .view-nav button.active {
@@ -1498,7 +1502,8 @@ h1, h2, h3 {
 
 /* ===== 新增 / 刪除 ===== */
 
-.header-tools { display: flex; align-items: center; gap: 10px; }
+.header-tools { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.view-nav button, .add-garment-button { white-space: nowrap; }
 
 .add-garment-button {
   display: inline-flex; align-items: center; gap: 6px;
@@ -1691,6 +1696,24 @@ h1, h2, h3 {
   pointer-events: none;
 }
 .piece-count-wish { color: var(--muted); }
+/* 最愛:格子左上角一顆小星(只顯示);單品頁名稱旁邊那顆才是開關 */
+.fav-mark {
+  position: absolute; left: 6px; top: 6px;
+  display: grid; place-items: center;
+  color: var(--accent);
+  pointer-events: none;
+}
+.viewer-fav {
+  flex: none;
+  width: 44px; height: 44px; margin: -12px 0 0;
+  display: grid; place-items: center;
+  border: 0; border-radius: 0; background: none;
+  color: var(--muted); cursor: pointer;
+  transition: color 160ms ease;
+}
+.viewer-fav:hover { color: var(--ink); }
+.viewer-fav.is-on { color: var(--accent); }
+.viewer-fav:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* 這件在別台被刪掉或隱藏了:頁面還開著時的說明 */
 .viewer-gone {

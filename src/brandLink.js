@@ -125,13 +125,18 @@ function hmallImages(host, region, code) {
 /* 從品名猜分類:取「最後出現」的關鍵字,因為中文的主詞在尾巴(針織外套→外套、毛絨針織上衣→上衣)。
    同一個位置有兩個字時,照下面的順序(「船型襪」的襪排在鞋前面)。 */
 const PART_WORDS = [
+  // 隨身小物排在包前面:「錢包」「皮夾」跟「包」同一個位置結束時算小物
+  ["carry", /鋼筆|原子筆|鋼珠筆|筆|打火機|皮夾|錢包|名片夾|鑰匙圈|\b(pens?|fountain\s?pens?|lighters?|wallets?|card\s?holders?|keychains?)\b/i],
   ["socks", /襪|\bsocks?\b/i],
   ["shoes", /鞋|靴|拖|\b(shoes?|sneakers?|boots?|loafers?|sandals?|slides?|trainers?|mules?)\b/i],
-  ["bag", /包|袋|\b(bags?|backpacks?|totes?|wallets?|purses?|crossbody|duffel|weekender|clutch|pouch|luggage|suitcase)\b/i],
+  ["bag", /包|袋|\b(bags?|backpacks?|totes?|purses?|crossbody|duffel|weekender|clutch|pouch|luggage|suitcase)\b/i],
   ["eyewear", /眼鏡|墨鏡|\b(sunglasses|glasses|eyewear)\b/i],
-  // 手錶、手環;項鍊、耳環這類放在「其他配件」
+  // 手錶、手環;皮帶、項鍊、戒指各自一類(2026-10-06);耳環、帽子、圍巾這類放在「其他配件」
   ["wrist", /錶|手環|手鍊|\b(watch|watches|bracelets?|bangles?)\b/i],
-  ["accessories_up", /項鍊|耳環|戒指|帽子|棒球帽|毛帽|圍巾|\b(necklaces?|earrings?|rings?|caps?|hats?|beanies?|scarf|scarves)\b/i],
+  ["belt", /皮帶|腰帶|\bbelts?\b/i],
+  ["necklace", /項鍊|項链|墜飾|\b(necklaces?|pendants?)\b/i],
+  ["ring", /戒指|指環|\brings?\b/i],
+  ["accessories_up", /耳環|帽子|棒球帽|毛帽|圍巾|\b(earrings?|caps?|hats?|beanies?|scarf|scarves)\b/i],
   ["wholebody_up", /外套|夾克|大衣|風衣|背心外套|羽絨|教練|西裝|\b(jackets?|coats?|blazers?|parkas?|windbreakers?|cardigans?)\b/i],
   ["lowerbody", /褲|裙|\b(pants|trousers|jeans|shorts|skirts?|chinos|joggers?|leggings)\b/i],
   ["upperbody", /T恤|襯衫|上衣|針織|毛衣|衛衣|帽T|POLO|Polo|背心|連帽|\b(t-?shirts?|tees?|shirts?|polos?|sweaters?|hoodies?|sweatshirts?|tops?|tanks?|knit)\b/i],

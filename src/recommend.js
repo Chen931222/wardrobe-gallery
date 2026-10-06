@@ -100,6 +100,9 @@ function recencyPenalty(item, wearLog) {
   return penalty;
 }
 
+/** 這條下身繫得了皮帶嗎:鬆緊帶、抽繩、運動褲、棉褲沒有褲頭,不配皮帶。 */
+const takesBelt = (bottom) => Boolean(bottom) && !/抽繩|鬆緊|drawstring|elastic|sweat|運動|棉褲|jogger|束口|legging/.test(itemText(bottom));
+
 /** 太陽眼鏡:只在不太會下雨的日子配;一般眼鏡照戴。 */
 const isSunglasses = (item) => /太陽|墨鏡|sunglass|sun-glass/i.test(`${item?.name || ""} ${(item?.tags || []).join(" ")}`);
 const SUNNY_RAIN_MAX = 40;
@@ -442,6 +445,9 @@ const SLOT_WORDS = [
   { slot: "bag", words: ["後背包", "背包", "側背包", "腰包", "包包", "包"] },
   { slot: "eyewear", words: ["墨鏡", "眼鏡"] },
   { slot: "wrist", words: ["手錶", "手環", "錶"] },
+  { slot: "belt", words: ["皮帶", "腰帶"] },
+  { slot: "necklace", words: ["項鍊"] },
+  { slot: "ring", words: ["戒指"] },
   { slot: "accessories_up", words: ["帽子", "圍巾", "帽"] },
 ];
 // 太泛的品類字(幾乎沒有單品名稱含「上衣」「鞋」),只用來定槽位、不拿去比對名稱
@@ -793,9 +799,11 @@ export function randomOutfit(items, weather = null) {
       && !((weather.rainProb ?? 0) >= 60 && shoe.rainOk === false)));
   }
   // 配件:手錶天天戴、眼鏡多半也是,出現得比襪子、包多(2026-10-06 本人:隨機一套很少配到手錶眼鏡,舊版每類都只有 45%)
-  const CHANCE = { socks: 0.45, bag: 0.45, eyewear: 0.6, wrist: 0.75, accessories_up: 0.45 };
+  // 皮帶只配有褲頭的褲子;隨身小物(鋼筆)不是穿的,不配
+  const CHANCE = { socks: 0.45, bag: 0.45, eyewear: 0.6, wrist: 0.75, belt: 0.6, necklace: 0.4, ring: 0.6, accessories_up: 0.45 };
   const rainy = (weather?.rainProb ?? 0) >= SUNNY_RAIN_MAX;
-  for (const part of ["socks", "bag", "eyewear", "wrist", "accessories_up"]) {
+  for (const part of ["socks", "bag", "eyewear", "wrist", "belt", "necklace", "ring", "accessories_up"]) {
+    if (part === "belt" && !takesBelt(outfit.lowerbody)) continue;
     const list = part === "eyewear" && rainy ? byPart(part).filter((item) => !isSunglasses(item)) : byPart(part);
     if (list.length && Math.random() < CHANCE[part]) outfit[part] = pickOne(list);
   }
@@ -993,13 +1001,13 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
   //   眼鏡:一般眼鏡照戴;太陽眼鏡只在不太會下雨的日子
   //   其他配件(帽子、項鍊…):一半的機率加,不每套都塞
   const wornSoFar = [...chosen, outfit.shoes, outfit.bag].filter(Boolean);
-  const pickAccessory = (part, keep = () => true) => {
+  const pickAccessory = (part, keep = () => true, bonus = () => 0) => {
     if (locked[part]) return locked[part];
     let bestAcc = null;
     for (const acc of items) {
       if (acc.part !== part || acc.wishlist || !keep(acc)) continue;
       const score = colorScore([...wornSoFar, acc]).score + recencyPenalty(acc, wearLog) + intentItemScore(acc, intent)
-        + paletteItemScore(acc, inPalette, strict) + seen(acc, 0.8) + Math.random() * 1.2;
+        + paletteItemScore(acc, inPalette, strict) + seen(acc, 0.8) + bonus(acc) + Math.random() * 1.2;
       if (!bestAcc || score > bestAcc.score) bestAcc = { acc, score };
     }
     return bestAcc?.acc || null;
@@ -1011,6 +1019,19 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
   if (locked.accessories_up || Math.random() < 0.5) {
     const extra = pickAccessory("accessories_up");
     if (extra) outfit.accessories_up = extra;
+  }
+  // 皮帶(2026-10-06):有褲頭的褲子才繫;跟鞋子深淺接近的優先(深色皮鞋配深色皮帶)
+  if (locked.belt || takesBelt(best.bottom)) {
+    const shoeL = outfit.shoes?.color ? hexToHsl(outfit.shoes.color).l : null;
+    const belt = pickAccessory("belt", () => true, (acc) => (shoeL !== null && acc.color && Math.abs(hexToHsl(acc.color).l - shoeL) < 0.2 ? 0.8 : 0));
+    if (belt) outfit.belt = belt;
+  }
+  // 戒指有就戴一只;項鍊四成。隨身小物(鋼筆)不是穿的,不配
+  const ring = pickAccessory("ring");
+  if (ring) outfit.ring = ring;
+  if (locked.necklace || Math.random() < 0.4) {
+    const necklace = pickAccessory("necklace");
+    if (necklace) outfit.necklace = necklace;
   }
   const duckedRainBag = rainy && dryBags.length > 0 && dryBags.length < allBags.length;
   // 實際因為雨被剔掉的那些(理由要照實講,不寫死「麂皮帆布鞋」)

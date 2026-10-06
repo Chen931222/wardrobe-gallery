@@ -14,7 +14,7 @@ import { readTaste } from "./taste.js";
 //   - 點聚焦中的衣服或資訊卡 → 開完整詳情(ItemViewer);點空白處 → 退回圓環
 //   所有移動都是一次性 CSS transition(900ms),不是持續動畫。
 const PICK = 12;
-const SLOT_LABEL = { upperbody: "上衣", wholebody_up: "外套", lowerbody: "下身", socks: "襪子", shoes: "鞋子", bag: "包款", eyewear: "眼鏡", wrist: "手錶手環", accessories_up: "配件" };
+const SLOT_LABEL = { upperbody: "上衣", wholebody_up: "外套", lowerbody: "下身", socks: "襪子", shoes: "鞋子", bag: "包款", eyewear: "眼鏡", wrist: "手錶手環", belt: "皮帶", necklace: "項鍊", ring: "戒指", accessories_up: "配件", carry: "小物" };
 
 // 每類單品的「基準寬度」,以上衣攤平肩寬為 1.0(現實約 55cm)。
 // 只定義寬度 —— 高度交給照片本身的長寬比推算,所以長褲自然比短褲長、
@@ -29,6 +29,10 @@ const WIDTH_FACTOR = {
   eyewear: 0.3,
   wrist: 0.26,
   accessories_up: 0.45,
+  belt: 0.62,           // 對折起來約 35cm
+  necklace: 0.32,
+  ring: 0.12,
+  carry: 0.22,          // 鋼筆約 14cm
 };
 const FOCUS_ZOOM = 4.6;
 
