@@ -34,6 +34,10 @@
   - GU、UNIQLO 抓得到品名、分類、價錢和商品圖。
   - 其他品牌讀公開的商品頁。蝦皮、Zara 這類擋機器人的，改用截圖。
 - **想買的**（`src/wishCheck.js`）：還沒買的另外放，看櫃裡有沒有很像的，以及能跟現有的配出幾套。
+- **衣櫃目錄**：分類照衣服、鞋襪、配件、隨身四組排成目錄，每類標件數，沒有衣服的分類不列。
+  分類有上衣、外套、下身、鞋子、襪子、包、眼鏡、手錶、皮帶、項鍊、戒指、其他配件、隨身小物（`src/parts.js`）。
+  鋼筆這類隨身小物不會被自動配進推薦。
+- **最愛**（`src/favorites.js`）：單品頁點星星加入，目錄裡可以只看最愛。不影響推薦。
 
 **資料放在哪**
 - 朋友加的衣服：只在他自己的瀏覽器（IndexedDB），網站伺服器收不到。
@@ -110,13 +114,13 @@ Fork 自 [tandpfun/wardrobe](https://github.com/tandpfun/wardrobe)，MIT 授權�
 **能寫註解的檔案，第一行都標明出處**，不必翻 git log，直接查：
 
 ```bash
-git grep -l "\[本 fork 新增\]"    # 76 個：整份自己寫的
+git grep -l "\[本 fork 新增\]"    # 78 個：整份自己寫的
 git grep -l "\[本 fork 修改\]"    # 7 個：上游檔案，改動寫在該行
 ```
 
 （用 `git grep` 而不是 `grep -r`：只掃版本控管的檔案，不會把 `dist/` 的 build 產物也算進去。）
 
-### 自己寫的（76 個）
+### 自己寫的（78 個）
 
 | 位置 | 內容 |
 |---|---|
@@ -133,6 +137,7 @@ git grep -l "\[本 fork 修改\]"    # 7 個：上游檔案，改動寫在該行
 | `src/backup.js`、`src/zip.js`、`src/keepSafe.js` | 備份 ZIP、備份提醒、app 內建瀏覽器警告 |
 | `src/lookCard.js`、`src/LookCard.jsx` | Look 卡：在瀏覽器裡把一套穿搭合成一張圖，不上傳 |
 | `src/ownerMode.js` | 站主與訪客看到的不一樣 |
+| `src/parts.js`、`src/favorites.js` | 唯一一份分類清單、最愛 |
 | `src/useDialog.js`、`src/ScrollRail.jsx` | 對話框的焦點、iPhone 上看得到的捲軸 |
 | `functions/`（8 支） | Vercel functions：GU／UNIQLO 品名、其他品牌商品頁與簽名過的商品圖、同步、站主衣櫃 |
 | `scripts/`（4 支） | 開發伺服器上的同一組端點（同步存在本機 `.sync-dev/`，不碰雲端） |
