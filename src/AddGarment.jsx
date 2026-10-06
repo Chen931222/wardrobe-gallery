@@ -264,7 +264,7 @@ function expandBox(region) {
  * @param onReplaced (item, blob) 換好的那張
  * @param hideButton 不畫自己的「新增」鈕(換圖專用的那一份)
  */
-export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHandled = null, replaceRequest = null, onReplaced = null, hideButton = false }) {
+export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHandled = null, replaceRequest = null, onReplaced = null, hideButton = false, onAddOne = null }) {
   const inputRef = useRef(null);
   const dialogRef = useRef(null);
   const [stage, setStage] = useState("idle"); // idle | source | pick | crop | working | review
@@ -889,6 +889,15 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
                   ))}
                   {dupes.length > 4 && <span>還有 {dupes.length - 4} 件</span>}
                 </div>
+                {/* 同一款又買了一件(2026-10-06):不另存一格,原本那件數量 +1 */}
+                {onAddOne && !draft.wishlist && dupes.some((item) => !item.wishlist) && (() => {
+                  const target = dupes.find((item) => !item.wishlist);   // 同一個連結、或櫃裡很像的那件(已經有的,不是想買的)
+                  return (
+                    <button type="button" className="add-dupe-one" onClick={() => { onAddOne(target); reset(); }}>
+                      是同一款:不另存,「{target.name || "那件"}」數量 +1
+                    </button>
+                  );
+                })()}
               </div>
             )}
 

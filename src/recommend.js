@@ -97,6 +97,8 @@ function recencyPenalty(item, wearLog) {
   else if (days <= 6) penalty = -1;
   // 鞋子連穿幾天很正常,而且只有幾雙,懲罰打三折免得每天被迫換鞋
   if (item.part === "shoes") penalty *= 0.3;
+  // 同一款有兩件以上(數量,2026-10-06):穿過一件還有乾淨的,扣分減半
+  if ((Number(item.quantity) || 1) > 1) penalty *= 0.5;
   return penalty;
 }
 

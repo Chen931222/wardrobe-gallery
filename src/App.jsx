@@ -108,11 +108,14 @@ function readEdits() {
 }
 
 
-const EDIT_FIELDS = ["name", "part", "color", "secondaryColor", "tags", "price", "priceCurrency"];
+// quantity(2026-10-06 本人要的:同一款買了兩件,不想佔兩格):數量,沒寫就是 1
+const EDIT_FIELDS = ["name", "part", "color", "secondaryColor", "tags", "price", "priceCurrency", "quantity"];
+const qtyOf = (value) => Math.min(99, Math.max(1, Math.floor(Number(value)) || 1));
 const editValue = (item, field) => {
   const value = item?.[field];
   if (field === "tags") return value || [];
   if (field === "name") return value || "";
+  if (field === "quantity") return qtyOf(value);
   return value ?? null;
 };
 
@@ -266,7 +269,7 @@ function GalleryItem({ item, selected, onOpen, onDelete, favorite = false }) {
         className="gallery-item"
         type="button"
         onClick={() => onOpen(item.id)}
-        aria-label={`查看${label}${item.wishlist ? "(還沒買)" : ""}${favorite ? "(最愛)" : ""}`}
+        aria-label={`查看${label}${qtyOf(item.quantity) > 1 ? `(${qtyOf(item.quantity)} 件)` : ""}${item.wishlist ? "(還沒買)" : ""}${favorite ? "(最愛)" : ""}`}
         aria-pressed={selected}
         data-testid={`wardrobe-item-${item.id}`}
       >
@@ -278,6 +281,7 @@ function GalleryItem({ item, selected, onOpen, onDelete, favorite = false }) {
         />
         {item.wishlist && <span className="wish-badge">想買</span>}
         {favorite && <span className="fav-mark" aria-hidden="true"><Star size={13} weight="fill" /></span>}
+        {qtyOf(item.quantity) > 1 && <span className="qty-badge" aria-hidden="true">×{qtyOf(item.quantity)}</span>}
       </button>
       {Boolean(item.price) && <span className="gallery-price">{formatPrice(item.price, item.priceCurrency)}</span>}
       {canEditItem(item) && (
@@ -322,8 +326,14 @@ function ClosetIndex({ activeType, onChoose, counts, total, favCount = 0, wishCo
   return (
     <nav className={open ? "closet-index" : "closet-index is-folded"} aria-label="衣櫃目錄">
       <div className="closet-index-top">
+        {/* 收合鈕貼在「全部」後面(2026-10-06 本人:不要一顆獨立在右邊)。「全部」已經選中時,點它也是展開／收起 */}
         <span className="closet-index-current">
-          {entry("all", "全部", total)}
+          <button type="button" className={activeType === "all" ? "active" : ""} aria-pressed={activeType === "all"} onClick={() => (activeType === "all" ? toggle() : onChoose("all"))}>
+            <span className="closet-index-label">全部</span><span className="closet-index-count">{total}</span>
+          </button>
+          <button type="button" className="closet-index-toggle" aria-expanded={open} aria-controls="closet-index-rows" aria-label={open ? "收起分類" : "展開分類"} title={open ? "收起分類" : "展開分類"} onClick={toggle}>
+            <CaretDown size={14} weight="regular" aria-hidden="true" />
+          </button>
           {!open && activePart && (
             <>
               <span className="closet-index-sep" aria-hidden="true">/</span>
@@ -331,14 +341,13 @@ function ClosetIndex({ activeType, onChoose, counts, total, favCount = 0, wishCo
             </>
           )}
         </span>
-        <span className="closet-index-extra">
-          {favCount > 0 && entry("favorites", "最愛", favCount)}
-          {wishCount > 0 && entry("wishlist", "想買的", wishCount)}
-          {trashCount > 0 && entry("trash", "垃圾桶", trashCount)}
-          <button type="button" className="closet-index-toggle" aria-expanded={open} aria-controls="closet-index-rows" onClick={toggle}>
-            {open ? "收起" : "分類"}<CaretDown size={13} weight="regular" aria-hidden="true" />
-          </button>
-        </span>
+        {(favCount > 0 || wishCount > 0 || trashCount > 0) && (
+          <span className="closet-index-extra">
+            {favCount > 0 && entry("favorites", "最愛", favCount)}
+            {wishCount > 0 && entry("wishlist", "想買的", wishCount)}
+            {trashCount > 0 && entry("trash", "垃圾桶", trashCount)}
+          </span>
+        )}
       </div>
       {/* 收合用 grid 的 0fr ↔ 1fr 做高度;收起時 inert,裡面的按鈕 Tab 不到、點不到 */}
       <div id="closet-index-rows" className="closet-index-rows" inert={!open}>
@@ -495,7 +504,7 @@ function ColorControl({ label, field, value, palette, onChange, sampling, setSam
   );
 }
 
-function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleStatus, priceStatus = "", onFetchPrice = null }) {
+function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleStatus, priceStatus = "", onFetchPrice = null, mergeCandidates = [], onMerge = null }) {
   const suggestedSecondary = palette.find((color) => color.toLowerCase() !== draft.color?.toLowerCase()) || "#9a9286";
 
   return (
@@ -519,6 +528,30 @@ function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleSta
           ))}
         </select>
       </label>
+
+      {/* 數量(2026-10-06):同一款有好幾件,一格寫 ×2 就好;櫃裡有很像的另一張,可以直接併進來 */}
+      <div className="field qty-field">
+        <span id="qty-label">數量</span>
+        <div className="qty-row" role="group" aria-labelledby="qty-label">
+          <button type="button" aria-label="少一件" disabled={qtyOf(draft.quantity) <= 1} onClick={() => setDraft((current) => ({ ...current, quantity: qtyOf(current.quantity) - 1 }))}>−</button>
+          <output aria-live="polite">{qtyOf(draft.quantity)}</output>
+          <button type="button" aria-label="多一件" disabled={qtyOf(draft.quantity) >= 99} onClick={() => setDraft((current) => ({ ...current, quantity: qtyOf(current.quantity) + 1 }))}>+</button>
+        </div>
+        {onMerge && mergeCandidates.length > 0 && (
+          <div className="qty-merge">
+            <p>櫃裡還有 {mergeCandidates.length} 件很像的。是同一款的話,併成這一格(那一張移到垃圾桶,可以復原):</p>
+            <ul>
+              {mergeCandidates.slice(0, 3).map((other) => (
+                <li key={other.id}>
+                  <img src={other.thumbnail || other.image} alt="" />
+                  <span>{other.name || "這件"}{qtyOf(other.quantity) > 1 ? ` ×${qtyOf(other.quantity)}` : ""}</span>
+                  <button type="button" onClick={() => onMerge(other)}>併進來</button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
 
       {/* 價錢:想買的有商品網址就自己去抓(打開單品頁時、或按「從網址抓價錢」);沒有網址的自己填 */}
       <div className="field price-field">
@@ -591,7 +624,7 @@ function ReadOnlyDetails({ item, onWear }) {
   const tags = [...new Set((item.tags || []).map(tagLabel))];
   return (
     <div className="viewer-readonly">
-      <p className="viewer-ro-category">{type}</p>
+      <p className="viewer-ro-category">{type}{qtyOf(item.quantity) > 1 ? ` · ${qtyOf(item.quantity)} 件` : ""}</p>
       {Boolean(item.price) && <p className="viewer-ro-price">{formatPrice(item.price, item.priceCurrency)}</p>}
       {!!colors.length && (
         <div className="viewer-ro-colors">
@@ -748,12 +781,13 @@ function WishCheck({ item, owned, onOpen, onWearOutfit }) {
   );
 }
 
-const DRAFT_FIELDS = ["name", "part", "color", "secondaryColor", "tags", "price", "priceCurrency"];
+const DRAFT_FIELDS = ["name", "part", "color", "secondaryColor", "tags", "price", "priceCurrency", "quantity"];
 
 function draftOf(item) {
   return {
     name: item.name || "", part: item.part, color: item.color || "#9a9286", secondaryColor: item.secondaryColor || null, tags: [...(item.tags || [])],
     price: item.price ? String(item.price) : "", priceCurrency: item.priceCurrency || "TWD",
+    quantity: qtyOf(item.quantity),
   };
 }
 
@@ -766,7 +800,7 @@ function rebaseDraft(draft, before, after) {
 }
 
 /** @param gone 這件在別台被刪掉或隱藏了:頁面留著(草稿還在、可以複製),但存檔、刪除、穿上這些動作都關掉 */
-function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWear, onBought, onSetUrl, onSetPrice, onOpen, onWearOutfit, onReplaceImage, onRestoreImage, favorite = false, onToggleFavorite = null }) {
+function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWear, onBought, onSetUrl, onSetPrice, onOpen, onWearOutfit, onReplaceImage, onRestoreImage, favorite = false, onToggleFavorite = null, onMergeAway = null }) {
   const closeButtonRef = useRef(null);
   const dialogRef = useRef(null);
   // 焦點圈在單品頁裡、關掉後回到原本點的那格(審查 F46)。Esc 照下面自己的處理(先取消吸色、有沒存的先擋)
@@ -813,6 +847,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
       tags: normalizedTags(draft.tags),
       price: parsePrice(draft.price),
       priceCurrency: parsePrice(draft.price) ? draft.priceCurrency || "TWD" : null,
+      quantity: qtyOf(draft.quantity),
     }) !== JSON.stringify({
       name: (item.name || "").trim(),
       part: item.part,
@@ -821,6 +856,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
       tags: normalizedTags(item.tags || []),
       price: item.price || null,
       priceCurrency: item.price ? item.priceCurrency || "TWD" : null,
+      quantity: qtyOf(item.quantity),
     });
   }, [draft, item]);
 
@@ -903,7 +939,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
     const price = parsePrice(draft.price);
     onSave({
       ...item, ...draft, name: draft.name.trim(), tags: draft.tags.map((tag) => tag.trim()).filter(Boolean),
-      price, priceCurrency: price ? draft.priceCurrency || "TWD" : null,
+      price, priceCurrency: price ? draft.priceCurrency || "TWD" : null, quantity: qtyOf(draft.quantity),
     });
     setSampling(null);
     // 存完就關掉,回到原本那一格(2026-10-06 本人要的;舊版存完停在原地,只在表單裡寫一行「已儲存」)
@@ -928,6 +964,21 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
     setPalette((current) => [color, ...current.filter((existing) => existing.toLowerCase() !== color.toLowerCase())].slice(0, 5));
     setSampleStatus(`已吸取這個${colorName(color)}。`);
     setSampling(null);
+  };
+
+  // 同一款的另一張(很像:同分類、同款式、同色):可以併進這一格,數量加上去
+  const mergeCandidates = useMemo(() => (
+    item.wishlist ? [] : findSimilar({ part: item.part, name: item.name, color: item.color }, owned).filter((other) => other.id !== item.id && !other.wishlist)
+  ), [item, owned]);
+  const mergeWith = (other) => {
+    const quantity = Math.min(99, qtyOf(draft.quantity) + qtyOf(other.quantity));
+    const price = parsePrice(draft.price);
+    onSave({
+      ...item, ...draft, name: draft.name.trim(), tags: draft.tags.map((tag) => tag.trim()).filter(Boolean),
+      price, priceCurrency: price ? draft.priceCurrency || "TWD" : null, quantity,
+    }, { quiet: true });
+    onMergeAway(other, item, qtyOf(draft.quantity));
+    onClose();
   };
 
   // 最愛(2026-10-06):名稱旁邊一顆星,點了加入;衣櫃目錄的「最愛」只看這些
@@ -1053,6 +1104,8 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
               sampleStatus={sampleStatus}
               priceStatus={priceStatus}
               onFetchPrice={canFetchPrice ? () => fetchPrice(false) : null}
+              mergeCandidates={mergeCandidates}
+              onMerge={onMergeAway && !gone ? mergeWith : null}
             />
 
             {closeBlocked && <p className="unsaved-notice" role="status">離開這頁前請先儲存或取消變更。</p>}
@@ -1373,9 +1426,9 @@ export function App() {
     </nav>
   );
 
-  const saveItem = (updatedItem) => {
+  const saveItem = (updatedItem, { quiet = false } = {}) => {
     setItems((current) => current.map((item) => item.id === updatedItem.id ? updatedItem : item));
-    say(`「${updatedItem.name || "這件"}」存好了。`);   // 單品頁存完就關掉,「存好了」改在上方講
+    if (!quiet) say(`「${updatedItem.name || "這件"}」存好了。`);   // 單品頁存完就關掉,「存好了」改在上方講
     // 原本的樣子 = 還沒套任何編輯的那份(站主的從 wardrobe.json、自己加的從 IndexedDB)
     const original = [...(servedRef.current || []), ...(localRef.current || [])].find((item) => item.id === updatedItem.id);
     persistEdit(updatedItem, original);
@@ -1453,6 +1506,27 @@ export function App() {
     await settleRefresh();
     say(`「${target?.name || "這件"}」移到垃圾桶了。`, { label: "復原", run: () => restoreItem(id, target?.name) });
   };
+  // 合併同款(2026-10-06):另一張移到垃圾桶,留下的那張數量加上去;「復原」把另一張拿回來、數量改回去
+  const setQuantity = (id, quantity) => {
+    const target = itemsRef.current.find((item) => item.id === id);
+    if (!target) return;
+    const updated = { ...target, quantity: qtyOf(quantity) };
+    setItems((current) => current.map((item) => (item.id === id ? updated : item)));
+    const original = [...(servedRef.current || []), ...(localRef.current || [])].find((item) => item.id === id);
+    persistEdit(updated, original);
+  };
+  const mergeAway = async (other, kept, keptBefore) => {
+    if (other.id.startsWith("local-")) await updateLocalItem(other.id, { trashedAt: new Date().toISOString() });
+    else persistDeletedItem(other.id);
+    setItems((current) => current.filter((item) => item.id !== other.id));
+    await settleRefresh();
+    const total = Math.min(99, keptBefore + qtyOf(other.quantity));
+    say(`併成一格了:「${kept.name || "這件"}」×${total}。另一張在垃圾桶。`, {
+      label: "復原",
+      run: async () => { setQuantity(kept.id, keptBefore); await restoreItem(other.id, other.name); },
+    });
+  };
+
   // 永久刪除:只在垃圾桶裡,這時才問。站主衣櫃的只有本機版刪得了(真的刪檔),線上只能一直隱藏
   const canPurge = (item) => Boolean(item.isLocal) || IS_LOCALHOST;
   const purgeItem = async (id) => {
@@ -1572,6 +1646,10 @@ export function App() {
               {CAN_ADD && (
                 <AddGarment
                   existing={closet === "all" ? items : items.filter((item) => item.isLocal)}
+                  onAddOne={(item) => {
+                    setQuantity(item.id, qtyOf(item.quantity) + 1);
+                    say(`沒有另存:「${item.name || "那件"}」改成 ×${qtyOf(item.quantity) + 1}。`);
+                  }}
                   openRequest={addRequest}
                   onOpenHandled={() => setAddRequest(0)}
                   onAdded={async (wishlist, name) => {
@@ -1727,6 +1805,7 @@ export function App() {
           onRestoreImage={restoreOriginalImage}
           favorite={favorites.has(selectedItem.id)}
           onToggleFavorite={onToggleFavorite}
+          onMergeAway={canEditItem(selectedItem) ? mergeAway : null}
         />
       )}
     </div>

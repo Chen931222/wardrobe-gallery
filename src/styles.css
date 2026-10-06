@@ -235,13 +235,14 @@ h1, h2, h3 {
   gap: 16px;
   border-bottom: 1px solid var(--line);
 }
-.closet-index-current { display: inline-flex; align-items: baseline; gap: 10px; }
+.closet-index-current { display: inline-flex; align-items: baseline; gap: 8px; }
 .closet-index-current > button:first-child { font-family: var(--font-display); font-size: 17px; letter-spacing: .02em; }
 .closet-index-sep { color: var(--line); font-size: 15px; }
 /* 想買的、垃圾桶、收合鈕:排不下就換行(寬 320 的手機),不擠出畫面 */
 .closet-index-top { flex-wrap: wrap; row-gap: 0; }
 .closet-index-extra { display: inline-flex; flex-wrap: wrap; align-items: baseline; column-gap: 20px; margin-left: auto; }
-.closet-index button.closet-index-toggle { gap: 4px; color: var(--muted); font-size: 13px; }
+/* 收合鈕貼在「全部 108」後面:看起來是同一組,點擊範圍另外撐到 40px 寬 */
+.closet-index button.closet-index-toggle { justify-content: center; align-self: center; min-width: 40px; min-height: 40px; margin-left: -6px; padding: 0; color: var(--muted); }
 .closet-index button.closet-index-toggle:hover { color: var(--ink); }
 .closet-index-toggle svg { align-self: center; transition: transform 240ms cubic-bezier(.2, .7, .2, 1); }
 .closet-index-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
@@ -1730,6 +1731,40 @@ h1, h2, h3 {
   pointer-events: none;
 }
 .piece-count-wish { color: var(--muted); }
+/* 數量:格子右下角 ×2;單品頁 −/+ 和「併進來」 */
+.qty-badge {
+  position: absolute; right: 6px; bottom: 6px;
+  padding: 1px 7px;
+  font-family: var(--font-display); font-size: 13px; line-height: 1.5; font-variant-numeric: lining-nums tabular-nums;
+  color: var(--ink); background: var(--paper-veil); border: 1px solid var(--line);
+  pointer-events: none;
+}
+.qty-row { display: inline-flex; align-items: stretch; border: 1px solid var(--line); width: fit-content; }
+.qty-row button {
+  width: 44px; min-height: 40px; border: 0; background: transparent; color: var(--ink);
+  font: inherit; font-size: 18px; cursor: pointer;
+}
+.qty-row button:disabled { color: var(--line); cursor: default; }
+.qty-row button:not(:disabled):hover { background: var(--hover-tint); }
+.qty-row button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.qty-row output {
+  display: grid; place-items: center; min-width: 48px;
+  border-inline: 1px solid var(--line);
+  font-family: var(--font-display); font-size: 17px; color: var(--ink); font-variant-numeric: lining-nums tabular-nums;
+}
+.qty-merge { margin-top: 10px; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+.qty-merge p { margin: 0 0 6px; }
+.qty-merge ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.qty-merge li { display: grid; grid-template-columns: 40px 1fr auto; align-items: center; gap: 10px; color: var(--body); }
+.qty-merge img { width: 40px; height: 40px; object-fit: contain; background: var(--paper); border: 1px solid var(--line); }
+.qty-merge button {
+  min-height: 36px; padding: 4px 12px; border: 1px solid var(--ink); background: transparent; color: var(--ink);
+  font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap;
+}
+.add-dupe-one {
+  margin-top: 10px; min-height: 40px; padding: 8px 14px; border: 1px solid var(--ink); background: var(--ink); color: var(--paper);
+  font: inherit; font-size: 13px; cursor: pointer; text-align: left;
+}
 /* 最愛:格子左上角一顆小星(只顯示);單品頁名稱旁邊那顆才是開關 */
 .fav-mark {
   position: absolute; left: 6px; top: 6px;
