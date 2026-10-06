@@ -275,17 +275,33 @@ function paletteOf(t) {
   return undefined;   // 這句話沒講色系
 }
 
+/** 指定的色系 → 判斷「這一件合不合」的函式(看單品,不只看色碼)。 */
 function paletteTest(palette) {
   if (!palette) return null;
-  if (palette.key.startsWith("color:")) return COLOR_WORDS.find((spec) => spec.key === palette.key.slice(6))?.test || null;
-  return PALETTES.find((entry) => entry.key === palette.key)?.test || null;
+  const hsl = palette.key.startsWith("color:")
+    ? COLOR_WORDS.find((spec) => spec.key === palette.key.slice(6))?.test
+    : PALETTES.find((entry) => entry.key === palette.key)?.test;
+  if (!hsl) return null;
+  const byHex = (item) => Boolean(item?.color) && hsl(hexToHsl(item.color));
+  if (palette.key !== "black" && palette.key !== "color:black") return byHex;
+  // 品名講明是別的顏色、色碼又暗又灰的(「深藍棉質翻領拉鍊夾克」#292d37、「深橄欖棕西裝外套」),色碼會被當成黑,
+  // 「全黑」配出深藍夾克就是這樣來的(2026-10-05)。品名有「黑」、或沒講顏色的,才照色碼
+  const otherWords = COLOR_WORDS.filter((spec) => spec.key !== "black").flatMap((spec) => spec.words);
+  return (item) => {
+    const name = String(item?.name || "");
+    if (!/黑|black/i.test(name) && otherWords.some((word) => name.includes(word))) return false;
+    return byHex(item);
+  };
 }
 
-/** 單品合不合指定的色系:合 +1.3、不合 -1.3(蓋得過抖動,整套三四件加起來就很一致);沒指定回 0。 */
-function paletteItemScore(item, test) {
+/** 單品合不合指定的色系:合 +1.3、不合 -1.3(蓋得過抖動,整套三四件加起來就很一致);沒指定回 0。
+ *  strict(「全黑」「黑白灰」「藍色系」這種講明顏色的)不合扣 3:連按「再推薦」時剛推過的那件最多扣 2.8,
+ *  只扣 1.3 擋不住,換一套就跑出深藍、球衣(2026-10-05 體檢:全黑 20° 連按 60 次有 21 次混別色)。 */
+function paletteItemScore(item, test, strict = false) {
   if (!test || !item?.color) return 0;
-  return test(hexToHsl(item.color)) ? 1.3 : -1.3;
+  return test(item) ? 1.3 : strict ? -3 : -1.3;
 }
+const isStrictPalette = (palette) => Boolean(palette && (palette.key === "black" || palette.key === "mono" || palette.key.startsWith("color:")));
 
 /* ---------- 場合意圖:把一句話(「面試」「下雨天上課」「運動」)轉成挑衣偏好 ----------
  * 純關鍵字規則,零依賴、零成本、決定論 —— 和引擎其他規則同一個世界觀,不呼叫任何 API。
@@ -792,9 +808,13 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
   // 次數 ≥ 99 = 這件一定不要(「換一件上衣」時身上那件)
   const seen = (item, weight) => {
     const count = (avoid && item && avoid.get(item.id)) || 0;
-    return count >= 99 ? -50 : -Math.min(count, 2) * weight;
+    if (count >= 99) return -50;
+    // 講明顏色(「全黑」)時,合色系的那件重複出現比換成深藍好:連按也只輕扣,換的是同色系裡的別件
+    return -Math.min(count, 2) * (strict && fitsPalette(item) ? weight * 0.4 : weight);
   };
   const inPalette = paletteTest(intent?.palette);
+  const strict = isStrictPalette(intent?.palette);
+  const fitsPalette = (item) => !inPalette || !item?.color || inPalette(item);
   const byPart = (part) => items.filter((item) => item.part === part && item.warmth !== undefined);
   const pool = (part) => (locked[part] ? [locked[part]] : byPart(part));
   const tops = pool("upperbody"), bottoms = pool("lowerbody");
@@ -816,8 +836,14 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
   }
 
   const wantOuter = needOuter(weather.feelsLike, weather.rainProb);
-  const allOuters = byPart("wholebody_up");
+  // 外套是最外層、最先淋到:下雨天跟鞋、包一樣先拿掉怕雨的(全都怕雨就不拿,總得穿一件)
+  const rainyDay = weather.rainProb >= 50;
+  const everyOuter = byPart("wholebody_up");
+  const dryOuters = everyOuter.filter((outer) => outer.rainOk !== false);
+  const allOuters = rainyDay && dryOuters.length ? dryOuters : everyOuter;
   const thinOuters = allOuters.filter((outer) => outer.warmth <= 1);
+  // 說了色系:敞開穿的那件也要合色系,不然「全黑」披上彩色球衣(這櫃的薄外套全是球衣)
+  const layerOuters = thinOuters.filter(fitsPalette);
 
   // 薄外套(棒球球衣、罩衫)是敞開當造型層穿的,熱天照樣成立,不該被 needOuter 的溫度閘門
   // 擋掉。但**不能**把它跟「不穿外套」一起丟進主迴圈比分數:主迴圈是幾千種組合取最高分,
@@ -826,8 +852,11 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
   // 灰階。所以改成先擲一次骰子決定今天加不加,再讓主迴圈從薄外套裡挑配色最好的那件。
   // 正式/得體場合不玩「敞開薄外套」那套 —— 這櫃的薄外套全是棒球球衣,套上去會毀掉約會/面試的樣子
   const dressy = intent?.formality === "formal" || intent?.formality === "smart";
-  let useOpenLayer = !wantOuter && thinOuters.length > 0 && !dressy && Math.random() < 0.35;
-  let outers = wantOuter ? allOuters : (useOpenLayer ? thinOuters : [null]);
+  let useOpenLayer = !wantOuter && layerOuters.length > 0 && !dressy && Math.random() < 0.35;
+  let outers = wantOuter ? allOuters : (useOpenLayer ? layerOuters : [null]);
+  // 講明顏色時外套不是非穿不可:16° 以上也可以只靠上衣保暖。「全黑」20° 穿黑色拉鍊帽T,
+  // 不硬套深藍防風外套;合色系的外套夠合適時,照樣比分數贏過不穿(2026-10-05:這櫃唯一的黑外套是厚真皮騎士外套)
+  if (wantOuter && strict && weather.feelsLike >= 16) outers = [...allOuters, null];
   // 這個場合點名要的外套(看球賽 → 球衣):不擲骰子,直接披上
   const wanted = intent?.boost ? thinOuters.filter((outer) => intent.boost.some((word) => itemText(outer).includes(word))) : [];
   if (!wantOuter && wanted.length) { useOpenLayer = true; outers = wanted; }
@@ -849,9 +878,14 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
         // 2) 下身:熱天短褲加分,冷天短褲扣分
         if (weather.feelsLike >= 26 && bottom.warmth <= 1 && intent?.formality !== "formal") score += 1.2;
         if (weather.feelsLike < 20 && bottom.warmth <= 1) score -= 3;
+        // 20–23° 也還不是短褲天;為了保暖才穿外套,下面卻穿短褲,更怪(2026-10-05 示範衣櫃模擬:560 次裡 119 次)。
+        // 下雨套防風外套配短褲照舊可以:台灣的雨天常這樣穿,褲管不會濕
+        else if (weather.feelsLike < 23 && bottom.warmth <= 1) score -= 1.8;
+        if (outer && !useOpenLayer && bottom.warmth <= 1 && weather.feelsLike < 24) score -= 2;
 
         // 3) 下雨:怕雨單品扣分
-        if (weather.rainProb >= 50) for (const item of worn) if (item.rainOk === false) score -= 3;
+        // (扣 4.5:要蓋過「全黑」這類指定色系的 +1.3／-3,不然為了顏色穿真皮外套淋雨)
+        if (weather.rainProb >= 50) for (const item of worn) if (item.rainOk === false) score -= 4.5;
 
         // 4) 配色
         score += colorScore(worn).score;
@@ -863,7 +897,7 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
         if (intent) for (const item of worn) score += intentItemScore(item, intent);
 
         // 4.7) 指定的色系(「全黑」「大地色」)
-        if (inPalette) for (const item of worn) score += paletteItemScore(item, inPalette);
+        if (inPalette) for (const item of worn) score += paletteItemScore(item, inPalette, strict);
 
         // 5) 最近穿過降權;剛剛推薦過的也往後排(鎖住的那格不算)
         for (const item of worn) score += recencyPenalty(item, wearLog);
@@ -887,14 +921,15 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
   // 鞋子:下雨先濾掉麂皮/帆布(全櫃都怕雨就不濾,總得穿一雙),再比配色和最近穿過
   const rainy = weather.rainProb >= 50;
   const allShoes = pool("shoes");
-  const dryOnly = allShoes.filter((shoe) => shoe.rainOk !== false);
+  // 26° 以下拖鞋本來就不算選項:下雨天不怕雨的只剩拖鞋時,寧可穿怕雨的那雙(舊的示範衣櫃 12° 下雨配羊毛大衣加拖鞋)
+  const dryOnly = allShoes.filter((shoe) => shoe.rainOk !== false && (weather.feelsLike >= 26 || !shoe.tags?.includes("slides")));
   const shoePool = rainy && dryOnly.length ? dryOnly : allShoes;
   let duckedRain = false;
   let bestShoe = null;
   for (const shoe of shoePool) {
     let score = colorScore([...chosen, shoe]).score + recencyPenalty(shoe, wearLog) + intentItemScore(shoe, intent) + Math.random() * 1.2;
     score += shoeClash(shoe, best.top, best.bottom, best.outer, intent?.formality === "sporty");   // 拖鞋不配襯衫、皮鞋不配運動褲
-    score += paletteItemScore(shoe, inPalette) + seen(shoe, 0.8);
+    score += paletteItemScore(shoe, inPalette, strict) + seen(shoe, 0.8);
     if (weather.feelsLike >= 30 && shoe.warmth <= 1) score += 0.8;   // 熱到爆就別穿包腳的
     if (weather.feelsLike < 20 && shoe.warmth <= 1) score -= 3;      // 反過來,涼了別穿薄鞋
     if (shoe.tags?.includes("slides")) {
@@ -923,7 +958,7 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
   let bestBag = null;
   for (const bag of bagPool) {
     let score = colorScore([...chosen, bag]).score + recencyPenalty(bag, wearLog) + intentItemScore(bag, intent) + Math.random() * 1.2;
-    score += paletteItemScore(bag, inPalette) + seen(bag, 0.8);
+    score += paletteItemScore(bag, inPalette, strict) + seen(bag, 0.8);
     if (rainy && bag.tags?.includes("backpack")) score += 1;   // 折傘塞得進去
     if (!bestBag || score > bestBag.score) bestBag = { bag, score };
   }
@@ -974,9 +1009,20 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
   if (inPalette) {
     // 說了色系就講做到幾成;櫃裡湊不齊也照實講,不假裝
     const pieces = [best.top, best.bottom, best.outer, outfit.shoes].filter(Boolean);
-    const off = pieces.filter((item) => item.color && !inPalette(hexToHsl(item.color)));
-    reasons.push(off.length
-      ? `照「${intent.palette.label}」挑,不過「${off[0].name}」${off.length > 1 ? `等 ${off.length} 件` : ""}不在這個色系(櫃裡這個條件下沒有更合的)`
+    const off = pieces.filter((item) => !fitsPalette(item));
+    // 鞋子、外套不合色系,是因為合的那件怕雨收起來了:講雨,不講「櫃裡沒有」
+    const rainedShoe = outfit.shoes && off.includes(outfit.shoes) && !locked.shoes
+      ? skippedShoes.find((shoe) => shoe.color && inPalette(shoe)) : null;
+    const rainedOuter = rainy && best.outer && off.includes(best.outer) && !locked.wholebody_up
+      ? everyOuter.find((outer) => outer.rainOk === false && outer.color && inPalette(outer)) : null;
+    const others = off.filter((item) => !(rainedShoe && item === outfit.shoes) && !(rainedOuter && item === best.outer));
+    const why = [
+      rainedOuter && `合色系的「${rainedOuter.name}」怕雨,外套換成「${best.outer.name}」`,
+      rainedShoe && `合色系的「${rainedShoe.name}」怕雨先收著,鞋子換成「${outfit.shoes.name}」`,
+      others.length && `「${others[0].name}」${others.length > 1 ? `等 ${others.length} 件` : ""}不在這個色系(櫃裡這個條件下沒有更合的)`,
+    ].filter(Boolean);
+    reasons.push(why.length
+      ? `照「${intent.palette.label}」挑,不過${why.join(";")}`
       : `照「${intent.palette.label}」挑,整套都在這個色系`);
   } else if (colorInfo.score > 0) reasons.push(colorInfo.label);
 

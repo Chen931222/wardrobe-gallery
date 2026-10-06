@@ -51,6 +51,12 @@ async function isOpen(store, space, { fresh = false } = {}) {
   return (await readRegistry(store, true)).has(space);
 }
 
+/** 這組同步碼是不是開通名單裡的。給 /api/closet 用:站主完整的衣櫃只給已經開通同步的裝置。 */
+export async function isOpenCode(store, rawCode) {
+  const code = normalizeCode(rawCode);
+  return CODE.test(code) && isOpen(store, spaceOf(code));
+}
+
 function imgsOf(manifest) {
   if (Array.isArray(manifest.imgs)) return manifest.imgs;
   return Object.values(manifest.items || {}).map((entry) => entry.img).filter(Boolean);   // 加密前的舊格式

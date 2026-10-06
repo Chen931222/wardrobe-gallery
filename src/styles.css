@@ -1586,6 +1586,12 @@ h1, h2, h3 {
   width: 100%; height: 220px; object-fit: contain;
   background: var(--paper); border: 1px solid var(--line);
 }
+/* 去背還在算:先放框起來的照片(淡一點),進度字排在下面 */
+.add-preview-wrap.is-pending .add-preview { opacity: .55; }
+.add-preview-status { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; font-size: 13px; color: var(--ink); }
+.add-preview-status .add-spinner { flex: none; }
+.add-retry { padding: 10px 12px; border: 1px solid var(--danger); }
+.add-retry p { margin: 0 0 8px; font-size: 13px; color: var(--danger); }
 
 .add-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
 .add-field input, .add-field select {

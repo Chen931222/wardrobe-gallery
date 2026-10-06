@@ -11,9 +11,13 @@
 // 靜態檔放 /api/ 可能不出(未實測),所以線上要讀的東西都放 /data/。
 // 刪除只有本機有,留在 /api/import/wardrobe/:id。
 //
+// 2026-10-05 起跟線上一樣分兩份:/data/wardrobe.json 只有示範的 20 件,站主完整的衣櫃走 /api/closet
+// (線上要帶開通過的同步碼;本機不檢查,開發機就是站主自己)。
+//
 // 這支只做「讀本機資料 + 刪一件」,沒有任何上傳或外部服務。
 import { readFile, writeFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
+import { demoCloset } from "../src/demoCloset.js";
 
 const LIBRARY = path.resolve("data/library.json");
 const ASSET_DIR = path.resolve("data/imported");
@@ -41,11 +45,14 @@ export function wardrobeDataApi() {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const url = new URL(req.url, "http://localhost");
-        const isRead = url.pathname === "/data/wardrobe.json" || url.pathname.startsWith("/data/library/");
+        const isRead = url.pathname === "/data/wardrobe.json" || url.pathname === "/api/closet" || url.pathname.startsWith("/data/library/");
         if (!isRead && !url.pathname.startsWith("/api/import/")) return next();
 
         try {
           if (url.pathname === "/data/wardrobe.json" && req.method === "GET") {
+            return sendJson(res, 200, demoCloset(await readLibrary()));
+          }
+          if (url.pathname === "/api/closet" && req.method === "GET") {
             return sendJson(res, 200, await readLibrary());
           }
 

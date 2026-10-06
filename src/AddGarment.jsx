@@ -339,7 +339,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
 
   // Esc、✕、取消、返回手勢:去背好的那一步先問(焦點一進來就在 ✕ 上,按一下 Enter 不該把算了半分鐘的結果丟掉),其他直接關
   const requestClose = () => {
-    if (stage === "review" && !window.confirm("要放棄剛去背好的這件嗎?")) return;
+    if (stage === "review" && !window.confirm(draft?.blob ? "要放棄剛去背好的這件嗎?" : "要放棄這件嗎?填好的不會留著。")) return;
     reset();
   };
   // 處理中按取消:回到上一步,照片和框都留著(審查 F4)。模型那邊停不下來,晚回來的結果丟掉
@@ -438,18 +438,27 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     if (!file) return;
     setError("");
     const usable = await toCutoutFormat(file);
+    setDraft((current) => { if (current?.preview) URL.revokeObjectURL(current.preview); return null; });
     setSource({ file: usable, url: URL.createObjectURL(usable) });
     setBox(FULL);
     setStage("crop");
     preloadModel();
   };
 
+  /* 去背:先把表單打開,去背在背景算(2026-10-05)。第一次要下載約 80MB 的模型,4G 上要等好一陣子,
+     舊版這段只有一個轉圈,等完才開始填名稱、分類;現在等的同時就能填,去背好了預覽換成去背圖、存檔鈕才亮。
+     失敗了表單和填好的字都留著,可以「再試一次」或回去重新框。 */
   const cutout = async (region) => {
     const run = ++runRef.current;
     const alive = () => run === runRef.current;
-    setStage("working");
     setError("");
     setStatus("讀取照片…");
+    const fail = (message) => {
+      clearTimeout(watchdogRef.current);
+      setError(message);
+      setStatus("");
+      setDraft((current) => current && { ...current, pending: false });
+    };
     // 看門狗只管下載:60 秒沒有任何下載進度就停(舊版卡住時永遠停在「讀取照片…」,Esc、點外面都沒用)。
     // 開始算之後不計時:iPad gen 7 光推論就可能超過 45 秒,要停就按取消
     const arm = () => {
@@ -457,16 +466,40 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
       watchdogRef.current = setTimeout(() => {
         if (!alive()) return;
         runRef.current += 1;
-        setError("去背模型下載停住了。檢查網路後再按一次。");
-        setStatus("");
-        setStage("crop");
+        fail("去背模型下載停住了。檢查網路後按「再試一次」。");
       }, 60000);
     };
-    arm();
     try {
       const outer = region === FULL ? FULL : expandBox(region);
       // 送去背前先縮到長邊 1600:模型本來就只看 1024,iPhone 的整張截圖(1179×2556)原尺寸丟進去只是吃記憶體
       const input = await limitSide(outer === FULL ? source.file : await cropBlob(source.file, outer), 1600);
+      if (!alive()) return;
+      // 表單先開,預覽先放框起來的照片。「再試一次」「重新框」回來的,已經填的留著
+      setDraft((current) => {
+        if (current?.preview) URL.revokeObjectURL(current.preview);
+        const kept = current?.region ? current : null;
+        return {
+          id: kept?.id || `local-${Date.now()}`,
+          region,
+          pending: true,
+          blob: null,
+          preview: URL.createObjectURL(input),
+          name: kept ? kept.name : link?.name || "",
+          // 長寬比猜分類一直猜錯(短褲→鞋、外套→下身),沒有品名可以看就留空讓人選
+          part: kept ? kept.part : link?.part || partFromName(link?.name) || "",
+          color: null,
+          secondaryColor: null,
+          // 貼了商品連結才預設「還沒買」;從相簿選的多半是自己已經有的
+          wishlist: kept ? kept.wishlist : Boolean(link?.url),
+          sourceUrl: kept ? kept.sourceUrl : link?.url || "",
+          // 價錢:商品頁或 GU、UNIQLO 讀得到就先填好,讀不到留空讓人填
+          price: kept ? kept.price : link?.price?.amount ? String(link.price.amount) : "",
+          priceCurrency: kept ? kept.priceCurrency : link?.price?.currency || "TWD",
+        };
+      });
+      setStage("review");
+      setStatus("準備去背…");
+      arm();
       const cut = await removeBg(input, (text, downloading) => {
         if (!alive()) return;
         setStatus(text);
@@ -485,31 +518,28 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
       const blob = await shrinkImage((await trimTransparent(clean)).blob);
       const { color, secondaryColor } = await garmentColors(blob);
       if (!alive()) return;
-      setDraft({
-        id: `local-${Date.now()}`,
-        blob,
-        preview: URL.createObjectURL(blob),
-        name: link?.name || "",
-        // 長寬比猜分類一直猜錯(短褲→鞋、外套→下身),沒有品名可以看就留空讓人選
-        part: link?.part || partFromName(link?.name) || "",
-        color,
-        secondaryColor,
-        // 貼了商品連結才預設「還沒買」;從相簿選的多半是自己已經有的
-        wishlist: Boolean(link?.url),
-        sourceUrl: link?.url || "",
-        // 價錢:商品頁或 GU、UNIQLO 讀得到就先填好,讀不到留空讓人填
-        price: link?.price?.amount ? String(link.price.amount) : "",
-        priceCurrency: link?.price?.currency || "TWD",
+      setDraft((current) => {
+        if (!current) return current;
+        if (current.preview) URL.revokeObjectURL(current.preview);
+        return { ...current, blob, preview: URL.createObjectURL(blob), color, secondaryColor, pending: false };
       });
-      setStage("review");
       setStatus("");
     } catch (cause) {
       if (!alive()) return;
-      clearTimeout(watchdogRef.current);
       console.error(cause);
-      setError(cutoutErrorText(cause));
-      setStage("crop");
+      fail(cutoutErrorText(cause));
+      if (stageRef.current !== "review") setStage("crop");
     }
+  };
+  // 失敗後:同一個框再算一次(填好的字留著),或回去重新框
+  const retryCutout = () => { if (draft?.region) cutout(draft.region); };
+  const backToCrop = () => {
+    runRef.current += 1;
+    clearTimeout(watchdogRef.current);
+    setError("");
+    setStatus("");
+    setDraft((current) => current && { ...current, pending: false });
+    setStage("crop");
   };
 
   const tooSmall = box.w < 0.05 || box.h < 0.05;
@@ -692,7 +722,29 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
         <div className="add-overlay" role="dialog" aria-modal="true" aria-label="確認新增的衣物" ref={dialogRef}>
           <div className="add-panel add-panel-review">
             {closeButton()}
-            <img className="add-preview" src={draft.preview} alt="去背結果預覽" />
+            <div className={draft.blob ? "add-preview-wrap" : "add-preview-wrap is-pending"}>
+              <img className="add-preview" src={draft.preview} alt={draft.blob ? "去背結果預覽" : "框起來的照片,還沒去背"} />
+              {draft.pending && (
+                <p className="add-preview-status" role="status" aria-live="polite">
+                  <SpinnerGap size={16} className="add-spinner" aria-hidden="true" />{status}
+                </p>
+              )}
+            </div>
+            {draft.pending && (
+              <small className="add-hint">
+                {modelReady() ? "去背中,趁這段時間先填名稱和分類。" : "第一次要下載約 80MB 的去背模型,趁這段時間先填名稱和分類。"}
+                照片在這台裝置上處理,不會上傳。
+              </small>
+            )}
+            {!draft.pending && !draft.blob && (
+              <div className="add-retry" role="alert">
+                <p>{error || "去背沒有完成。"}</p>
+                <div className="add-actions">
+                  <button type="button" className="secondary-button" onClick={backToCrop}>重新框</button>
+                  <button type="button" className="primary-button" onClick={retryCutout}>再試一次</button>
+                </div>
+              </div>
+            )}
 
             <fieldset className="add-owned">
               <legend>這件</legend>
@@ -783,8 +835,8 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
 
             <div className="add-actions">
               <button type="button" className="secondary-button" onClick={requestClose}>取消</button>
-              <button type="button" className="primary-button" onClick={save} disabled={urlInvalid || !draft.part}>
-                {dupes.length ? "還是要存" : draft.wishlist ? "放進想買的" : "加入衣櫃"}
+              <button type="button" className="primary-button" onClick={save} disabled={urlInvalid || !draft.part || !draft.blob}>
+                {!draft.blob ? "去背好就能存" : dupes.length ? "還是要存" : draft.wishlist ? "放進想買的" : "加入衣櫃"}
               </button>
             </div>
           </div>
@@ -792,7 +844,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
       )}
 
       {showing && <ScrollRail target={dialogRef} watch={stage} />}
-      {error && <p className="add-error" role="alert">{error}</p>}
+      {error && !(stage === "review" && draft && !draft.blob) && <p className="add-error" role="alert">{error}</p>}
     </>
   );
 }

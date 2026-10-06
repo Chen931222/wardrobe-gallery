@@ -1,14 +1,21 @@
 // [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 // tools/export-static.mjs — 匯出唯讀靜態版衣櫃(給 Vercel)
-// 原理:前端啟動只 GET /data/wardrobe.json(= data/library.json)和
-// /data/library/*.webp(= data/imported/),把它們照路徑擺成靜態檔即可。
+// 原理:前端啟動只 GET /data/wardrobe.json 和圖,把它們照路徑擺成靜態檔即可。
+//
+// 2026-10-05 起站主完整的衣櫃不再公開:
+//   /data/wardrobe.json      只有示範的 20 件(src/demoCloset.js),圖在 /data/library/(原本的檔名)
+//   api/_owner-closet.mjs    完整的衣櫃,給 /api/closet(要帶開通過的同步碼);底線開頭,網址打不開
+//   /data/p/<雜湊>.webp       其他衣服的圖。檔名是 HMAC(data/.publish-secret, 原檔名),猜不到,只寫在上面那份清單裡;
+//                            secret 留在本機 data/(不進 git),每次匯出用同一把,手機快取的圖才不會每次重抓
 // 不放 api/ 底下:Vercel 把 api/ 保留給 functions,靜態檔放那裡可能不出(未實測,避開就好)。
 // 用法:npx vite build && node tools/export-static.mjs → 產出 wardrobe-gallery/
 // 上線只能從 wardrobe-gallery/ 用 CLI 部署。repo 沒有 data/,Git 建置出來的站是空的,
 // 所以 vercel.json 關掉了 Git 自動部署(2026-09 線上版兩次被 push 觸發的建置蓋掉)。
 import { cp, mkdir, rm, readdir, readFile, copyFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
+import { demoCloset, isDemoItem } from "../src/demoCloset.js";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -52,13 +59,16 @@ for (const entry of await readdir(OUT)) {
   if (entry !== ".vercel") await rm(join(OUT, entry), { recursive: true, force: true });
 }
 await cp(join(ROOT, "dist"), OUT, { recursive: true });
-// 唯一的 Vercel function:貼 GU／UNIQLO 連結時查品名(瀏覽器被對方 CORS 擋,只能從伺服器問)
+// 貼 GU／UNIQLO 連結時查品名(瀏覽器被對方 CORS 擋,只能從伺服器問)
 await mkdir(join(OUT, "api"), { recursive: true });
 await copyFile(join(ROOT, "functions", "brand-product.mjs"), join(OUT, "api", "brand-product.mjs"));
 // 同步:sync.mjs 是路由,_sync-core.mjs 底線開頭不會變成路由。function 要用 @vercel/blob,
 // 所以輸出資料夾放一份只列這個套件的 package.json,Vercel 部署時會自己裝。
 await copyFile(join(ROOT, "functions", "sync.mjs"), join(OUT, "api", "sync.mjs"));
 await copyFile(join(ROOT, "functions", "_sync-core.mjs"), join(OUT, "api", "_sync-core.mjs"));
+// 站主完整的衣櫃:要帶開通過的同步碼(跟同步共用開通名單);清單本身在下面寫成 _owner-closet.mjs
+await copyFile(join(ROOT, "functions", "closet.mjs"), join(OUT, "api", "closet.mjs"));
+await copyFile(join(ROOT, "functions", "_closet-core.mjs"), join(OUT, "api", "_closet-core.mjs"));
 // 其他品牌的商品頁和商品圖。圖片網址要用 secret 簽名才肯代為下載(免得變成誰都能用的開放代理);
 // secret 每次匯出亂數產生、只放在輸出資料夾(不進 git),部署一次換一次,舊的簽名跟著失效也沒關係
 await copyFile(join(ROOT, "functions", "_product-page-core.mjs"), join(OUT, "api", "_product-page-core.mjs"));
@@ -108,8 +118,40 @@ await writeFile(join(OUT, "vercel.json"), JSON.stringify({
 
 const dataDir = join(OUT, "data");
 await mkdir(join(dataDir, "library"), { recursive: true });
-await copyFile(join(ROOT, "data", "library.json"), join(dataDir, "wardrobe.json"));
-for (const f of assets) {
-  await copyFile(join(ROOT, "data", "imported", f), join(dataDir, "library", f));
+await mkdir(join(dataDir, "p"), { recursive: true });
+
+// 公開的:示範的 20 件和它們的圖(原本的路徑)
+const demo = demoCloset(library);
+if (demo.length < 15) {
+  console.error(`示範衣櫃只對到 ${demo.length} 件(src/demoCloset.js 的 DEMO_IDS 跟 data/library.json 對不起來),先停下,不蓋掉上一份輸出`);
+  process.exit(1);
 }
-console.log(`匯出完成:wardrobe-gallery/(${library.length} 件、${assets.length} 個圖檔)→ cd wardrobe-gallery && vercel deploy --prod --yes`);
+await writeFile(join(dataDir, "wardrobe.json"), JSON.stringify(demo));
+const fileOf = (url) => url.slice(ASSET_PREFIX.length);
+const demoFiles = new Set(demo.flatMap((item) => ["image", "thumbnail", "modeledImage"].map((key) => item[key]).filter(Boolean).map(fileOf)));
+for (const f of demoFiles) await copyFile(join(ROOT, "data", "imported", f), join(dataDir, "library", f));
+
+// 不公開的:其他衣服的圖換成猜不到的檔名;完整清單寫進 function
+const secretPath = join(ROOT, "data", ".publish-secret");
+if (!existsSync(secretPath)) await writeFile(secretPath, randomBytes(32).toString("hex"));
+const secret = (await readFile(secretPath, "utf8")).trim();
+const privateUrl = (url) => `/data/p/${createHmac("sha256", secret).update(fileOf(url)).digest("hex").slice(0, 40)}.webp`;
+const hidden = new Map();   // 原檔名 → 新網址
+const closet = library.map((item) => {
+  if (isDemoItem(item)) return item;
+  const out = { ...item };
+  for (const key of ["image", "thumbnail", "modeledImage"]) {
+    if (!item[key]) continue;
+    const url = privateUrl(item[key]);
+    hidden.set(fileOf(item[key]), url);
+    out[key] = url;
+  }
+  return out;
+});
+for (const [file, url] of hidden) await copyFile(join(ROOT, "data", "imported", file), join(OUT, url.slice(1)));
+await writeFile(join(OUT, "api", "_owner-closet.mjs"),
+  `// 匯出時由 tools/export-static.mjs 產生:站主完整的衣櫃,只給 /api/closet 用。不進 git。
+export const CLOSET = ${JSON.stringify(closet)};
+`);
+
+console.log(`匯出完成:wardrobe-gallery/(公開示範 ${demo.length} 件、${demoFiles.size} 個圖檔;站主衣櫃 ${closet.length} 件只走 /api/closet,另外 ${hidden.size} 個圖檔換成不公開檔名)→ cd wardrobe-gallery && vercel deploy --prod --yes`);

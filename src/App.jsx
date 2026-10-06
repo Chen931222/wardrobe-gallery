@@ -18,6 +18,7 @@ import { CURRENCIES, formatPrice, parsePrice } from "./price.js";
 import { downloadBackupZip, importBackupFile } from "./backup.js";
 import { backupReminder, inAppBrowser, isIos, isStandalone, requestPersist, snoozeBackupHint } from "./keepSafe.js";
 import { Welcome } from "./Welcome.jsx";
+import { demoCloset } from "./demoCloset.js";
 
 const STORAGE_KEY = "open-wardrobe-edits-v1";
 const DELETED_STORAGE_KEY = "open-wardrobe-deleted-v1";
@@ -68,22 +69,35 @@ const TAG_ZH = {
 };
 const tagLabel = (tag) => TAG_ZH[String(tag).toLowerCase()] || tag;
 
-/* 示範衣櫃:給朋友、作品集訪客看的。不攤開站主全部 104 件,只放一小份樣本(各類幾件,今日推薦還配得出來),
-   品名去掉括號裡的品牌(「紅色網布輕量慢跑鞋(Nike)」→「紅色網布輕量慢跑鞋」),標籤拿掉品牌。
-   2026-10-05 本人:網站給朋友試用了,不想把自己的衣服都放在入口。站主自己(?edit)照舊看全部。
-   注意這只是畫面上不顯示:data/wardrobe.json 還是公開的,直接開那個網址看得到全部。 */
-const DEMO_QUOTA = { upperbody: 6, wholebody_up: 3, lowerbody: 5, shoes: 3, bag: 2, socks: 1 };
-const BRAND_TAGS = new Set(["adidas", "nike", "mlb", "dickies", "gu", "lacoste", "new balance", "samsonite", "timberland", "under armour", "tods", "polo-rl", "padres", "nationals"]);
-const stableHash = (text) => [...String(text)].reduce((hash, char) => ((hash * 31) + char.charCodeAt(0)) >>> 0, 7);
-function demoSample(served) {
-  const picked = [];
-  const sorted = [...served].sort((a, b) => stableHash(a.id) - stableHash(b.id));   // 每次都挑同一份,不是每次重新整理換一批
-  for (const [part, count] of Object.entries(DEMO_QUOTA)) picked.push(...sorted.filter((item) => item.part === part).slice(0, count));
-  return picked.map((item) => ({
-    ...item,
-    name: String(item.name || "").replace(/\s*[（(][^()（）]*[)）]\s*$/, "").trim() || item.name,
-    tags: (item.tags || []).filter((tag) => !BRAND_TAGS.has(String(tag).toLowerCase())),
-  }));
+/* 站主那批衣服從哪裡來(2026-10-05 起完整衣櫃不再公開):
+   訪客、?public 讀公開的 /data/wardrobe.json,只有示範的 20 件(src/demoCloset.js,人工挑過、品名去掉品牌)。
+   擁有者模式讀 /api/closet,線上要帶開通過的同步碼;還沒輸入、或碼已經換掉 → 先給示範衣櫃,畫面上請他去輸入同步碼。
+   網路斷、伺服器錯 → 丟錯,refresh 沿用上一份,不讓衣服從畫面上消失。
+   完整的那份一次瀏覽只抓一次:它只在重新部署時才會變,同步事件一來就重抓只是白打 function。 */
+let ownerCloset = null;   // 抓完整衣櫃的那一次(Promise);同時發的幾次 refresh 共用,抓到了這次瀏覽就不再抓
+function fetchOwnerCloset() {
+  if (!ownerCloset) {
+    const code = syncCode();
+    ownerCloset = fetch("/api/closet", { cache: "no-store", headers: code ? { "x-sync-code": code } : {} }).then(async (response) => {
+      if (response.ok) return { list: await response.json(), locked: false };
+      await response.text().catch(() => "");   // 沒用到的回應也要讀完,不然那條連線一直掛著(只取消不算數)
+      if ([400, 401, 403, 404].includes(response.status)) return { list: null, locked: true };
+      throw new Error("衣櫃載入失敗。");
+    });
+    // 沒拿到的(還沒輸入同步碼、網路斷)不記住:輸入碼之後、網路回來的下一次 refresh 再抓
+    ownerCloset.then((result) => { if (result.locked) ownerCloset = null; }, () => { ownerCloset = null; });
+  }
+  return ownerCloset;
+}
+async function loadServed() {
+  const demo = async () => {
+    const response = await fetch("/data/wardrobe.json", { cache: "no-store" });
+    if (!response.ok) throw new Error("衣櫃載入失敗。");
+    return demoCloset(await response.json());
+  };
+  if (!CAN_EDIT) return { list: await demo(), locked: false };
+  const result = await fetchOwnerCloset();
+  return result.locked ? { list: await demo(), locked: true } : result;
 }
 const TYPE_ORDER = Object.fromEntries(TYPES.slice(1).map((type, index) => [type.id, index]));
 
@@ -976,15 +990,16 @@ export function App() {
   const servedSeq = useRef(0);
   const localSeq = useRef(0);
   const appliedComplete = useRef(false);   // 畫面上那份兩邊都有讀到
+  const [ownerLocked, setOwnerLocked] = useState(false);   // 擁有者模式但沒有開通的同步碼:看到的是示範衣櫃
   const refresh = useCallback(async () => {
     const seq = ++refreshSeq.current;
     let failed = null;
-    const [served, local] = await Promise.all([
-      fetch("/data/wardrobe.json", { cache: "no-store" })
-        .then((response) => (response.ok ? response.json() : Promise.reject(new Error("衣櫃載入失敗。"))))
-        .catch((cause) => { failed = cause; return null; }),
+    const [servedResult, local] = await Promise.all([
+      loadServed().catch((cause) => { failed = cause; return null; }),
       loadLocalItems(),
     ]);
+    const served = servedResult?.list || null;
+    if (servedResult) setOwnerLocked(servedResult.locked);
     // 備用的上一份只收比較新的結果:較舊的 refresh 晚回來,不能把它換回刪除前的清單(之後讀不到時刪掉的會冒回來)
     if (served && seq > servedSeq.current) { servedRef.current = served; servedSeq.current = seq; }
     if (local && seq > localSeq.current) { localRef.current = local; localSeq.current = seq; }
@@ -999,12 +1014,16 @@ export function App() {
     const edits = readEdits();
     const deleted = readDeletedItems();
     const servedList = served || servedRef.current || [];
-    const merged = [...(CAN_EDIT ? servedList : demoSample(servedList)), ...(local || localRef.current || [])].filter((item) => !deleted.has(item.id));
+    const merged = [...servedList, ...(local || localRef.current || [])].filter((item) => !deleted.has(item.id));
     setItems(merged.map((item) => ({ ...item, ...(edits[item.id] || {}) })));
     setLoading(false);
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+  // 入口頁是滿版的,上面那條提示看不到:打開時講一次
+  useEffect(() => {
+    if (CAN_EDIT && ownerLocked) say("這台還沒輸入同步碼,看到的是示範衣櫃。到右上「同步」輸入同步碼,就會打開你的衣櫃。");
+  }, [ownerLocked, say]);
 
   // 同步:打開時、切回來時拉一次;離開(切到別的 app)前有改過就推;衣服一改,5 秒後推。
   // 拿到別台的東西不整頁重新整理:衣服、編輯、隱藏由 refresh 重讀;收藏、微調、穿著紀錄由搭配頁自己聽同一個事件重讀。
@@ -1371,6 +1390,14 @@ export function App() {
             </p>
           );
         })()}
+        {CAN_EDIT && ownerLocked && view !== "landing" && (
+          <p className="keep-hint" role="note">
+            你的衣櫃要用同步碼打開:這台還沒輸入同步碼(或碼已經換新的),現在看到的是示範衣櫃。
+            <span className="keep-hint-actions">
+              <button type="button" className="is-main" onClick={() => setSyncOpen(true)}>輸入同步碼</button>
+            </span>
+          </p>
+        )}
         {/* 浮在畫面上方:入口頁是滿版的、單品頁在手機上蓋滿整個畫面,放在頁面裡會看不到(審查抓到) */}
         {notice && <p className="app-notice" role="status">{notice}</p>}
         {error && <p className="status error">{error}</p>}
