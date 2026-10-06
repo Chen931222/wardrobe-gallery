@@ -235,8 +235,26 @@ h1, h2, h3 {
   gap: 16px;
   border-bottom: 1px solid var(--line);
 }
-.closet-index-top > button { font-family: var(--font-display); font-size: 17px; letter-spacing: .02em; }
-.closet-index-extra { display: inline-flex; gap: 20px; }
+.closet-index-current { display: inline-flex; align-items: baseline; gap: 10px; }
+.closet-index-current > button:first-child { font-family: var(--font-display); font-size: 17px; letter-spacing: .02em; }
+.closet-index-sep { color: var(--line); font-size: 15px; }
+/* 想買的、垃圾桶、收合鈕:排不下就換行(寬 320 的手機),不擠出畫面 */
+.closet-index-top { flex-wrap: wrap; row-gap: 0; }
+.closet-index-extra { display: inline-flex; flex-wrap: wrap; align-items: baseline; column-gap: 20px; margin-left: auto; }
+.closet-index button.closet-index-toggle { gap: 4px; color: var(--muted); font-size: 13px; }
+.closet-index button.closet-index-toggle:hover { color: var(--ink); }
+.closet-index-toggle svg { align-self: center; transition: transform 240ms cubic-bezier(.2, .7, .2, 1); }
+.closet-index-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+/* 收合:高度用 grid 0fr ↔ 1fr,不用量內容多高 */
+.closet-index-rows {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 260ms cubic-bezier(.2, .7, .2, 1);
+}
+.closet-index-rows-inner { min-height: 0; overflow: hidden; }
+.closet-index.is-folded .closet-index-rows { grid-template-rows: 0fr; }
+/* 收起時只剩第一行:它自己的底線和整塊目錄的底線會疊成兩條,拿掉一條 */
+.closet-index.is-folded .closet-index-top { border-bottom-color: transparent; }
 .closet-index-row {
   display: grid;
   grid-template-columns: 3em 1fr;
@@ -1090,6 +1108,8 @@ h1, h2, h3 {
 @media (prefers-reduced-motion: reduce) {
   .gallery-item img,
   .closet-index button,
+  .closet-index-rows,
+  .closet-index-toggle svg,
   .viewer-art-floating { transition: none; }
   .viewer-overlay,
   .viewer-entry { animation: none; }

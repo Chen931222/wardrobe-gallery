@@ -1,6 +1,6 @@
 // [本 fork 修改] 上游 tandpfun/wardrobe 既有檔案。本 fork 的改動:介面全繁中化並擴充分類,新增入口環/衣櫃/搭配三頁切換、IndexedDB 本機衣物合併與格子刪除鈕。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Camera, Check, Plus, Sparkle, Star, Trash, X } from "@phosphor-icons/react";
+import { Camera, CaretDown, Check, Plus, Sparkle, Star, Trash, X } from "@phosphor-icons/react";
 import { OptimizedImage } from "./OptimizedImage.jsx";
 import { OutfitStudio, rememberWearing } from "./OutfitStudio.jsx";
 import { LandingRing } from "./LandingRing.jsx";
@@ -297,34 +297,64 @@ function GalleryItem({ item, selected, onOpen, onDelete, favorite = false }) {
 /* 衣櫃目錄(2026-10-06 本人選的)。舊版是一長排橫向捲動的分類:iPhone 上只看得到 5–7 顆,
    「想買的」「垃圾桶」排在最後面最難找,再加皮帶、戒指就更長。改成像書的目錄:每組一行、每類標件數,
    一眼看完不用滑;沒有衣服的分類不列(正在看的那類除外),想加的時候新增的選單裡都有。 */
+/* 收起來(2026-10-06 本人要的:目錄展開時手機上第一件衣服往下推了約 135px)。收起時只留第一行;
+   正在看的那一類也留在第一行(「全部 / 皮帶 6」),看得出現在篩的是什麼。記在這台(open-wardrobe-index-open-v1),
+   第一次預設展開:新朋友要先看得到有哪些分類。 */
+const INDEX_OPEN_KEY = "open-wardrobe-index-open-v1";
+function readIndexOpen() {
+  try { return localStorage.getItem(INDEX_OPEN_KEY) !== "0"; } catch { return true; }
+}
+
 function ClosetIndex({ activeType, onChoose, counts, total, favCount = 0, wishCount, trashCount }) {
+  const [open, setOpen] = useState(readIndexOpen);
+  const toggle = () => {
+    setOpen((was) => {
+      try { localStorage.setItem(INDEX_OPEN_KEY, was ? "0" : "1"); } catch { /* 只記這次 */ }
+      return !was;
+    });
+  };
   const entry = (id, label, count) => (
     <button key={id} type="button" className={activeType === id ? "active" : ""} aria-pressed={activeType === id} onClick={() => onChoose(id)}>
       <span className="closet-index-label">{label}</span><span className="closet-index-count">{count}</span>
     </button>
   );
+  const activePart = PARTS[activeType] ? activeType : null;
   return (
-    <nav className="closet-index" aria-label="衣櫃目錄">
+    <nav className={open ? "closet-index" : "closet-index is-folded"} aria-label="衣櫃目錄">
       <div className="closet-index-top">
-        {entry("all", "全部", total)}
-        {(favCount > 0 || wishCount > 0 || trashCount > 0) && (
-          <span className="closet-index-extra">
-            {favCount > 0 && entry("favorites", "最愛", favCount)}
-            {wishCount > 0 && entry("wishlist", "想買的", wishCount)}
-            {trashCount > 0 && entry("trash", "垃圾桶", trashCount)}
-          </span>
-        )}
+        <span className="closet-index-current">
+          {entry("all", "全部", total)}
+          {!open && activePart && (
+            <>
+              <span className="closet-index-sep" aria-hidden="true">/</span>
+              {entry(activePart, PARTS[activePart].short || PARTS[activePart].label, counts[activePart] || 0)}
+            </>
+          )}
+        </span>
+        <span className="closet-index-extra">
+          {favCount > 0 && entry("favorites", "最愛", favCount)}
+          {wishCount > 0 && entry("wishlist", "想買的", wishCount)}
+          {trashCount > 0 && entry("trash", "垃圾桶", trashCount)}
+          <button type="button" className="closet-index-toggle" aria-expanded={open} aria-controls="closet-index-rows" onClick={toggle}>
+            {open ? "收起" : "分類"}<CaretDown size={13} weight="regular" aria-hidden="true" />
+          </button>
+        </span>
       </div>
-      {PART_GROUPS.map((group) => {
-        const parts = group.parts.filter((part) => counts[part] || activeType === part);
-        if (!parts.length) return null;
-        return (
-          <div key={group.id} className="closet-index-row" role="group" aria-label={group.label}>
-            <span className="closet-index-group" aria-hidden="true">{group.label}</span>
-            <span className="closet-index-items">{parts.map((part) => entry(part, PARTS[part].short || PARTS[part].label, counts[part] || 0))}</span>
-          </div>
-        );
-      })}
+      {/* 收合用 grid 的 0fr ↔ 1fr 做高度;收起時 inert,裡面的按鈕 Tab 不到、點不到 */}
+      <div id="closet-index-rows" className="closet-index-rows" inert={!open}>
+        <div className="closet-index-rows-inner">
+          {PART_GROUPS.map((group) => {
+            const parts = group.parts.filter((part) => counts[part] || activeType === part);
+            if (!parts.length) return null;
+            return (
+              <div key={group.id} className="closet-index-row" role="group" aria-label={group.label}>
+                <span className="closet-index-group" aria-hidden="true">{group.label}</span>
+                <span className="closet-index-items">{parts.map((part) => entry(part, PARTS[part].short || PARTS[part].label, counts[part] || 0))}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </nav>
   );
 }
