@@ -533,8 +533,8 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       const result = recommendOutfit(items, weather, wearLog, intent, locked, avoid);
       if (result.error) { setDaily({ error: result.error }); return; }
       shownRef.current = [Object.values(result.outfit).filter(Boolean).map((item) => item.id), ...shownRef.current].slice(0, 3);
-      // 引擎不管眼鏡/手錶/配件,身上有就留著,別每次推薦都被脫掉
-      for (const slot of ["eyewear", "wrist", "accessories_up"]) if (wearing[slot]) result.outfit[slot] = wearing[slot];
+      // 眼鏡、手錶、配件現在引擎也會挑(2026-10-06);這次沒挑到的那格,身上有就留著,別每次推薦都被脫掉
+      for (const slot of ["eyewear", "wrist", "accessories_up"]) if (wearing[slot] && !result.outfit[slot]) result.outfit[slot] = wearing[slot];
       if (notes.length) result.reasons.unshift(...notes);
       const lockedLabels = Object.keys(locked).map((slot) => SLOT_LABEL[slot]);
       if (lockedLabels.length) result.reasons.push(`鎖住沒動:${lockedLabels.join("、")}`);

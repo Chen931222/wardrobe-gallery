@@ -99,6 +99,10 @@ function recencyPenalty(item, wearLog) {
   return penalty;
 }
 
+/** 太陽眼鏡:只在不太會下雨的日子配;一般眼鏡照戴。 */
+const isSunglasses = (item) => /太陽|墨鏡|sunglass|sun-glass/i.test(`${item?.name || ""} ${(item?.tags || []).join(" ")}`);
+const SUNNY_RAIN_MAX = 40;
+
 /* ---------- 溫度規則(台灣常見穿法) ---------- */
 
 function targetWarmth(feelsLike) {
@@ -787,9 +791,12 @@ export function randomOutfit(items, weather = null) {
     outfit.shoes = pickOne(feels === null ? shoes : narrow(shoes, (shoe) => (feels >= 20 || !known(shoe) || shoe.warmth > 1)
       && !((weather.rainProb ?? 0) >= 60 && shoe.rainOk === false)));
   }
+  // 配件:手錶天天戴、眼鏡多半也是,出現得比襪子、包多(2026-10-06 本人:隨機一套很少配到手錶眼鏡,舊版每類都只有 45%)
+  const CHANCE = { socks: 0.45, bag: 0.45, eyewear: 0.6, wrist: 0.75, accessories_up: 0.45 };
+  const rainy = (weather?.rainProb ?? 0) >= SUNNY_RAIN_MAX;
   for (const part of ["socks", "bag", "eyewear", "wrist", "accessories_up"]) {
-    const list = byPart(part);
-    if (list.length && Math.random() >= 0.55) outfit[part] = pickOne(list);
+    const list = part === "eyewear" && rainy ? byPart(part).filter((item) => !isSunglasses(item)) : byPart(part);
+    if (list.length && Math.random() < CHANCE[part]) outfit[part] = pickOne(list);
   }
   return outfit;
 }
@@ -963,6 +970,32 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
     if (!bestBag || score > bestBag.score) bestBag = { bag, score };
   }
   if (bestBag) outfit.bag = bestBag.bag;
+
+  // 眼鏡、手錶、其他配件(2026-10-06 本人:今日推薦從來不配這幾類,舊版引擎根本沒挑)。
+  // 只挑已經有的(想買的不算,也不看保暖度),比配色、色系、場合、最近戴過:
+  //   手錶手環:有就戴一支,每天都戴的東西
+  //   眼鏡:一般眼鏡照戴;太陽眼鏡只在不太會下雨的日子
+  //   其他配件(帽子、項鍊…):一半的機率加,不每套都塞
+  const wornSoFar = [...chosen, outfit.shoes, outfit.bag].filter(Boolean);
+  const pickAccessory = (part, keep = () => true) => {
+    if (locked[part]) return locked[part];
+    let bestAcc = null;
+    for (const acc of items) {
+      if (acc.part !== part || acc.wishlist || !keep(acc)) continue;
+      const score = colorScore([...wornSoFar, acc]).score + recencyPenalty(acc, wearLog) + intentItemScore(acc, intent)
+        + paletteItemScore(acc, inPalette, strict) + seen(acc, 0.8) + Math.random() * 1.2;
+      if (!bestAcc || score > bestAcc.score) bestAcc = { acc, score };
+    }
+    return bestAcc?.acc || null;
+  };
+  const watch = pickAccessory("wrist");
+  if (watch) outfit.wrist = watch;
+  const glasses = pickAccessory("eyewear", (item) => weather.rainProb < SUNNY_RAIN_MAX || !isSunglasses(item));
+  if (glasses) outfit.eyewear = glasses;
+  if (locked.accessories_up || Math.random() < 0.5) {
+    const extra = pickAccessory("accessories_up");
+    if (extra) outfit.accessories_up = extra;
+  }
   const duckedRainBag = rainy && dryBags.length > 0 && dryBags.length < allBags.length;
   // 實際因為雨被剔掉的那些(理由要照實講,不寫死「麂皮帆布鞋」)
   const skippedShoes = duckedRain ? allShoes.filter((shoe) => shoe.rainOk === false) : [];
