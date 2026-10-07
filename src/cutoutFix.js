@@ -72,12 +72,59 @@ function floodFromBorder(pass, W, H, stack) {
   return reached;
 }
 
+/* 整件都很淡(鬼影,2026-10-07 本人白襯衫換圖的截圖):模型抓到的形狀是對的,但整件衣服都只給兩成上下的不透明度,
+   上面那套「圍住的才補」對它沒用 —— 補滿模式只圍到領口一小塊,補成一塊白,其他還是鬼影。
+   看衣服本體有多不透明(不透明度 ≥ 8 的像素裡第 90 百分位):不到 192 就當鬼影,把不透明度拉開 ——
+   背景雜訊和淡淡的影子(本體三成以下)歸零,本體拉到全不透明,中間照比例,邊緣還是柔的。正常的去背不動。 */
+const GHOST_HI = 192;
+const GHOST_WEAK = 64;
+function stretchGhost(alpha, W, H) {
+  const N = W * H;
+  const hist = new Uint32Array(256);
+  let count = 0;
+  for (let i = 0; i < N; i += 1) if (alpha[i] >= 8) { hist[alpha[i]] += 1; count += 1; }
+  if (count < N * 0.005) return false;   // 幾乎什麼都沒抓到:拉了也只是放大雜訊
+  let hi = 255;
+  for (let v = 8, seen = 0; v < 256; v += 1) { seen += hist[v]; if (seen >= count * 0.9) { hi = v; break; } }
+  if (hi >= GHOST_HI) return false;
+  // 四邊一圈(2%)是背景:它的第 99 百分位當雜訊的底
+  const frame = Math.max(1, Math.round(Math.min(W, H) * 0.02));
+  const edgeHist = new Uint32Array(256);
+  let edgeCount = 0;
+  for (let y = 0; y < H; y += 1) {
+    for (let x = 0; x < W; x += 1) {
+      if (y >= frame && y < H - frame && x >= frame && x < W - frame) continue;
+      edgeHist[alpha[y * W + x]] += 1; edgeCount += 1;
+    }
+  }
+  let floor = 0;
+  for (let v = 0, seen = 0; v < 256; v += 1) { seen += edgeHist[v]; if (seen >= edgeCount * 0.99) { floor = v; break; } }
+  const lo = Math.max(floor, Math.round(hi * 0.3));
+  if (hi - lo < 8) return false;
+  for (let i = 0; i < N; i += 1) alpha[i] = Math.max(0, Math.min(255, Math.round(((alpha[i] - lo) * 255) / (hi - lo))));
+  return true;
+}
+
 /** 直接改 out(RGBA)的 alpha 和顏色;src 是原照片同尺寸的 RGBA。回傳改了幾個像素。 */
 export function solidify(out, src, W, H, { strong = false } = {}) {
   const N = W * H;
   const alpha = new Uint8Array(N);
   for (let i = 0; i < N; i += 1) alpha[i] = out[i * 4 + 3];
-  const edge = strong ? STRONG_EDGE : WEAK;
+  // 鬼影先拉開,整張的不透明度和顏色都換成拉開後的(很淡的像素存 PNG 時顏色會糊掉,用原照片的)
+  let changed = 0;
+  const ghost = stretchGhost(alpha, W, H);
+  if (ghost) {
+    for (let i = 0; i < N; i += 1) {
+      if (out[i * 4 + 3] === alpha[i]) continue;
+      out[i * 4] = src[i * 4];
+      out[i * 4 + 1] = src[i * 4 + 1];
+      out[i * 4 + 2] = src[i * 4 + 2];
+      out[i * 4 + 3] = alpha[i];
+      changed += 1;
+    }
+  }
+  // 鬼影拉開後,本體裡偏淡的地方還是不到一半:門檻放低到 1/4,才不會從那裡被當成外面
+  const edge = strong ? STRONG_EDGE : ghost ? GHOST_WEAK : WEAK;
   const weak = (i) => alpha[i] < edge;
   const stack = new Int32Array(N);
 
@@ -129,7 +176,6 @@ export function solidify(out, src, W, H, { strong = false } = {}) {
   for (let i = 0; i < N; i += 1) toOutside[i] = outside[i] || hole[i] ? 0 : INF;
   chamfer(toOutside, W, H);
 
-  let changed = 0;
   for (let i = 0; i < N; i += 1) {
     if (outside[i] || hole[i] || alpha[i] === 255) continue;
     if (!fill[i] && toOutside[i] <= band3) continue;   // 邊緣那一圈:留柔邊
