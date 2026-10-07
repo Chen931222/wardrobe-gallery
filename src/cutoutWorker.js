@@ -2,7 +2,7 @@
 /* 在 Worker 裡去背(為什麼見 cutout.js 開頭):主執行緒那 10–20 秒才不會凍住,等的時候還能打字。
    進度回呼固定一個(去背套件會把第一次的設定連回呼一起快取),進度用訊息傳回主執行緒。 */
 import { preload, removeBackground } from "@imgly/background-removal";
-import { solidifyCutout } from "./cutoutFix.js";
+import { retryLowContrast, solidifyCutout } from "./cutoutFix.js";
 
 const progress = (key, current, total) => self.postMessage({ type: "progress", key, current, total });
 
@@ -16,7 +16,10 @@ self.onmessage = async ({ data: { id, type, file, cut, quality, part, strong } }
       // 白衣服白底被吃掉的補回來(cutoutFix.js);跟去背分開,按「補滿」時不用重算模型
       self.postMessage({ id, type: "done", blob: await solidifyCutout(file, cut, { part, strong }) });
     } else {
-      self.postMessage({ id, type: "done", blob: await removeBackground(file, config) });
+      const cut = await removeBackground(file, config);
+      // 對比太低(白衣服、淺灰底的商品圖):拉開再算一次(cutoutFix.js)
+      const blob = await retryLowContrast(file, cut, (leveled) => { progress("retry", 0, 1); return removeBackground(leveled, config); });
+      self.postMessage({ id, type: "done", blob });
     }
   } catch (error) {
     const message = String(error?.message || error);

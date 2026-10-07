@@ -244,6 +244,46 @@ const encode = (canvas) => (canvas.convertToBlob
   ? canvas.convertToBlob({ type: "image/png" })
   : new Promise((resolve) => canvas.toBlob(resolve, "image/png")));
 
+/* 對比太低的照片先拉開再算一次(2026-10-07 本人傳來的 Massimo Dutti 白襯衫商品圖):
+   純白襯衫放在 238–249 的淺灰漸層上,整張照片亮度只差 20(第 1 到第 99 百分位)。模型只看得到左袖和領口,
+   右半邊幾乎全給 0 —— 這不是補洞能救的,模型就是沒看到。把亮度拉開(第 1 百分位→0、第 99→255)再丟進去,
+   整件都抓到了(不透明度 ≥ 224 的像素 1,409 → 34,896)。拿那次的形狀、配原照片的顏色。
+   只在對比很低(亮度差 ≤ 48)時多算這一次;一般照片(白床單上的白衣服也有 60 以上)不會多等。
+   合成的低對比測試圖拉開後結果跟原本一樣(0.99 上下),所以只有第二次的實心範圍明顯比較大(多 25%)才換。 */
+const LOW_SPAN = 48;
+async function solidArea(blob) {
+  const { image } = await pixels(blob);
+  let solid = 0;
+  for (let i = 3; i < image.data.length; i += 4) if (image.data[i] >= 224) solid += 1;
+  return { solid, total: image.data.length / 4 };
+}
+/** rerun(拉開對比的那張) → 模型的結果。不需要、或沒比較好,回傳原本的 cut。 */
+export async function retryLowContrast(original, cut, rerun) {
+  const source = await pixels(original);
+  const data = source.image.data;
+  const hist = new Uint32Array(256);
+  const N = data.length / 4;
+  for (let i = 0; i < data.length; i += 4) hist[Math.round((data[i] + data[i + 1] + data[i + 2]) / 3)] += 1;
+  const at = (q) => { for (let v = 0, seen = 0; v < 256; v += 1) { seen += hist[v]; if (seen >= N * q) return v; } return 255; };
+  const lo = at(0.01), hi = at(0.99);
+  if (hi - lo > LOW_SPAN || hi - lo < 4) return cut;
+  const first = await solidArea(cut);
+  const keep = new Uint8ClampedArray(data);   // 原照片的顏色留一份,拉開的只給模型看
+  for (let i = 0; i < data.length; i += 4) {
+    for (let c = 0; c < 3; c += 1) data[i + c] = ((data[i + c] - lo) * 255) / (hi - lo);
+  }
+  source.context.putImageData(source.image, 0, 0);
+  const second = await rerun(await encode(source.canvas));
+  const after = await solidArea(second);
+  if (after.solid <= first.solid * 1.25 || after.solid > after.total * 0.9) return cut;
+  const shape = await pixels(second);
+  if (shape.canvas.width !== source.canvas.width || shape.canvas.height !== source.canvas.height) return cut;
+  for (let i = 0; i < keep.length; i += 4) keep[i + 3] = shape.image.data[i + 3];
+  source.image.data.set(keep);
+  source.context.putImageData(source.image, 0, 0);
+  return (await encode(source.canvas)) || cut;
+}
+
 /** 去背結果補洞補實。原照片和結果尺寸不同、或這類不自動做,原樣回傳。strong = 人按了「補滿」 */
 export async function solidifyCutout(original, cut, { part = "", strong = false } = {}) {
   if (!strong && SKIP_PARTS.has(part)) return cut;

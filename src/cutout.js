@@ -19,6 +19,10 @@ let currentProgress = null;
 let downloading = false;
 const onModelProgress = (key, current, total) => {
   if (!currentProgress) return;
+  if (key === "retry") {   // 對比太低,拉開再算一次(cutoutFix.js 的 retryLowContrast)
+    currentProgress("衣服跟背景太像,拉高對比再算一次…", false);
+    return;
+  }
   if (key.startsWith("fetch") && current < total) {
     downloading = true;
     // 「已經下載過」的記號不可靠:Safari 會把這麼大的快取清掉,隔天又要重抓。下載中就講明多大、建議 Wi-Fi
@@ -129,6 +133,8 @@ export async function removeBg(file, onProgress) {
       if (!result) {
         const { removeBackground } = await import("@imgly/background-removal");
         result = await removeBackground(file, modelConfig());
+        const { retryLowContrast } = await import("./cutoutFix.js");
+        result = await retryLowContrast(file, result, (leveled) => { onModelProgress("retry", 0, 1); return removeBackground(leveled, modelConfig()); });
       }
       try { localStorage.setItem(MODEL_READY_KEY, "1"); } catch { /* 存不了就每次都顯示第一次的提示 */ }
       return result;
