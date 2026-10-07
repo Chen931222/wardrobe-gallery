@@ -39,6 +39,7 @@ export function toDemoItem(item) {
     ...item,
     name: String(item.name || "").replace(/\s*[（(][^()（）]*[)）]\s*$/, "").trim() || item.name,
     tags: (item.tags || []).filter((tag) => !BRAND_TAGS.has(String(tag).toLowerCase())),
+    brand: "",   // 示範衣櫃刻意不放品牌(品名、標籤都拿掉了);空白 = 不寫,brands.js 不會再猜
   };
 }
 

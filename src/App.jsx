@@ -22,6 +22,7 @@ import { demoCloset } from "./demoCloset.js";
 import { PART_GROUPS, PART_ORDER, PARTS } from "./parts.js";
 import { FAVORITES_KEY, readFavorites, toggleFavorite } from "./favorites.js";
 import { useFullImage } from "./useFullImage.js";
+import { brandOf, brandSuggestions } from "./brands.js";
 import { partFromName } from "./brandLink.js";
 import { noteRecommendation } from "./taste.js";
 
@@ -149,7 +150,8 @@ function readEdits() {
 
 
 // quantity(2026-10-06 本人要的:同一款買了兩件,不想佔兩格):數量,沒寫就是 1
-const EDIT_FIELDS = ["name", "part", "color", "secondaryColor", "tags", "price", "priceCurrency", "quantity"];
+// brand(2026-10-07):品牌,沒寫就看品名、標籤、網址猜(brands.js);存成空白 = 刻意不寫
+const EDIT_FIELDS = ["name", "part", "color", "secondaryColor", "tags", "price", "priceCurrency", "quantity", "brand"];
 const qtyOf = (value) => Math.min(99, Math.max(1, Math.floor(Number(value)) || 1));
 const editValue = (item, field) => {
   const value = item?.[field];
@@ -349,8 +351,13 @@ function readIndexOpen() {
   try { return localStorage.getItem(INDEX_OPEN_KEY) !== "0"; } catch { return true; }
 }
 
-function ClosetIndex({ activeType, onChoose, counts, total, favCount = 0, wishCount, trashCount }) {
+const BRAND_PREFIX = "brand:";
+const brandFilterOf = (activeType) => (activeType.startsWith(BRAND_PREFIX) ? activeType.slice(BRAND_PREFIX.length) : null);
+const BRANDS_SHOWN = 10;   // 品牌多的話先列件數最多的幾個,其他按「其他 N 個」
+
+function ClosetIndex({ activeType, onChoose, counts, total, favCount = 0, wishCount, trashCount, brands = { list: [], none: 0 } }) {
   const [open, setOpen] = useState(readIndexOpen);
+  const [allBrands, setAllBrands] = useState(false);
   const toggle = () => {
     setOpen((was) => {
       try { localStorage.setItem(INDEX_OPEN_KEY, was ? "0" : "1"); } catch { /* 只記這次 */ }
@@ -363,6 +370,15 @@ function ClosetIndex({ activeType, onChoose, counts, total, favCount = 0, wishCo
     </button>
   );
   const activePart = PARTS[activeType] ? activeType : null;
+  // 品牌(2026-10-07):目錄最下面一行,像書的索引。件數多的排前面;正在看的那個一定列出來
+  const activeBrand = brandFilterOf(activeType);
+  const shownBrands = allBrands ? brands.list : brands.list.filter((brand, index) => index < BRANDS_SHOWN || brand.name === activeBrand);
+  const hiddenBrands = brands.list.length - shownBrands.length;
+  const folded = activePart
+    ? { id: activePart, label: PARTS[activePart].short || PARTS[activePart].label, count: counts[activePart] || 0 }
+    : activeBrand !== null
+      ? { id: activeType, label: activeBrand || "沒寫品牌", count: activeBrand ? brands.list.find((brand) => brand.name === activeBrand)?.count || 0 : brands.none }
+      : null;
   return (
     <nav className={open ? "closet-index" : "closet-index is-folded"} aria-label="衣櫃目錄">
       <div className="closet-index-top">
@@ -374,10 +390,10 @@ function ClosetIndex({ activeType, onChoose, counts, total, favCount = 0, wishCo
           <button type="button" className="closet-index-toggle" aria-expanded={open} aria-controls="closet-index-rows" aria-label={open ? "收起分類" : "展開分類"} title={open ? "收起分類" : "展開分類"} onClick={toggle}>
             <CaretDown size={14} weight="regular" aria-hidden="true" />
           </button>
-          {!open && activePart && (
+          {!open && folded && (
             <>
               <span className="closet-index-sep" aria-hidden="true">/</span>
-              {entry(activePart, PARTS[activePart].short || PARTS[activePart].label, counts[activePart] || 0)}
+              {entry(folded.id, folded.label, folded.count)}
             </>
           )}
         </span>
@@ -402,9 +418,57 @@ function ClosetIndex({ activeType, onChoose, counts, total, favCount = 0, wishCo
               </div>
             );
           })}
+          {brands.list.length > 0 && (
+            <div className="closet-index-row" role="group" aria-label="品牌">
+              <span className="closet-index-group" aria-hidden="true">品牌</span>
+              <span className="closet-index-items">
+                {shownBrands.map((brand) => entry(`${BRAND_PREFIX}${brand.name}`, brand.name, brand.count))}
+                {hiddenBrands > 0 && (
+                  <button type="button" className="closet-index-more" onClick={() => setAllBrands(true)}>其他 {hiddenBrands} 個</button>
+                )}
+                {brands.none > 0 && entry(BRAND_PREFIX, "沒寫", brands.none)}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </nav>
+  );
+}
+
+/* 總價(2026-10-07 本人要的「總價錢」):跟著目錄選的範圍加(全部/某一類/某個品牌/想買的)。
+   數量 ×2 的算兩件;不同幣別分開加、不換算(沒有匯率來源,換了也是猜);幾件沒填價錢照實寫,不然看起來像全部的總值。
+   站主衣櫃那 104 件本來都沒有價錢(verified 2026-10-07:library.json 0 件有),要自己在單品頁填。 */
+function sumPrices(list) {
+  const byCurrency = new Map();
+  let priced = 0;
+  for (const item of list) {
+    const price = Number(item.price);
+    if (!(price > 0)) continue;
+    priced += 1;
+    const currency = item.priceCurrency || "TWD";
+    byCurrency.set(currency, (byCurrency.get(currency) || 0) + price * qtyOf(item.quantity));
+  }
+  return { text: [...byCurrency].map(([currency, value]) => formatPrice(value, currency)).join(" + "), priced, count: list.length };
+}
+function ClosetTotal({ items }) {
+  const owned = sumPrices(items.filter((item) => !item.wishlist));
+  const wish = sumPrices(items.filter((item) => item.wishlist));
+  const part = (label, sum) => sum.count > 0 && (
+    <span className="closet-total-part">
+      <span className="closet-total-label">{label}</span>
+      {sum.priced ? <strong>{sum.text}</strong> : <span className="closet-total-none">還沒填價錢</span>}
+      {!(sum.count === 1 && sum.priced) && (
+        <small>{sum.priced === sum.count ? `${sum.count} 件都有價錢` : sum.priced ? `${sum.count} 件裡 ${sum.priced} 件有價錢` : "點開一件,在「價錢」填上就會加進來"}</small>
+      )}
+    </span>
+  );
+  if (!owned.count && !wish.count) return null;
+  return (
+    <p className="closet-total">
+      {part(wish.count ? "已經有的" : "合計", owned)}
+      {part("想買的", wish)}
+    </p>
   );
 }
 
@@ -544,7 +608,7 @@ function ColorControl({ label, field, value, palette, onChange, sampling, setSam
   );
 }
 
-function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleStatus, priceStatus = "", onFetchPrice = null, mergeCandidates = [], onMerge = null }) {
+function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleStatus, priceStatus = "", onFetchPrice = null, mergeCandidates = [], onMerge = null, brandOptions = [] }) {
   const suggestedSecondary = palette.find((color) => color.toLowerCase() !== draft.color?.toLowerCase()) || "#9a9286";
 
   return (
@@ -556,6 +620,18 @@ function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleSta
           onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
           placeholder={TYPE_MAP[draft.part]?.singular || "衣物"}
         />
+      </label>
+      {/* 品牌:先填好看品名、網址猜到的;清空 = 這件不寫品牌 */}
+      <label className="field">
+        <span>品牌</span>
+        <input
+          value={draft.brand}
+          list="brand-options"
+          autoComplete="off"
+          onChange={(event) => setDraft((current) => ({ ...current, brand: event.target.value }))}
+          placeholder="沒寫"
+        />
+        <datalist id="brand-options">{brandOptions.map((brand) => <option key={brand} value={brand} />)}</datalist>
       </label>
 
       <label className="field">
@@ -664,7 +740,7 @@ function ReadOnlyDetails({ item, onWear }) {
   const tags = [...new Set((item.tags || []).map(tagLabel))];
   return (
     <div className="viewer-readonly">
-      <p className="viewer-ro-category">{type}{qtyOf(item.quantity) > 1 ? ` · ${qtyOf(item.quantity)} 件` : ""}</p>
+      <p className="viewer-ro-category">{brandOf(item) ? `${brandOf(item)} · ` : ""}{type}{qtyOf(item.quantity) > 1 ? ` · ${qtyOf(item.quantity)} 件` : ""}</p>
       {Boolean(item.price) && <p className="viewer-ro-price">{formatPrice(item.price, item.priceCurrency)}</p>}
       {!!colors.length && (
         <div className="viewer-ro-colors">
@@ -821,13 +897,14 @@ function WishCheck({ item, owned, onOpen, onWearOutfit }) {
   );
 }
 
-const DRAFT_FIELDS = ["name", "part", "color", "secondaryColor", "tags", "price", "priceCurrency", "quantity"];
+const DRAFT_FIELDS = ["name", "part", "color", "secondaryColor", "tags", "price", "priceCurrency", "quantity", "brand"];
 
 function draftOf(item) {
   return {
     name: item.name || "", part: item.part, color: item.color || "#9a9286", secondaryColor: item.secondaryColor || null, tags: [...(item.tags || [])],
     price: item.price ? String(item.price) : "", priceCurrency: item.priceCurrency || "TWD",
     quantity: qtyOf(item.quantity),
+    brand: brandOf(item) || "",
   };
 }
 
@@ -840,7 +917,7 @@ function rebaseDraft(draft, before, after) {
 }
 
 /** @param gone 這件在別台被刪掉或隱藏了:頁面留著(草稿還在、可以複製),但存檔、刪除、穿上這些動作都關掉 */
-function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWear, onBought, onSetUrl, onSetPrice, onOpen, onWearOutfit, onReplaceImage, onRestoreImage, favorite = false, onToggleFavorite = null, onMergeAway = null }) {
+function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWear, onBought, onSetUrl, onSetPrice, onOpen, onWearOutfit, onReplaceImage, onRestoreImage, favorite = false, onToggleFavorite = null, onMergeAway = null, brandOptions = [] }) {
   const closeButtonRef = useRef(null);
   const dialogRef = useRef(null);
   // 焦點圈在單品頁裡、關掉後回到原本點的那格(審查 F46)。Esc 照下面自己的處理(先取消吸色、有沒存的先擋)
@@ -889,6 +966,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
       price: parsePrice(draft.price),
       priceCurrency: parsePrice(draft.price) ? draft.priceCurrency || "TWD" : null,
       quantity: qtyOf(draft.quantity),
+      brand: draft.brand.trim(),
     }) !== JSON.stringify({
       name: (item.name || "").trim(),
       part: item.part,
@@ -898,6 +976,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
       price: item.price || null,
       priceCurrency: item.price ? item.priceCurrency || "TWD" : null,
       quantity: qtyOf(item.quantity),
+      brand: brandOf(item) || "",
     });
   }, [draft, item]);
 
@@ -978,9 +1057,12 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
 
   const saveEditing = () => {
     const price = parsePrice(draft.price);
+    // 品牌跟自動猜的一樣、本來也沒填:不存(之後品名改了還會跟著猜);改過才存,清空 = 刻意不寫
+    const typedBrand = draft.brand.trim();
+    const brand = typedBrand === (brandOf(item) || "") ? item.brand : typedBrand;
     onSave({
       ...item, ...draft, name: draft.name.trim(), tags: draft.tags.map((tag) => tag.trim()).filter(Boolean),
-      price, priceCurrency: price ? draft.priceCurrency || "TWD" : null, quantity: qtyOf(draft.quantity),
+      price, priceCurrency: price ? draft.priceCurrency || "TWD" : null, quantity: qtyOf(draft.quantity), brand,
     });
     setSampling(null);
     // 存完就關掉,回到原本那一格(2026-10-06 本人要的;舊版存完停在原地,只在表單裡寫一行「已儲存」)
@@ -1137,6 +1219,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
               )}
             </div>
             <ItemEditor
+              brandOptions={brandOptions}
               draft={draft}
               setDraft={setDraft}
               palette={palette}
@@ -1374,6 +1457,7 @@ export function App() {
     const filtered = activeType === "all" ? ownedItems
       : activeType === "wishlist" ? closetItems.filter((item) => item.wishlist)
       : activeType === "favorites" ? closetItems.filter((item) => favorites.has(item.id))
+      : brandFilterOf(activeType) !== null ? closetItems.filter((item) => (brandOf(item) || "") === brandFilterOf(activeType))
       : closetItems.filter((item) => item.part === activeType);
     return [...filtered].sort((a, b) => {
       // 自己加的排最前面,越新越前面;站主那批沒有建立時間,接在後面照原本的類型順序
@@ -1382,7 +1466,7 @@ export function App() {
         if (!b.createdAt) return -1;
         return b.createdAt.localeCompare(a.createdAt);
       }
-      if (activeType === "all" || activeType === "wishlist" || activeType === "favorites") {
+      if (activeType === "all" || activeType === "wishlist" || activeType === "favorites" || brandFilterOf(activeType) !== null) {
         const typeDifference = (TYPE_ORDER[a.part] ?? 99) - (TYPE_ORDER[b.part] ?? 99);
         if (typeDifference) return typeDifference;
       }
@@ -1451,13 +1535,28 @@ export function App() {
     for (const item of closetItems) counts[item.part] = (counts[item.part] || 0) + 1;
     return counts;
   }, [closetItems]);
+  // 品牌的件數(跟分類一樣,連想買的一起算);沒寫的另外數
+  const brandCounts = useMemo(() => {
+    const counts = new Map();
+    let none = 0;
+    for (const item of closetItems) {
+      const brand = brandOf(item);
+      if (brand) counts.set(brand, (counts.get(brand) || 0) + 1); else none += 1;
+    }
+    return { list: [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([name, count]) => ({ name, count })), none };
+  }, [closetItems]);
+  const brandOptions = useMemo(() => brandSuggestions(closetItems), [closetItems]);
+  // 有價錢的才顯示總價那行;站主一律顯示(才知道可以填)
+  const anyPrice = useMemo(() => closetItems.some((item) => Number(item.price) > 0), [closetItems]);
 
   // 想買的全買了或刪光,那顆分類就消失了;停在上面會一片空白、沒有任何一顆亮著,退回「全部」
   useEffect(() => {
     if (!loading && activeType === "wishlist" && !wishCount) setActiveType("all");
     if (!loading && activeType === "trash" && !trashCount) setActiveType("all");
     if (!loading && activeType === "favorites" && !favCount) setActiveType("all");
-  }, [loading, activeType, wishCount, trashCount, favCount]);
+    // 那個品牌的衣服都改掉、刪掉了:退回全部
+    if (!loading && brandFilterOf(activeType) !== null && !visibleItems.length) setActiveType("all");
+  }, [loading, activeType, wishCount, trashCount, favCount, visibleItems.length]);
 
   const chooseCloset = (next) => {
     setClosetChoice(next);
@@ -1729,8 +1828,10 @@ export function App() {
               favCount={favCount}
               wishCount={wishCount}
               trashCount={trashCount}
+              brands={brandCounts}
             />
           )}
+          {view === "closet" && activeType !== "trash" && (CAN_EDIT || anyPrice) && <ClosetTotal items={visibleItems} />}
         </header>
         )}
 
@@ -1820,7 +1921,7 @@ export function App() {
           <TrashGrid items={trashItems} onRestore={restoreItem} onPurge={purgeItem} canPurge={canPurge} />
         )}
         {view === "closet" && !!closetItems.length && activeType !== "trash" && (
-          <section className="gallery-grid" aria-label={`${activeType === "wishlist" ? "想買的" : activeType === "favorites" ? "最愛的" : TYPE_MAP[activeType]?.label || "全部"}衣物`}>
+          <section className="gallery-grid" aria-label={`${activeType === "wishlist" ? "想買的" : activeType === "favorites" ? "最愛的" : brandFilterOf(activeType) !== null ? brandFilterOf(activeType) || "沒寫品牌的" : TYPE_MAP[activeType]?.label || "全部"}衣物`}>
             {visibleItems.map((item) => (
               <GalleryItem
                 key={item.id}
@@ -1841,6 +1942,7 @@ export function App() {
 
       {selectedItem && (
         <ItemViewer
+          brandOptions={brandOptions}
           item={selectedItem}
           gone={selectedGone}
           owned={ownedItems}

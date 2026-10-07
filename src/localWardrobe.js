@@ -244,12 +244,14 @@ export function localFullImage(id) {
   return fullPending.get(id);
 }
 
-export async function saveLocalItem({ id, name, part, color, secondaryColor, tags, blob, wishlist, sourceUrl, price, priceCurrency }) {
+export async function saveLocalItem({ id, name, part, color, secondaryColor, tags, blob, wishlist, sourceUrl, price, priceCurrency, brand }) {
   await tx("readwrite", (store) => store.put({
     id, name, part, color, secondaryColor: secondaryColor || null,
     tags: tags || [], blob, createdAt: new Date().toISOString(),
     wishlist: Boolean(wishlist), sourceUrl: sourceUrl || null,
     price: price ?? null, priceCurrency: price ? priceCurrency || "TWD" : null,
+    // 品牌:新增時填的或商品連結讀到的;沒填就不存這個欄位,之後看品名、網址猜(brands.js)
+    ...(brand ? { brand } : {}),
   }));
 }
 

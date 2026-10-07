@@ -9,6 +9,7 @@ import { useDialog } from "./useDialog.js";
 import { ScrollRail } from "./ScrollRail.jsx";
 import { fixCutout, modelReady, preloadModel, removeBg } from "./cutout.js";
 import { CURRENCIES, parsePrice } from "./price.js";
+import { brandOf, brandSuggestions } from "./brands.js";
 
 // 分類清單在 src/parts.js(新增的選單照組排:衣服、鞋襪、配件、小物)
 
@@ -435,6 +436,8 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
           sourceUrl: kept ? kept.sourceUrl : link?.url || "",
           // 價錢:商品頁或 GU、UNIQLO 讀得到就先填好,讀不到留空讓人填
           price: kept ? kept.price : link?.price?.amount ? String(link.price.amount) : "",
+          // 品牌:商品連結讀得到就先填(GU、UNIQLO、其他品牌的商品頁)
+          brand: kept ? kept.brand : link?.brand || "",
           priceCurrency: kept ? kept.priceCurrency : link?.price?.currency || "TWD",
         };
       });
@@ -569,6 +572,8 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
       sourceUrl: draft.wishlist ? findUrl(draft.sourceUrl) : null,
       price: parsePrice(draft.price),
       priceCurrency: draft.priceCurrency || "TWD",
+      // 填了才存;沒填之後看品名、網址猜。已經有的不存網址,所以商品連結的網域讀到的品牌要現在存
+      brand: draft.brand.trim() || brandOf({ sourceUrl: link?.url }) || undefined,
     });
     try { navigator.storage?.persist?.(); } catch { /* 不支援就算了 */ }
     onAdded(draft.wishlist, name);
@@ -808,6 +813,18 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
                 onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
                 placeholder={draft.wishlist ? "例:GU 寬版牛仔褲" : "例:白色帆布鞋"}
               />
+            </label>
+
+            <label className="add-field">
+              <span>品牌</span>
+              <input
+                value={draft.brand || ""}
+                list="add-brand-options"
+                autoComplete="off"
+                onChange={(event) => setDraft((current) => ({ ...current, brand: event.target.value }))}
+                placeholder={brandOf({ name: draft.name }) ? `看品名是 ${brandOf({ name: draft.name })},不用填` : "選填,例:UNIQLO"}
+              />
+              <datalist id="add-brand-options">{brandSuggestions(existing).map((brand) => <option key={brand} value={brand} />)}</datalist>
             </label>
 
             <PriceField

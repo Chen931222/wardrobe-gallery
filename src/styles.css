@@ -270,6 +270,23 @@ h1, h2, h3 {
   color: var(--muted);
 }
 .closet-index-items { display: flex; flex-wrap: wrap; column-gap: 24px; }
+/* 品牌那行:品牌多的時候先列幾個,「其他 N 個」展開 */
+.closet-index button.closet-index-more { color: var(--muted); font-size: 13px; }
+.closet-index button.closet-index-more:hover { color: var(--ink); }
+/* 總價(2026-10-07):目錄底下一行,像帳本的小計。金額用目錄同一套數字;沒填價錢的件數照實寫在後面 */
+.closet-total {
+  display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 32px; row-gap: 6px;
+  max-width: 760px; margin: 14px 0 0;
+  font-size: 12.5px; line-height: 1.5; color: var(--muted);
+}
+.closet-total-part { display: inline-flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; }
+.closet-total-label { font-size: 12px; letter-spacing: .12em; color: var(--muted); }
+.closet-total strong {
+  font-family: var(--font-display); font-weight: 500; font-size: 18px; letter-spacing: .01em;
+  color: var(--ink); font-variant-numeric: lining-nums tabular-nums;
+}
+.closet-total-none { color: var(--body); }
+.closet-total small { font-size: 11.5px; color: var(--muted); }
 
 .gallery-grid {
   display: grid;
