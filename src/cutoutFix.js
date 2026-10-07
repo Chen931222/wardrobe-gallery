@@ -72,18 +72,21 @@ function floodFromBorder(pass, W, H, stack) {
   return reached;
 }
 
-/* 整件都很淡(鬼影,2026-10-07 本人白襯衫換圖的截圖):模型抓到的形狀是對的,但整件衣服都只給兩成上下的不透明度,
-   上面那套「圍住的才補」對它沒用 —— 補滿模式只圍到領口一小塊,補成一塊白,其他還是鬼影。
-   看衣服本體有多不透明(不透明度 ≥ 8 的像素裡第 90 百分位):不到 192 就當鬼影,把不透明度拉開 ——
-   背景雜訊和淡淡的影子(本體三成以下)歸零,本體拉到全不透明,中間照比例,邊緣還是柔的。正常的去背不動。 */
+/* 整件都很淡(鬼影,2026-10-07 本人換 Massimo Dutti 白襯衫的圖,兩次截圖):模型抓到的形狀是對的,
+   但不透明度很低,而且不平均 —— 袖子、領口大概六七成,身體只有一兩成。
+   第一版「圍住的才補」對它沒用(補滿只圍到領口一小塊、補成一塊白);
+   第二版照比例拉開、本體三成以下當影子歸零 → 袖子變實心,身體被清掉(第二張截圖)。
+   現在:衣服本體(不透明度 ≥ 8 的第 90 百分位)不到 192 就當鬼影,改成先定形狀再上不透明度 ——
+   ① 從最有把握的地方(本體一半以上)出發,沿著「比背景雜訊明顯高一點」的像素長出去,連在一起的都是衣服;
+      背景裡零星的雜訊沒連上,不算
+   ② 形狀裡全部不透明,邊緣模糊一兩個像素當柔邊。正常的去背不動。 */
 const GHOST_HI = 192;
-const GHOST_WEAK = 64;
-function stretchGhost(alpha, W, H) {
+function liftGhost(alpha, W, H, stack) {
   const N = W * H;
   const hist = new Uint32Array(256);
   let count = 0;
   for (let i = 0; i < N; i += 1) if (alpha[i] >= 8) { hist[alpha[i]] += 1; count += 1; }
-  if (count < N * 0.005) return false;   // 幾乎什麼都沒抓到:拉了也只是放大雜訊
+  if (count < N * 0.005) return false;   // 幾乎什麼都沒抓到:放大的只是雜訊
   let hi = 255;
   for (let v = 8, seen = 0; v < 256; v += 1) { seen += hist[v]; if (seen >= count * 0.9) { hi = v; break; } }
   if (hi >= GHOST_HI) return false;
@@ -99,9 +102,45 @@ function stretchGhost(alpha, W, H) {
   }
   let floor = 0;
   for (let v = 0, seen = 0; v < 256; v += 1) { seen += edgeHist[v]; if (seen >= edgeCount * 0.99) { floor = v; break; } }
-  const lo = Math.max(floor, Math.round(hi * 0.3));
-  if (hi - lo < 8) return false;
-  for (let i = 0; i < N; i += 1) alpha[i] = Math.max(0, Math.min(255, Math.round(((alpha[i] - lo) * 255) / (hi - lo))));
+  const low = floor + Math.max(3, Math.round((hi - floor) * 0.1));
+  const seedLevel = Math.max(low + 1, Math.round(hi * 0.5));
+  if (seedLevel <= low) return false;
+
+  // ① 從有把握的地方長出去
+  const shape = new Uint8Array(N);
+  let top = 0, size = 0;
+  for (let i = 0; i < N; i += 1) if (alpha[i] >= seedLevel) { shape[i] = 1; stack[top++] = i; size += 1; }
+  while (top) {
+    const i = stack[--top];
+    const x = i % W;
+    const grow = (j) => { if (!shape[j] && alpha[j] >= low) { shape[j] = 1; stack[top++] = j; size += 1; } };
+    if (x > 0) grow(i - 1);
+    if (x < W - 1) grow(i + 1);
+    if (i >= W) grow(i - W);
+    if (i < N - W) grow(i + W);
+  }
+  if (size > N * 0.9) return false;   // 幾乎整張都連成一片:背景雜訊也長進來了,不做
+
+  // ② 形狀裡全部不透明,邊緣兩趟方框模糊當柔邊
+  const r = Math.max(1, Math.round(Math.max(W, H) * 0.0015));
+  const row = new Float32Array(N);
+  for (let y = 0; y < H; y += 1) {
+    let sum = 0;
+    for (let x = -r; x <= r; x += 1) sum += shape[y * W + Math.min(W - 1, Math.max(0, x))];
+    for (let x = 0; x < W; x += 1) {
+      row[y * W + x] = sum;
+      sum += shape[y * W + Math.min(W - 1, x + r + 1)] - shape[y * W + Math.max(0, x - r)];
+    }
+  }
+  const area = (2 * r + 1) * (2 * r + 1);
+  for (let x = 0; x < W; x += 1) {
+    let sum = 0;
+    for (let y = -r; y <= r; y += 1) sum += row[Math.min(H - 1, Math.max(0, y)) * W + x];
+    for (let y = 0; y < H; y += 1) {
+      alpha[y * W + x] = Math.round((sum / area) * 255);
+      sum += row[Math.min(H - 1, y + r + 1) * W + x] - row[Math.max(0, y - r) * W + x];
+    }
+  }
   return true;
 }
 
@@ -110,10 +149,10 @@ export function solidify(out, src, W, H, { strong = false } = {}) {
   const N = W * H;
   const alpha = new Uint8Array(N);
   for (let i = 0; i < N; i += 1) alpha[i] = out[i * 4 + 3];
-  // 鬼影先拉開,整張的不透明度和顏色都換成拉開後的(很淡的像素存 PNG 時顏色會糊掉,用原照片的)
+  const stack = new Int32Array(N);
+  // 鬼影先定形狀,整張的不透明度和顏色都換成新的(很淡的像素存 PNG 時顏色會糊掉,用原照片的)
   let changed = 0;
-  const ghost = stretchGhost(alpha, W, H);
-  if (ghost) {
+  if (liftGhost(alpha, W, H, stack)) {
     for (let i = 0; i < N; i += 1) {
       if (out[i * 4 + 3] === alpha[i]) continue;
       out[i * 4] = src[i * 4];
@@ -123,10 +162,8 @@ export function solidify(out, src, W, H, { strong = false } = {}) {
       changed += 1;
     }
   }
-  // 鬼影拉開後,本體裡偏淡的地方還是不到一半:門檻放低到 1/4,才不會從那裡被當成外面
-  const edge = strong ? STRONG_EDGE : ghost ? GHOST_WEAK : WEAK;
+  const edge = strong ? STRONG_EDGE : WEAK;
   const weak = (i) => alpha[i] < edge;
-  const stack = new Int32Array(N);
 
   // 外面 = 從四邊沿著「不是衣服」走得到的
   let outside;
