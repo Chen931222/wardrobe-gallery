@@ -22,6 +22,8 @@ export default defineConfig(() => {
         clientFiles: ["./src/main.jsx"],
       },
     },
+    // 去背的 Worker(src/cutoutWorker.js)裡有動態 import(onnxruntime),要用 ES module 格式打包
+    worker: { format: "es" },
     preview: {
       host: "127.0.0.1",
       port: 4173,

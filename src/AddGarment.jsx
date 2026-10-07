@@ -7,82 +7,14 @@ import { fetchBrandProduct, fetchProductPage, parseBrandLink, partFromName, part
 import { findSimilar, kindLabel } from "./wishCheck.js";
 import { useDialog } from "./useDialog.js";
 import { ScrollRail } from "./ScrollRail.jsx";
+import { fixCutout, modelReady, preloadModel, removeBg } from "./cutout.js";
 import { CURRENCIES, parsePrice } from "./price.js";
 
 // 分類清單在 src/parts.js(新增的選單照組排:衣服、鞋襪、配件、小物)
 
 const FULL = { x: 0, y: 0, w: 1, h: 1 };
 
-/* 去背模型有 80MB 左右,第一次用會下載。動態 import 讓它不進主 bundle,
-   沒按「新增」的人完全不會付這個成本。 */
-const MODEL_READY_KEY = "open-wardrobe-bgmodel-v1";   // 這台成功去背過一次 = 模型已經在瀏覽器快取裡
-const modelReady = () => { try { return localStorage.getItem(MODEL_READY_KEY) === "1"; } catch { return false; } };
-
-/* 進度回呼要是同一個函式:去背套件把設定(連 progress 一起)照第一次呼叫的樣子快取起來,之後每次都叫第一次那個。
-   每次給新的回呼的話,第二件開始進度文字不動、下載看門狗也收不到進度,算到一半就被當成卡住(2026-10-03 審查抓到)。
-   所以回呼固定一個,真正要通知誰放在 currentProgress。 */
-let currentProgress = null;
-let downloading = false;
-const onModelProgress = (key, current, total) => {
-    if (!currentProgress) return;
-    if (key.startsWith("fetch") && current < total) {
-      downloading = true;
-      // 「已經下載過」的記號不可靠:Safari 會把這麼大的快取清掉,隔天又要重抓。下載中就講明多大、建議 Wi-Fi
-      currentProgress(`下載去背模型 ${Math.round((current / total) * 100)}%(約 80MB,建議用 Wi-Fi)`, true);
-    } else if (key.startsWith("fetch")) {
-      // 下載到 100% 之後畫面會停 7–9 秒在算(主執行緒忙,文字也動不了),先講清楚接下來在做什麼(審查 F33)
-      currentProgress(downloading ? "模型下載好了,開始去背,約 10–20 秒…" : "去背中,約 10–20 秒…", false);
-    } else {
-      currentProgress("去背中,約 10–20 秒…", false);
-    }
-};
-/* 去背套件把「初始化」照設定內容記起來,失敗的也記:模型下載斷過一次,同一頁之後怎麼按都立刻失敗,
-   網路恢復了也一樣,只能重新整理(2026-10-05 實測;本人 iPhone 4G 去背一直失敗多半就是這個)。
-   它記的鍵是設定轉成的字串,所以失敗後把設定改一個不影響結果的小數(PNG 不看 quality),下一次就會重新初始化。 */
-let modelAttempt = 0;
-const modelConfig = () => ({ output: { format: "image/png", quality: 0.9 + modelAttempt * 1e-6 }, progress: onModelProgress });
-
-/** 一打開新增視窗就在背景先載模型(2026-10-05 本人要的:朋友第一次用,選照片、框衣服的這段時間就載完了),
- *  選好照片時再叫一次(前一次斷了會重來,載好了的話什麼都不做)。開了省流量模式、或網路是 2G 等級就不先載。 */
-function preloadModel() {
-  const connection = typeof navigator !== "undefined" ? navigator.connection : null;
-  if (connection?.saveData || /2g/.test(connection?.effectiveType || "")) return;
-  const attempt = modelAttempt;
-  import("@imgly/background-removal")
-    .then(({ preload }) => preload(modelConfig()))
-    .catch(() => { if (attempt === modelAttempt) modelAttempt += 1; });
-}
-// 一次只算一張:取消只是不看結果,模型那邊停不下來;馬上再按一次去背,兩張一起算,iPad 的記憶體會撐不住
-let previousRun = Promise.resolve();
-let pending = 0;   // 排隊中加上正在算的張數
-
-/** @param onProgress (文字, 是否在下載) */
-async function removeBg(file, onProgress) {
-  const waitFor = previousRun;
-  let release;
-  previousRun = new Promise((resolve) => { release = resolve; });
-  pending += 1;
-  try {
-    if (pending > 1) onProgress("上一張還在算,等它結束…", false);
-    await waitFor;
-    const { removeBackground } = await import("@imgly/background-removal");
-    downloading = false;
-    currentProgress = onProgress;
-    const attempt = modelAttempt;
-    try {
-      const result = await removeBackground(file, modelConfig());
-      try { localStorage.setItem(MODEL_READY_KEY, "1"); } catch { /* 存不了就每次都顯示第一次的提示 */ }
-      return result;
-    } catch (error) {
-      if (attempt === modelAttempt) modelAttempt += 1;   // 下一次重新初始化,不沿用失敗的那次
-      throw error;
-    }
-  } finally {
-    if (currentProgress === onProgress) currentProgress = null;
-    pending -= 1;
-    release();
-  }
-}
+// 去背(載模型、排隊、在 Worker 裡算)在 src/cutout.js
 
 /* 在照片上拖一個框。座標存成 0–1,和照片實際解析度無關。
    手指點下去常常會動 1–3px,舊版一動就把框重畫成一個點,按鈕變灰也不說原因(審查 F32):移動不到 8px 不算拖。 */
@@ -278,6 +210,10 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
   const [replacing, setReplacing] = useState(null);   // 換圖模式:要換掉圖的那件
   const runRef = useRef(0);                // 每次下載商品圖、去背都換一號;取消或逾時就換號,晚回來的結果丟掉
   const watchdogRef = useRef(null);
+  const cutRef = useRef(null);             // 這次去背的原料(送去背的照片、模型給的結果、框):按「補滿」時不用重算模型
+  const [refilling, setRefilling] = useState(false);
+  const partRef = useRef("");              // 去背好那一刻選的分類(眼鏡不自動補實,見 cutoutFix.js)
+  partRef.current = draft?.part || "";
 
   /* 返回手勢(iPhone 從左緣側滑):舊版會直接離開網站,剛去背好的結果全丟(審查 F34)。
      打開新增時押一筆歷史,返回就只關掉新增;已經去背好的先問一聲。用 UI 關掉時自己把那一筆吃掉。 */
@@ -290,6 +226,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
   const clear = () => {
     runRef.current += 1;
     clearTimeout(watchdogRef.current);
+    cutRef.current = null;
     if (draft?.preview) URL.revokeObjectURL(draft.preview);
     if (source?.url) URL.revokeObjectURL(source.url);
     setDraft(null);
@@ -504,7 +441,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
       setStage("review");
       setStatus("準備去背…");
       arm();
-      const cut = await removeBg(input, (text, downloading) => {
+      const raw = await removeBg(input, (text, downloading) => {
         if (!alive()) return;
         setStatus(text);
         if (downloading) arm(); else clearTimeout(watchdogRef.current);
@@ -512,20 +449,13 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
       if (!alive()) return;
       clearTimeout(watchdogRef.current);
       setStatus("修邊…");
-      let clean = await refillGaps(input, cut);
-      if (outer !== FULL) {
-        clean = await cropBlob(clean, {
-          x: (region.x - outer.x) / outer.w, y: (region.y - outer.y) / outer.h,
-          w: region.w / outer.w, h: region.h / outer.h,
-        });
-      }
-      const blob = await shrinkImage((await trimTransparent(clean)).blob);
-      const { color, secondaryColor } = await garmentColors(blob);
+      cutRef.current = { input, raw, outer, region };
+      const { blob, color, secondaryColor } = await finishCutout(cutRef.current, false);
       if (!alive()) return;
       setDraft((current) => {
         if (!current) return current;
         if (current.preview) URL.revokeObjectURL(current.preview);
-        return { ...current, blob, preview: URL.createObjectURL(blob), color, secondaryColor, pending: false };
+        return { ...current, blob, preview: URL.createObjectURL(blob), color, secondaryColor, pending: false, filled: false };
       });
       setStatus("");
     } catch (cause) {
@@ -535,11 +465,59 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
       if (stageRef.current !== "review") setStage("crop");
     }
   };
+  /* 模型給的結果 → 補洞補實(白衣服白底被吃掉的,cutoutFix.js)→ 補條紋縫 → 裁回原本的框 → 去掉透明邊、縮小 → 抓顏色。
+     strong = 按了「補滿」:更白的衣服模型連一大塊都很有把握地判成背景,自動補不了,交給人看預覽決定 */
+  const finishCutout = async ({ input, raw, outer, region }, strong) => {
+    let clean = await refillGaps(input, await fixCutout(input, raw, { part: partRef.current, strong }));
+    if (outer !== FULL) {
+      clean = await cropBlob(clean, {
+        x: (region.x - outer.x) / outer.w, y: (region.y - outer.y) / outer.h,
+        w: region.w / outer.w, h: region.h / outer.h,
+      });
+    }
+    const blob = await shrinkImage((await trimTransparent(clean)).blob);
+    return { blob, ...(await garmentColors(blob)) };
+  };
+  // 「補滿」和「還原」:同一份模型結果重做後半段
+  const toggleFill = async () => {
+    const saved = cutRef.current;
+    if (!saved || !draft?.blob || refilling) return;
+    const run = runRef.current;
+    const strong = !draft.filled;
+    setRefilling(true);
+    setError("");
+    try {
+      const { blob, color, secondaryColor } = await finishCutout(saved, strong);
+      if (run !== runRef.current) return;
+      setDraft((current) => {
+        if (!current) return current;
+        if (current.preview) URL.revokeObjectURL(current.preview);
+        return { ...current, blob, preview: URL.createObjectURL(blob), color, secondaryColor, filled: strong };
+      });
+    } catch (cause) {
+      console.error(cause);
+      if (run === runRef.current) setError(`補滿沒有成功:${cause?.message || cause}`);
+    } finally {
+      setRefilling(false);
+    }
+  };
+  const fillToggle = () => draft?.blob && cutRef.current && (
+    <div className="add-fill">
+      <button type="button" className="add-fill-button" onClick={toggleFill} disabled={refilling} aria-pressed={Boolean(draft.filled)}>
+        {refilling ? "補滿中…" : draft.filled ? "還原成原本的去背" : "白色衣服被去掉一塊?補滿"}
+      </button>
+      <small className="add-hint">
+        {draft.filled ? "包包背帶、手把圈起來的空隙也一起補上了;不對就還原。" : "衣服跟背景都很白時用。包包背帶圈起來的空隙也會被補上,看預覽決定。"}
+      </small>
+    </div>
+  );
+
   // 失敗後:同一個框再算一次(填好的字留著),或回去重新框
   const retryCutout = () => { if (draft?.region) cutout(draft.region); };
   const backToCrop = () => {
     runRef.current += 1;
     clearTimeout(watchdogRef.current);
+    cutRef.current = null;
     setError("");
     setStatus("");
     setDraft((current) => current && { ...current, pending: false });
@@ -746,6 +724,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
                 <figcaption>{draft.blob ? "新的" : "去背中"}</figcaption>
               </figure>
             </div>
+            {fillToggle()}
             {draft.pending && (
               <p className="add-preview-status" role="status" aria-live="polite">
                 <SpinnerGap size={16} className="add-spinner" aria-hidden="true" />{status}
@@ -783,6 +762,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
                 </p>
               )}
             </div>
+            {fillToggle()}
             {draft.pending && (
               <small className="add-hint">
                 {modelReady() ? "去背中,趁這段時間先填名稱和分類。" : "第一次要下載約 80MB 的去背模型,趁這段時間先填名稱和分類。"}

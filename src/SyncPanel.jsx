@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { becomeOwner } from "./ownerMode.js";
 import {
   deleteCloud, formatCode, isValidCode, joinSync, lastSyncError, lastSynced, normalizeCode, rotateCode,
-  startSync, stopSync, syncCode, syncNotice, syncNow,
+  startSync, stopSync, syncCode, syncNotice, syncNow, syncProgress,
 } from "./sync.js";
 
 const timeText = (iso) => {
@@ -14,6 +14,25 @@ const timeText = (iso) => {
   return date.toDateString() === new Date().toDateString()
     ? date.toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" })
     : date.toLocaleString("zh-TW", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+};
+
+/* 現在這一步怎麼講(2026-10-07 本人:看不出現在在做什麼、有沒有同步完成) */
+const stepText = (step) => {
+  if (!step || step.phase === "start") return "跟雲端比對…";
+  if (step.phase === "push") return step.total > 1 ? `把這台的圖傳上去 ${Math.min(step.done + 1, step.total)} / ${step.total}…` : "把這台的圖傳上去…";
+  if (step.phase === "pull") return step.total > 1 ? `從雲端拿衣服 ${Math.min(step.done + 1, step.total)} / ${step.total}…` : "從雲端拿衣服…";
+  return "";
+};
+
+/* 同步碼打到哪了:一直顯示格式,打錯當場講,不用等按了「加入」才知道 */
+const codeHint = (typed) => {
+  const code = normalizeCode(typed);
+  if (!code) return { text: "16 個英文字母和數字,4 個一組。連字號、大小寫都不用管。不會有 0、O、1、I。" };
+  const lookalike = code.match(/[01OI]/)?.[0];
+  if (lookalike) return { text: `同步碼裡沒有「${lookalike}」:0、O、1、I 這四個都不會出現,是長得像的別的字,再對一次。`, bad: true };
+  if (code.length < 16) return { text: `已打 ${code.length} / 16 個字。` };
+  if (code.length > 16) return { text: `多打了 ${code.length - 16} 個字(現在 ${code.length} 個,要 16 個)。`, bad: true };
+  return { text: "格式對了。", ok: true };
 };
 
 export function SyncPanel({ canStart = true }) {
@@ -26,6 +45,7 @@ export function SyncPanel({ canStart = true }) {
   const [joining, setJoining] = useState(!canStart);
   const [typed, setTyped] = useState("");
   const [showCode, setShowCode] = useState(false);
+  const [step, setStep] = useState(syncProgress);   // 同步進行到哪(sync.js 的 wardrobe-sync-progress);null = 沒在同步
   // 同步碼等於整個衣櫃的鑰匙(2026-10-06 資安盤點):打開 60 秒自動收起;切到別的 app 馬上收起,
   // iPhone 的多工畫面會把當下的頁面截成縮圖,碼不該留在上面
   useEffect(() => {
@@ -41,9 +61,15 @@ export function SyncPanel({ canStart = true }) {
     const onSynced = (event) => {
       setStatus(event.detail);
       setCode(syncCode());
+      setStep(null);
     };
+    const onProgress = (event) => setStep(event.detail);
     window.addEventListener("wardrobe-synced", onSynced);
-    return () => window.removeEventListener("wardrobe-synced", onSynced);
+    window.addEventListener("wardrobe-sync-progress", onProgress);
+    return () => {
+      window.removeEventListener("wardrobe-synced", onSynced);
+      window.removeEventListener("wardrobe-sync-progress", onProgress);
+    };
   }, []);
 
   // 每個動作都一樣:顯示進行中、做完收尾、出錯就把話講出來
@@ -57,6 +83,7 @@ export function SyncPanel({ canStart = true }) {
     } finally {
       setBusy("");
       setCode(syncCode());
+      setStep(syncProgress());
     }
   };
 
@@ -69,8 +96,10 @@ export function SyncPanel({ canStart = true }) {
       setStatus({ error: lookalike ? "同步碼裡不會有 0、O、1、I 這四個字,是長得像的別的字,再對一次" : `同步碼是 16 個英文字母和數字,現在是 ${next.length} 個,再對一次` });
       return;
     }
+    setStatus(null);
     act("加入中…", async () => {
       const result = await joinSync(next);
+      if (!result.error && !canStart) setStatus({ joined: true, pulled: result.pulled || 0 });   // 重新整理之前那一下也講
       if (!result.error) {
         setJoining(false);
         setTyped("");
@@ -103,8 +132,35 @@ export function SyncPanel({ canStart = true }) {
     setStatus(null);
   };
 
+  // 最上面一行:現在是什麼狀態。進行中 > 剛加入 > 出錯 > 已同步 > 還沒開
+  const hint = codeHint(typed);
+  const working = busy || (code && step ? "同步中" : "");
+  let state = null;
+  if (working) {
+    const detail = busy === "換碼中…" ? "整個衣櫃搬到新碼…" : busy === "刪除中…" ? "" : stepText(step);
+    state = { kind: "busy", label: working.replace(/…$/, ""), detail };
+  } else if (status?.joined) {
+    state = { kind: "ok", label: "加入了", detail: status.pulled ? `從另一台拿到 ${status.pulled} 件,重新整理中…` : "重新整理中…" };
+  } else if (status?.error) {
+    state = { kind: "error", label: code ? "沒有同步成功" : "加入失敗", detail: status.stopped || !code ? status.error : `這台的改動還沒上去。${status.error}` };
+  } else if (code && status?.at) {
+    const parts = [timeText(status.at)];
+    if (status.pulled) parts.push(`從其他裝置拿到 ${status.pulled} 件`);
+    state = { kind: "ok", label: "已同步完成", detail: `${parts.join(",")}。這台和雲端一樣。` };
+  } else if (code) {
+    state = { kind: "ok", label: "已開同步", detail: "還沒同步過,按「立即同步」。" };
+  } else if (canStart && !joining) {
+    state = { kind: "off", label: "這台還沒開同步", detail: "" };
+  }
+
   return (
     <div className="studio-sync">
+      {state && (
+        <p className={`sync-state is-${state.kind}`} role="status" aria-live="polite">
+          <span className="sync-state-label">{state.label}</span>
+          {state.detail && <span className="sync-state-detail">{state.detail}</span>}
+        </p>
+      )}
       {(code || canStart) && (
       <div className="studio-backup-controls">
         {code ? (
@@ -130,13 +186,17 @@ export function SyncPanel({ canStart = true }) {
           <input
             id="sync-code-input"
             value={typed}
-            onChange={(event) => setTyped(event.target.value)}
+            onChange={(event) => { setTyped(event.target.value); if (status?.error) setStatus(null); }}
+            onBlur={() => { const next = normalizeCode(typed); if (next) setTyped(formatCode(next)); }}
             placeholder="XXXX-XXXX-XXXX-XXXX"
             autoComplete="off"
             autoCapitalize="characters"
             spellCheck={false}
+            aria-describedby="sync-code-hint"
+            aria-invalid={hint.bad || undefined}
           />
           <button type="submit" disabled={Boolean(busy)}>{busy || "加入"}</button>
+          <small id="sync-code-hint" className={`sync-code-hint${hint.bad ? " is-bad" : hint.ok ? " is-ok" : ""}`}>{hint.text}</small>
         </form>
       )}
 
@@ -153,15 +213,6 @@ export function SyncPanel({ canStart = true }) {
           </p>
         </div>
       )}
-
-      {status?.error ? (
-        <p className="studio-backup-msg is-error" role="status">{status.stopped || !code ? status.error : `同步沒成功,這台的改動還沒上去:${status.error}`}</p>
-      ) : code && status?.at ? (
-        <p className="studio-backup-msg" role="status">
-          上次同步 {timeText(status.at)}
-          {status.pulled ? `,從其他裝置拿到 ${status.pulled} 件` : ""}
-        </p>
-      ) : null}
 
       <p className="studio-backup-note">
         {code

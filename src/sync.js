@@ -301,6 +301,15 @@ export async function hasLocalChanges() {
 }
 
 let running = null;
+/* 進度(2026-10-07 本人:「同步碼這個區塊沒有很清楚顯示目前的資訊,例如已同步完成」):同步面板聽 wardrobe-sync-progress,
+   顯示「跟雲端比對」「傳上去 3/12 張圖」「拿下來 5/40 件」。面板在同步途中才打開的,用 syncProgress() 拿現在這一步 */
+let progress = null;
+const report = (detail) => {
+  progress = detail;
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("wardrobe-sync-progress", { detail }));
+};
+/** 正在同步的話,回現在這一步({ phase, done, total });沒在同步回 null */
+export const syncProgress = () => (running || rotating ? progress || { phase: "start" } : null);
 let rotating = null;   // 換新碼進行中;這段時間叫的同步排在它後面,換好之後用新碼跑
 let timer = null;
 let changedWhileRunning = false;   // 同步跑的時候使用者又改了東西
@@ -313,6 +322,7 @@ export function syncNow(options = {}) {
   // 換碼途中叫的(切回前景、5 秒後推、問完大量刪除的選擇):等換完再照原本的要求跑,不能拿換碼那份結果交差
   if (rotating) return rotating.then(() => syncNow(options));
   if (!running) {
+    report({ phase: "start" });
     running = runSync(options)
       .then((result) => ({ ...result, error: null }))
       .catch((error) => {
@@ -335,6 +345,7 @@ export function syncNow(options = {}) {
       })
       .finally(() => {
         running = null;
+        progress = null;
         if (changedWhileRunning) { changedWhileRunning = false; scheduleSync(); }
       });
   }
@@ -489,8 +500,14 @@ async function runSync(options = {}) {
     const changed = !cloud.data || !same(items.result, remote.items || {}) || !same(values.result, remote.keys || {});
     if (changed) {
       const cloudImages = new Set(cloud.imgs || []);
+      const toSend = new Set(Object.values(items.result)
+        .filter((entry) => entry.img && !cloudImages.has(entry.img) && !uploaded.has(entry.img) && mine.blobs[entry.img])
+        .map((entry) => entry.img)).size;
+      let sent = 0;
       for (const entry of Object.values(items.result)) {
         if (!entry.img || cloudImages.has(entry.img) || uploaded.has(entry.img) || !mine.blobs[entry.img]) continue;
+        report({ phase: "push", done: sent, total: toSend });
+        sent += 1;
         const sealed = await seal(keys, new Uint8Array(await mine.blobs[entry.img].arrayBuffer()));
         const response = await api(code, { method: "PUT", img: entry.img, body: sealed, type: "application/octet-stream" });
         if (response.status === 413) throw new Error(`「${entry.meta.name || "一件衣服"}」的圖太大,傳不上去;刪掉重新加一次`);
@@ -510,7 +527,10 @@ async function runSync(options = {}) {
     //    寫之前先重讀這件:網路來回那幾秒裡這台改過或刪過它,就不寫回(不蓋掉剛做的),
     //    上次同步的底留這台原本那份,下一輪三方合併再處理。
     const skipped = [];
+    let got = 0;
     for (const id of items.pull) {
+      report({ phase: "pull", done: got, total: items.pull.length });
+      got += 1;
       const entry = items.result[id];
       const current = await readLocalRecord(id).catch(() => { throw new Error("讀不到這台存的衣服,先不同步(免得把雲端當成全刪了)"); });
       const now = current ? (await entryOf(keys, current, base.items[id]?.img ?? null)).entry : undefined;
