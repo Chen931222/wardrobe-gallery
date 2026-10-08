@@ -97,12 +97,18 @@ const PRICE = /\s*(NT\$|US\$|HK\$|\$|¥|￥|€|£)\s?[\d,]+(\.\d+)?\s*起?\s*$/
 const STORE_WORDS = /官方(網路)?(旗艦店|網站|購物網站|商城|商店|線上商店)|官網|線上購物|網路商店|official\s*(online\s*)?(store|shop|site|website)|online\s*(store|shop)/gi;
 const squash = (text) => String(text || "").toLowerCase().replace(/[\s®™'’.]/g, "");
 
+/* 賣場、平台:網站名(「蝦皮購物」「momo購物網」)和網域都不是這件衣服的品牌,只信商品資料裡的 brand */
+const MARKETPLACE = /(^|\.)(shopee|momoshop|pchome|24h\.pchome|ruten|rakuten|amazon|zozo|farfetch|ssense|mrporter|net-a-porter|asos|yoox|taobao|tmall|aliexpress|temu|shein|etsy|ebay|pinkoi|etmall|books|costco)\./i;
+export const isMarketplaceHost = (host) => MARKETPLACE.test(`.${String(host || "").toLowerCase()}`);
+
 export function cleanBrand(brand, host) {
   const cleaned = decode(brand).replace(STORE_WORDS, "").replace(/[|｜:\-–—\s]+$/, "").replace(/(.+?)\s*(台灣|taiwan|tw)$/i, "$1").trim();
-  if (cleaned) return cleaned;
-  // 網站沒寫品牌:拿網域(shop.muji.tw → MUJI,短的全大寫)
+  if (cleaned) return cleaned.replace(/^[a-z]/, (letter) => letter.toUpperCase());
+  if (isMarketplaceHost(host)) return "";
+  // 網站沒寫品牌:拿網域,首字大寫(本人 2026-10-08);三個字母以內是縮寫,整段大寫(dw.com → DW)。
+  // 認得的品牌(muji → MUJI)前端 canonicalBrand 會再換成標準寫法
   const label = String(host || "").replace(/^(www\d?|m|tw|shop|store)\./, "").split(".")[0] || "";
-  return label.length <= 5 ? label.toUpperCase() : label.charAt(0).toUpperCase() + label.slice(1);
+  return label.length <= 3 ? label.toUpperCase() : label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 export function cleanName(name, brand) {
@@ -227,7 +233,8 @@ export async function readProductPage(pageUrl, secret) {
   // 分享標題比 JSON-LD 的品名完整就用它(LONGINES:「巨擘系列」vs「巨擘系列 | Ø 40.00 mm, 銀色 | L2.793.4.73.2 | LONGINES TW」)
   const ldName = ld?.name && ogTitle.includes(ld.name) && ogTitle.length > ld.name.length ? ogTitle : ld?.name;
   name ||= ldName || ogTitle || decode((html.match(/<title[^>]*>([^<]*)<\/title>/i) || [])[1]);
-  brand ||= ld?.brand || metaContents(html, "og:site_name")[0] || "";
+  // 賣場的 og:site_name 是賣場名,不是品牌
+  brand ||= ld?.brand || (isMarketplaceHost(url.hostname) ? "" : metaContents(html, "og:site_name")[0]) || "";
   brand = cleanBrand(brand, url.hostname);
   name = cleanName(name, brand);
   sources = [...sources, ...(ld?.images || []), ...metaContents(html, "og:image"), ...metaContents(html, "og:image:secure_url"), ...metaContents(html, "twitter:image")];

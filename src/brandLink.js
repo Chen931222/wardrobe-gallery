@@ -6,6 +6,7 @@
 // Zara 整站有機器人驗證,讀不到頁面;只能從網址路徑拿品名。
 
 import { findUrl } from "./localWardrobe.js";
+import { brandInUrl } from "./brands.js";
 
 /* 同一套商品頁系統的品牌。圖片網址規則一樣,只差網域。
    手機打開會被轉到 m. 開頭的手機版(2026-10-03 實測 301),商品頁是 /tw/product?pid=u…,
@@ -63,8 +64,9 @@ export function parseBrandLink(text) {
     return { brand: "Zara", url: href, name: name || nameHint, images: [] };
   }
 
-  // 其他品牌:圖和品名問自己的 /api/product-page(讀商品頁公開的分享資料,見 functions/_product-page-core.mjs)
-  return { brand: "", url: href, name: nameHint, images: [], page: true };
+  // 其他品牌:圖和品名問自己的 /api/product-page(讀商品頁公開的分享資料,見 functions/_product-page-core.mjs)。
+  // 品牌先照網域填(beams.co.jp → Beams;蝦皮這類賣場留空),商品頁讀到品牌再換掉
+  return { brand: brandInUrl(href) || "", url: href, name: nameHint, images: [], page: true };
 }
 
 /** 照商品網址找價錢:GU、UNIQLO 問商品 API,其他品牌讀商品頁;找不到(擋機器人、頁面沒寫)回 null。

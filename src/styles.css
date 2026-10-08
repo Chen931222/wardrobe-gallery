@@ -9,7 +9,9 @@
    關鍵取捨:衣櫃裡很多黑/深藍的去背剪影,底色若壓到書櫃站那種純近黑會讓深色衣服直接消失
    (書封是實色矩形吃得住近黑,剪影吃不住)。所以背景抬高一階到「暖炭木」,讓剪影浮得出來,
    同時保住印刷感。色相全走衣櫃的暖木調;對比值皆手動驗過 WCAG AA。
-   淺色(打開衣櫃的樺木內裝)保留為 [data-theme="light"] 可選主題,預設不觸發。 */
+   2026-10-08 起預設改淺色:index.html 的 <html> 掛 data-theme="light"。理由是衣櫃大多是白、米、灰,
+   107 件疊在近黑底上每件都發亮,本人說看了頭暈;深底對照截圖在 work/ui-compare-2026-10-08/。
+   深色這組保留,拿掉 data-theme 就回來。 */
 :root {
   --paper: #201b14;    /* 關上衣櫃:近黑暖木,當底 */
   --surface: #2a231b;  /* 微抬起的面板/卡片 */
@@ -53,8 +55,7 @@
   font-variant-numeric: lining-nums;
 }
 
-/* 淺色 = 打開衣櫃的樺木內裝。保留為可選主題,預設不觸發;
-   日後加切換鈕時,在 <html> 掛 data-theme="light" 即整套換回。 */
+/* 淺色 = 打開衣櫃的樺木內裝。2026-10-08 起是預設(index.html 掛 data-theme="light")。 */
 :root[data-theme="light"] {
   --paper: #ece3d1;    /* 淺樺木層板 */
   --surface: #f2ead9;
@@ -288,11 +289,14 @@ h1, h2, h3 {
 .closet-total-none { color: var(--body); }
 .closet-total small { font-size: 11.5px; color: var(--muted); }
 
+/* 2026-10-08 C 版(本人選):每件放進自己的底板,桌面大約 5 欄。
+   舊版 9 欄、沒有框,107 件去背衣服懸在底色上,眼睛沒有線可以停。 */
 .gallery-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
-  gap: 22px 26px;
-  padding: 43px 52px 70px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 40px 44px;
+  padding: 48px 56px 80px;
+  align-items: start;
 }
 
 .gallery-item {
@@ -301,18 +305,23 @@ h1, h2, h3 {
   aspect-ratio: .78;
   display: grid;
   place-items: center;
-  border: 1px solid transparent;
-  padding: 10px;
-  background: transparent;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  padding: 18px;
+  background: var(--surface);
   cursor: zoom-in;
   transition: border-color 160ms ease;
 }
+.gallery-item:hover { border-color: var(--fill); }
 
 .gallery-item img {
   width: 100%;
   height: 100%;
+  min-height: 0;
   object-fit: contain;
-  transform: scale(.94);
+  /* 淺色衣服(白 T、米色襯衫)在淺底板上靠這道影子跟底板分開 */
+  filter: drop-shadow(0 6px 10px var(--shadow-soft));
+  transform: scale(.92);
   transition: transform 220ms cubic-bezier(.2, .7, .2, 1);
   -webkit-user-drag: none;
 }
@@ -1046,7 +1055,7 @@ h1, h2, h3 {
 
 @media (max-width: 1180px) {
   .gallery-header { padding-inline: 34px; }
-  .gallery-grid { padding-inline: 32px; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap-inline: 18px; }
+  .gallery-grid { padding-inline: 32px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 32px 28px; }
   .viewer { padding-inline: 30px; }
   .has-modeled-image .viewer-details.editing { padding-inline: 30px; }
 }
@@ -1057,10 +1066,10 @@ h1, h2, h3 {
   /* iPad 直向原本固定 3 欄、一格 247×384,104 件要捲將近 12 屏(審查 F47);照寬度排,iPad 直向是 4 欄 */
   .gallery-grid {
     grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-    gap: 18px 14px;
+    gap: 24px 16px;
     padding: 30px 20px 50px;
   }
-  .gallery-item { padding: 5px; }
+  .gallery-item { padding: 10px; }
   .viewer-overlay { background: var(--scrim); }
   .viewer-entry { width: 100%; height: 100dvh; }
   .viewer {
@@ -1094,10 +1103,10 @@ h1, h2, h3 {
   .closet-index-items { column-gap: 20px; }
   .gallery-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px 8px;
-    padding: 22px 12px 40px;
+    gap: 18px 10px;
+    padding: 22px 16px 40px;
   }
-  .gallery-item { aspect-ratio: .72; }
+  .gallery-item { aspect-ratio: .72; padding: 8px; }
   .viewer { padding: max(24px, env(safe-area-inset-top)) 22px max(28px, env(safe-area-inset-bottom)); }
   .modeled-hero { flex-basis: 360px; height: 360px; }
   .modeled-hero-photo { height: 326px; object-position: 49% 43%; }
@@ -2888,10 +2897,19 @@ h1, h2, h3 {
 
 /* ===== 價錢 ===== */
 /* 衣櫃格子:圖下面一行小字,沒標價的不顯示 */
+.gallery-name {
+  display: block;
+  margin-top: 10px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--body);
+}
 .gallery-price {
   display: block;
-  margin-top: 2px;
-  text-align: center;
+  margin-top: 0;
   font-family: var(--font-display);
   font-size: 13px;
   letter-spacing: .04em;
@@ -2994,3 +3012,47 @@ h1, h2, h3 {
 .city-select:focus-within .city-select-label { outline: 2px solid var(--ink); outline-offset: 2px; }
 .gallery-header.is-quiet .add-garment-button { display: none; }
 .view-nav[hidden], .piece-count[hidden] { display: none; }
+
+/* ===== 顏色區塊:講這個顏色在搭配裡做什麼(2026-10-08) =====
+   舊版一打開就是調色盤;改成先講「底色/重點色」和櫃裡配得起來幾件,改色收在「顏色抓錯了」 */
+.color-role {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 14px;
+  align-items: start;
+}
+.color-role-swatch {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--line);
+}
+.color-role-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 4px;
+}
+.color-role-title strong { font-weight: 400; font-size: 15px; color: var(--ink); }
+.color-role-title span { font-size: 12px; letter-spacing: .08em; color: var(--accent); }
+.color-role-copy {
+  margin: 0 0 4px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--body);
+}
+.color-fix-toggle {
+  min-height: 40px;
+  margin: 6px 0 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.color-fix-toggle:hover { color: var(--ink); }
+.color-fix-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.color-field .colors-editor { margin-top: 14px; }

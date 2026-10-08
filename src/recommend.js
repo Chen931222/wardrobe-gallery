@@ -183,6 +183,19 @@ function isBaseColor(item) {
   return base;
 }
 
+/** 這件的顏色在配色裡扮演什麼:底色(跟什麼都搭)或重點色(一套裡只讓它有顏色)。
+ *  條件跟 isBaseColor 一模一樣,只是多回一個理由給單品頁講(2026-10-08:顏色區塊改成講「這個顏色在搭配裡做什麼」)。 */
+export function colorRole(item) {
+  if (!item?.color) return { role: "base", why: "還沒有顏色" };
+  const { h, s, l } = hexToHsl(item.color);
+  if (isNeutral(item.color)) return { role: "base", why: "黑白灰" };
+  if (l < 0.26) return { role: "base", why: "很深的顏色" };
+  if (l > 0.78 && s < 0.6) return { role: "base", why: "很淺的顏色" };
+  if (/牛仔|丹寧|denim|jeans/.test(`${item.name || ""} ${(item.tags || []).join(" ")}`.toLowerCase())) return { role: "base", why: "丹寧" };
+  if (h >= 20 && h <= 65 && s < 0.42) return { role: "base", why: "低彩度的大地色" };
+  return { role: "accent", why: "" };
+}
+
 export function colorScore(items) {
   const accents = [];
   for (const item of items) {
@@ -537,6 +550,26 @@ export function colorName(hex) {
   const hsl = hexToHsl(hex);
   const hit = COLOR_WORDS.find((spec) => spec.test(hsl));
   return hit ? `${COLOR_NAME[hit.key]}色` : "混色";
+}
+
+/** 給人看的顏色名:品名裡寫了顏色就用品名的(「駝色斜紋外套」叫駝色),沒寫才用色碼猜。
+ *  照片抓的色碼分不開駝色和橄欖綠(兩個都在色相 39°~42°,2026-10-08 實測),品名是人看著衣服寫的,比較準。 */
+const NAME_COLOR_FIX = { 丹寧: "丹寧藍", 金: "金色" };
+export function colorLabel(name, hex) {
+  const text = String(name || "");
+  let best = null, at = Infinity;
+  for (const spec of COLOR_WORDS) for (const word of spec.words) {
+    const index = text.indexOf(word);
+    if (index >= 0 && (index < at || (index === at && word.length > best.length))) { best = word; at = index; }
+  }
+  if (!best) return colorName(hex);
+  // 整段顏色詞組:前面的深/淺/米、後面接的一個顏色字(「深橄欖棕」「米灰」「藍綠」「酒紅色」)
+  let from = at, to = at + best.length;
+  if (from > 0 && "深淺米".includes(text[from - 1])) from -= 1;
+  if (to < text.length && "綠棕灰白藍紅黑紫黃褐色".includes(text[to])) to += 1;
+  const phrase = text.slice(from, to);
+  if (NAME_COLOR_FIX[phrase]) return NAME_COLOR_FIX[phrase];
+  return phrase.endsWith("色") ? phrase : `${phrase}色`;
 }
 
 /** 一件單品所有已知的顏色(主色+副色+色盤):條紋衫的白才不會被平均成的那坨灰吞掉。 */

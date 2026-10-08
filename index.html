@@ -1,10 +1,12 @@
 <!doctype html>
-<!-- [本 fork 修改] 上游 tandpfun/wardrobe 既有檔案。本 fork 的改動:改為繁中站台 meta:lang/標題/描述中文化、theme-color 換深色。 -->
-<html lang="zh-Hant">
+<!-- [本 fork 修改] 上游 tandpfun/wardrobe 既有檔案。本 fork 的改動:改為繁中站台 meta:lang/標題/描述中文化、theme-color 換深色;2026-10-08 預設改淺色(data-theme="light"、theme-color #ece3d1)。 -->
+<html lang="zh-Hant" data-theme="light">
+  <!-- impeccable-disable cream-palette -- 淺樺木底是衣櫃打開後的內裝色,不是預設奶油底。本人 2026-10-08 看過深底、淺底、淺底加底板三張對照後選淺底加底板:衣櫃大多是白米灰,在近黑底上每件都發亮、看了頭暈。對照圖在 work/ui-compare-2026-10-08/ -->
+  <!-- impeccable-disable text-occlusion -- 天氣列的城市選單是透明(opacity 0)的原生 select 疊在城市名上,讓手機點了叫出原生選單;字沒有真的被擋住 -->
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#201b14" />
+    <meta name="theme-color" content="#ece3d1" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="我的衣櫃" />

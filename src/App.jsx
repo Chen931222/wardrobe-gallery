@@ -10,7 +10,7 @@ import { deleteLocalItem, findUrl, loadLocalItems, productUrlProblem, putLocalRe
 import { CAN_ADD, CAN_EDIT, canEditItem } from "./ownerMode.js";
 import { hasLocalChanges, lastSyncError, noteDeliberateDelete, scheduleSync, syncCode, syncNotice, syncNow } from "./sync.js";
 import { findSimilar, fitOf, guessWarmth, kindLabel, wishOutfits } from "./wishCheck.js";
-import { colorName, isNeutral } from "./recommend.js";
+import { colorLabel, colorName, colorRole, colorScore, isNeutral } from "./recommend.js";
 import { useDialog } from "./useDialog.js";
 import { ScrollRail } from "./ScrollRail.jsx";
 import { fetchPriceForUrl } from "./brandLink.js";
@@ -22,7 +22,7 @@ import { demoCloset } from "./demoCloset.js";
 import { PART_GROUPS, PART_ORDER, PARTS } from "./parts.js";
 import { FAVORITES_KEY, readFavorites, toggleFavorite } from "./favorites.js";
 import { useFullImage } from "./useFullImage.js";
-import { brandOf, brandSuggestions } from "./brands.js";
+import { brandOf, brandSuggestions, canonicalBrand } from "./brands.js";
 import { partFromName } from "./brandLink.js";
 import { noteRecommendation } from "./taste.js";
 
@@ -318,13 +318,15 @@ function GalleryItem({ item, selected, onOpen, onDelete, favorite = false }) {
         <OptimizedImage
           src={item.thumbnail || item.image}
           alt=""
-          sizes="(max-width: 520px) calc(50vw - 16px), (max-width: 860px) calc(33vw - 18px), 180px"
+          sizes="(max-width: 520px) calc(50vw - 16px), (max-width: 860px) calc(33vw - 18px), 260px"
           breakpoints={[120, 180, 240, 320, 480]}
         />
         {item.wishlist && <span className="wish-badge">想買</span>}
         {favorite && <span className="fav-mark" aria-hidden="true"><Star size={13} weight="fill" /></span>}
         {qtyOf(item.quantity) > 1 && <span className="qty-badge" aria-hidden="true">×{qtyOf(item.quantity)}</span>}
       </button>
+      {/* 品名一行:只靠圖分不出「灰褐運動長褲」和「灰色打褶西裝褲」(2026-07 本人回報)。按鈕的 aria-label 已經念過品名 */}
+      <span className="gallery-name" aria-hidden="true" title={label}>{label}</span>
       {Boolean(item.price) && <span className="gallery-price">{formatPrice(item.price, item.priceCurrency)}</span>}
       {canEditItem(item) && (
         <button
@@ -548,6 +550,40 @@ function TagEditor({ tags, onChange }) {
   );
 }
 
+/* 主角配什麼最能看出搭不搭(跟 wishCheck.js 的 PARTNER 一致):上衣看下身、下身看上衣、外套看上衣、鞋看下身 */
+const COLOR_PARTNER = { upperbody: "lowerbody", lowerbody: "upperbody", wholebody_up: "upperbody", shoes: "lowerbody", bag: "upperbody", socks: "shoes" };
+
+/** 顏色區塊的主體:這個顏色在推薦裡是底色還是重點色、櫃裡有幾件跟它配得起來 */
+function ColorRoleNote({ draft, owned, itemId }) {
+  const piece = { color: draft.color, name: draft.name, tags: draft.tags, part: draft.part };
+  const { role, why } = colorRole(piece);
+  const partner = COLOR_PARTNER[draft.part] || null;
+  const partners = partner ? owned.filter((other) => other.part === partner && other.id !== itemId && !other.wishlist) : [];
+  // 「配得起來」= 兩件擺一起,colorScore 不判成「顏色可能打架」(跟「值不值得買」同一個算法)
+  const fit = partners.filter((other) => colorScore([piece, other]).score > -3).length;
+  if (!draft.color) return <p className="color-role-copy">還沒有主色,推薦時當成跟什麼都搭。從圖片吸一個,配色才算得準。</p>;
+  return (
+    <div className="color-role">
+      <span className="color-role-swatch" style={{ backgroundColor: draft.color }} aria-hidden="true" />
+      <div>
+        <p className="color-role-title">
+          <strong>{colorLabel(draft.name, draft.color)}</strong>
+          <span>{role === "base" ? "底色" : "重點色"}</span>
+        </p>
+        <p className="color-role-copy">
+          {role === "base"
+            ? `${why},推薦時拿來打底,跟什麼都配。`
+            : "推薦時一套只讓它一件有顏色,其他配黑白灰、深色或丹寧。"}
+          {partner && partners.length > 0 && (role === "base"
+            ? `櫃裡的${PART_NAME[partner]} ${partners.length} 件都能配。`
+            : `櫃裡的${PART_NAME[partner]} ${partners.length} 件裡,${fit} 件跟它不打架。`)}
+        </p>
+        {draft.secondaryColor && <p className="color-role-copy">副色 {colorName(draft.secondaryColor)},說「換成{colorName(draft.secondaryColor)}的」時也找得到它。</p>}
+      </div>
+    </div>
+  );
+}
+
 function ColorControl({ label, field, value, palette, onChange, sampling, setSampling, optional = false, onClear, onAdd }) {
   if (optional && !value) {
     return (
@@ -608,7 +644,8 @@ function ColorControl({ label, field, value, palette, onChange, sampling, setSam
   );
 }
 
-function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleStatus, priceStatus = "", onFetchPrice = null, mergeCandidates = [], onMerge = null, brandOptions = [] }) {
+function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleStatus, priceStatus = "", onFetchPrice = null, mergeCandidates = [], onMerge = null, brandOptions = [], owned = [], itemId = null }) {
+  const [fixingColor, setFixingColor] = useState(false);
   const suggestedSecondary = palette.find((color) => color.toLowerCase() !== draft.color?.toLowerCase()) || "#9a9286";
 
   return (
@@ -696,6 +733,14 @@ function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleSta
 
       <fieldset className="color-field">
         <legend>顏色</legend>
+        {/* 2026-10-08 本人:這個區塊不知道存在的意義。舊版一打開就是調色盤,五個建議色常常是五個差不多的黑。
+            顏色在推薦裡只用來判斷「底色/重點色」,所以先講這件,改色收進「顏色抓錯了」。 */}
+        <ColorRoleNote draft={draft} owned={owned} itemId={itemId} />
+        {!(fixingColor || sampling || !draft.color) && (
+          <button type="button" className="color-fix-toggle" onClick={() => setFixingColor(true)} aria-expanded="false">顏色抓錯了?改</button>
+        )}
+        {(fixingColor || sampling || !draft.color) && (
+        <>
         <div className="colors-editor">
           <ColorControl
             label="主色"
@@ -720,6 +765,9 @@ function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleSta
           />
         </div>
         <p className="color-help" aria-live="polite">{sampling ? "點衣服上的任一處吸取顏色。" : sampleStatus || "主色是從圖片自動抓的;只有在偵測到明顯的第二種顏色時才會建議副色。"}</p>
+        {draft.color && !sampling && <button type="button" className="color-fix-toggle" onClick={() => setFixingColor(false)} aria-expanded="true">收起</button>}
+        </>
+        )}
       </fieldset>
 
       <div className="field details-field">
@@ -966,7 +1014,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
       price: parsePrice(draft.price),
       priceCurrency: parsePrice(draft.price) ? draft.priceCurrency || "TWD" : null,
       quantity: qtyOf(draft.quantity),
-      brand: draft.brand.trim(),
+      brand: canonicalBrand(draft.brand) || "",
     }) !== JSON.stringify({
       name: (item.name || "").trim(),
       part: item.part,
@@ -1058,7 +1106,8 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
   const saveEditing = () => {
     const price = parsePrice(draft.price);
     // 品牌跟自動猜的一樣、本來也沒填:不存(之後品名改了還會跟著猜);改過才存,清空 = 刻意不寫
-    const typedBrand = draft.brand.trim();
+    // 統一寫法再存(adidas、ADIDAS → Adidas),目錄才不會同一個牌子分兩格
+    const typedBrand = canonicalBrand(draft.brand) || "";
     const brand = typedBrand === (brandOf(item) || "") ? item.brand : typedBrand;
     onSave({
       ...item, ...draft, name: draft.name.trim(), tags: draft.tags.map((tag) => tag.trim()).filter(Boolean),
@@ -1220,6 +1269,8 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
             </div>
             <ItemEditor
               brandOptions={brandOptions}
+              owned={owned || []}
+              itemId={item.id}
               draft={draft}
               setDraft={setDraft}
               palette={palette}

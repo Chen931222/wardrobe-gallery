@@ -9,7 +9,7 @@ import { useDialog } from "./useDialog.js";
 import { ScrollRail } from "./ScrollRail.jsx";
 import { fixCutout, modelReady, preloadModel, removeBg } from "./cutout.js";
 import { CURRENCIES, parsePrice } from "./price.js";
-import { brandOf, brandSuggestions } from "./brands.js";
+import { brandInUrl, brandOf, brandSuggestions, canonicalBrand } from "./brands.js";
 
 // 分類清單在 src/parts.js(新增的選單照組排:衣服、鞋襪、配件、小物)
 
@@ -316,8 +316,8 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
   const pageLoading = Boolean(pageUrl) && (!page || page.status === "loading");
   const effectiveLink = (() => {
     if (!parsedLink?.page || !page || page.status === "loading") return parsedLink;
-    const site = new URL(parsedLink.url).hostname.replace(/^(www|m|tw)\./, "");
-    const brand = page.brand || site;
+    // 品牌:商品頁寫的優先,統一寫法(adidas → Adidas);沒寫就用網域猜的。舊版直接塞網域「beams.co.jp」
+    const brand = canonicalBrand(page.brand) || parsedLink.brand || "";
     // 品名:分享文字裡的優先;商品頁讀到的補上品牌(品名裡已經有就不重複)
     const pageName = page.name && brand && !page.name.toLowerCase().includes(brand.toLowerCase()) ? `${page.name}(${brand})` : page.name;
     const name = parsedLink.name || pageName || "";
@@ -573,7 +573,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
       price: parsePrice(draft.price),
       priceCurrency: draft.priceCurrency || "TWD",
       // 填了才存;沒填之後看品名、網址猜。已經有的不存網址,所以商品連結的網域讀到的品牌要現在存
-      brand: draft.brand.trim() || brandOf({ sourceUrl: link?.url }) || undefined,
+      brand: canonicalBrand(draft.brand) || brandInUrl(link?.url) || undefined,
     });
     try { navigator.storage?.persist?.(); } catch { /* 不支援就算了 */ }
     onAdded(draft.wishlist, name);
