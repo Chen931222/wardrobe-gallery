@@ -19,6 +19,7 @@ import { downloadBackupZip, importBackupFile } from "./backup.js";
 import { backupReminder, inAppBrowser, isIos, isStandalone, requestPersist, snoozeBackupHint } from "./keepSafe.js";
 import { Welcome } from "./Welcome.jsx";
 import { UpdatesSheet } from "./Updates.jsx";
+import { useIndexIndicator } from "./useIndexIndicator.js";
 import { hasUnseenUpdates } from "./updates.js";
 import { demoCloset } from "./demoCloset.js";
 import { PART_GROUPS, PART_ORDER, PARTS } from "./parts.js";
@@ -429,14 +430,32 @@ function ClosetSearch({ query, onChange, count }) {
 function ClosetIndex({ activeType, onChoose, counts, total, favCount = 0, wishCount, dreamCount = 0, trashCount, brands = { list: [], none: 0 } }) {
   const [open, setOpen] = useState(readIndexOpen);
   const [allBrands, setAllBrands] = useState(false);
+  const navRef = useRef(null);
+  const lineRef = useRef(null);
+  useIndexIndicator(navRef, lineRef, [activeType, open, allBrands, counts, brands, favCount, wishCount, dreamCount, trashCount]);
+  /* 點了下面幾行的分類、品牌:選好就收起來,變成「全部 / 包款」(2026-10-08 本人:不要再多點一次才收)。
+     用鍵盤選的,焦點原本在要收起來(inert)的那幾行裡,會掉到 body;收好後移到第一行的「/ 包款」 */
+  const refocusRef = useRef(false);
+  const chooseAndFold = (id) => {
+    onChoose(id);
+    if (!open) return;
+    refocusRef.current = Boolean(navRef.current?.querySelector(".closet-index-rows")?.contains(document.activeElement));
+    setOpen(false);
+    try { localStorage.setItem(INDEX_OPEN_KEY, "0"); } catch { /* 只記這次 */ }
+  };
+  useEffect(() => {
+    if (open || !refocusRef.current) return;
+    refocusRef.current = false;
+    navRef.current?.querySelector(".closet-index-top button.active:not(.closet-index-toggle)")?.focus({ preventScroll: true });
+  }, [open]);
   const toggle = () => {
     setOpen((was) => {
       try { localStorage.setItem(INDEX_OPEN_KEY, was ? "0" : "1"); } catch { /* 只記這次 */ }
       return !was;
     });
   };
-  const entry = (id, label, count) => (
-    <button key={id} type="button" className={activeType === id ? "active" : ""} aria-pressed={activeType === id} onClick={() => onChoose(id)}>
+  const entry = (id, label, count, fold = false) => (
+    <button key={id} type="button" className={activeType === id ? "active" : ""} aria-pressed={activeType === id} onClick={() => (fold ? chooseAndFold(id) : onChoose(id))}>
       <span className="closet-index-label">{label}</span><span className="closet-index-count">{count}</span>
     </button>
   );
@@ -451,7 +470,8 @@ function ClosetIndex({ activeType, onChoose, counts, total, favCount = 0, wishCo
       ? { id: activeType, label: activeBrand || "沒寫品牌", count: activeBrand ? brands.list.find((brand) => brand.name === activeBrand)?.count || 0 : brands.none }
       : null;
   return (
-    <nav className={open ? "closet-index" : "closet-index is-folded"} aria-label="衣櫃目錄">
+    <nav ref={navRef} className={open ? "closet-index" : "closet-index is-folded"} aria-label="衣櫃目錄">
+      <span ref={lineRef} className="closet-index-indicator" aria-hidden="true" />
       <div className="closet-index-top">
         {/* 收合鈕貼在「全部」後面(2026-10-06 本人:不要一顆獨立在右邊)。「全部」已經選中時,點它也是展開／收起 */}
         <span className="closet-index-current">
@@ -486,7 +506,7 @@ function ClosetIndex({ activeType, onChoose, counts, total, favCount = 0, wishCo
             return (
               <div key={group.id} className="closet-index-row" role="group" aria-label={group.label}>
                 <span className="closet-index-group" aria-hidden="true">{group.label}</span>
-                <span className="closet-index-items">{parts.map((part) => entry(part, PARTS[part].short || PARTS[part].label, counts[part] || 0))}</span>
+                <span className="closet-index-items">{parts.map((part) => entry(part, PARTS[part].short || PARTS[part].label, counts[part] || 0, true))}</span>
               </div>
             );
           })}
@@ -494,11 +514,11 @@ function ClosetIndex({ activeType, onChoose, counts, total, favCount = 0, wishCo
             <div className="closet-index-row" role="group" aria-label="品牌">
               <span className="closet-index-group" aria-hidden="true">品牌</span>
               <span className="closet-index-items">
-                {shownBrands.map((brand) => entry(`${BRAND_PREFIX}${brand.name}`, brand.name, brand.count))}
+                {shownBrands.map((brand) => entry(`${BRAND_PREFIX}${brand.name}`, brand.name, brand.count, true))}
                 {hiddenBrands > 0 && (
                   <button type="button" className="closet-index-more" onClick={() => setAllBrands(true)}>其他 {hiddenBrands} 個</button>
                 )}
-                {brands.none > 0 && entry(BRAND_PREFIX, "沒寫", brands.none)}
+                {brands.none > 0 && entry(BRAND_PREFIX, "沒寫", brands.none, true)}
               </span>
             </div>
           )}

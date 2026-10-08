@@ -73,6 +73,11 @@ export function canonicalBrand(text) {
   const known = BRANDS.find(([name, ...ways]) => squash(name) === key
     || ways.some((way) => squash(typeof way === "object" ? way.exact : way) === key));
   if (known) return known[0];
+  // 網站名寫成網域的(Polo Ralph Lauren 台灣站的網站名就是「ralphlauren.com.tw」,2026-10-08 本人截圖):照網域認品牌
+  if (/^(www\.)?[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(raw)) {
+    const fromDomain = brandInUrl(`https://${raw.toLowerCase()}`);
+    if (fromDomain) return fromDomain;
+  }
   return raw.replace(/^[a-z]/, (letter) => letter.toUpperCase());
 }
 

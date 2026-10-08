@@ -1,5 +1,6 @@
 // [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useIndexIndicator } from "./useIndexIndicator.js";
 import { ArrowCounterClockwise, ArrowsClockwise, CalendarCheck, Export, FloppyDisk, ImageSquare, Lock, LockOpen, Microphone, Sparkle, Trash, X } from "@phosphor-icons/react";
 import { CitySelect } from "./CitySelect.jsx";
 import { adjustIntent, fetchWeather, findItemForSwap, parseRequest, randomOutfit, readWearLog, recommendOutfit, recordWear, unrecordWear } from "./recommend.js";
@@ -35,24 +36,48 @@ export const SLOT_STYLE = {
   shoes:          { left: 36, top: 82,   width: 28, height: 18,   z: 3 },
   lowerbody:      { left: 31, top: 51,   width: 38, height: 44,   z: 4 },
   upperbody:      { left: 25, top: 16,   width: 50, height: 36,   z: 5 },
+  // 襯衫層(2026-10-08 本人:「有時候襯衫可以跟上衣一起搭配」):疊在上衣外面、外套裡面,框比上衣大一點(襯衫通常比較長)
+  shirt:          { left: 24, top: 15.5, width: 52, height: 38,   z: 6 },
   // 2026-10-06 加的皮帶、項鍊、戒指、隨身小物(位置對著 Silhouette 的 200×340:腰 y≈165–178、脖子 y≈46–60、
   // 右手下緣 y≈150–165、胸前口袋 x≈108–122)。皮帶壓在上衣下擺上面,不然整條被上衣蓋住;外套還是在它上面
-  belt:           { left: 34, top: 48.5, width: 32, height: 5.5,  z: 6 },
-  wholebody_up:   { left: 22, top: 14.5, width: 56, height: 42,   z: 7 },
-  necklace:       { left: 41, top: 15,   width: 18, height: 9,    z: 8 },
+  belt:           { left: 34, top: 48.5, width: 32, height: 5.5,  z: 7 },
+  wholebody_up:   { left: 22, top: 14.5, width: 56, height: 42,   z: 8 },
+  necklace:       { left: 41, top: 15,   width: 18, height: 9,    z: 9 },
   // 包的長寬比從 0.84(後背包)到 1.40(半月斜背包)都有。框開 38% 寬時全部都會
   // 撐到 144px = 跟寬褲一樣寬,像揹了個行李箱。收到 26% 後一律渲染 98px 寬,
   // 約寬褲的七成,才像掛在右腰的包。
-  bag:            { left: 54, top: 46,   width: 26, height: 19,   z: 9 },
-  eyewear:        { left: 38, top: 3.5,  width: 24, height: 8,    z: 10 },
-  wrist:          { left: 23, top: 41,   width: 15, height: 8,    z: 10 },
-  ring:           { left: 66, top: 44,   width: 8,  height: 5,    z: 10 },
-  carry:          { left: 56, top: 20,   width: 6,  height: 10,   z: 10 },
-  accessories_up: { left: 62, top: 1,    width: 30, height: 15,   z: 10 },
+  bag:            { left: 54, top: 46,   width: 26, height: 19,   z: 10 },
+  eyewear:        { left: 38, top: 3.5,  width: 24, height: 8,    z: 11 },
+  wrist:          { left: 23, top: 41,   width: 15, height: 8,    z: 11 },
+  ring:           { left: 66, top: 44,   width: 8,  height: 5,    z: 11 },
+  carry:          { left: 56, top: 20,   width: 6,  height: 10,   z: 11 },
+  accessories_up: { left: 62, top: 1,    width: 30, height: 15,   z: 11 },
 };
 
+/* 襯衫在衣櫃裡還是「上衣」(部位 upperbody),推薦引擎也照舊把它當上衣挑;只有搭配頁的人台另外給它一格。
+   所以人台上「哪件放哪格」一律問 slotOf,不再直接用 item.part:
+     - 品名有「襯衫」的上衣 → 襯衫格(「襯衫式外套」建檔在外套,不受影響)
+     - 其他 → 照部位
+   推薦、隨機、帶進來的那套是照部位排的(引擎只知道 upperbody),套上人台前用 toStudio 換一次。 */
+const isShirt = (item) => item?.part === "upperbody" && /襯衫/.test(item.name || "");
+export const slotOf = (item) => (isShirt(item) ? "shirt" : item?.part);
+export function toStudio(outfit) {
+  const next = {};
+  for (const item of Object.values(outfit || {})) if (item) next[slotOf(item)] = item;
+  return next;
+}
+/* 給推薦引擎的鎖:引擎沒有襯衫格。只鎖了襯衫(身上沒有別的上衣)就當成鎖住上衣;上衣、襯衫都鎖了,引擎只管上衣,襯衫事後放回去 */
+function toEngineLocks(locked) {
+  const next = { ...locked };
+  if (next.shirt) {
+    if (!next.upperbody) next.upperbody = next.shirt;
+    delete next.shirt;
+  }
+  return next;
+}
+
 // 衣架的分類、理由裡的名稱:跟衣櫃同一份(src/parts.js),順序也一樣
-const SLOT_LABEL = Object.fromEntries(PART_ORDER.map((part) => [part, PARTS[part].label]));
+const SLOT_LABEL = Object.fromEntries(PART_ORDER.flatMap((part) => (part === "upperbody" ? [[part, PARTS[part].label], ["shirt", "襯衫"]] : [[part, PARTS[part].label]])));
 
 function readLooks() {
   try {
@@ -143,8 +168,10 @@ function askedLabel(spec, fallback) {
  * @param closet "all"(站主)、"mine"、"demo":「身上這套」各衣櫃分開記
  * @param initialDaily 入口今日推薦帶進來的天氣和理由,進來就看得到為什麼是這套(審查 F25)
  */
+/* 衣架(2026-10-08 本人選「靠近加放大」＋「分頁標出身上有穿」):分頁改成跟衣櫃目錄同一套(文字、件數、書籤底線),
+   身上有穿的那類旁邊一個小點;縮圖放大、下面寫品名(上衣 45 件,好幾件灰 T 只看圖分不出來)。 */
 export function OutfitStudio({ items, initialOutfit = null, initialDaily = null, onOpenItem = null, closet = "all" }) {
-  const [wearing, setWearing] = useState(() => initialOutfit || {});   // 帶一套進來時一開始就穿著,寫回時才不會先寫出空的
+  const [wearing, setWearing] = useState(() => toStudio(initialOutfit));   // 帶一套進來時一開始就穿著,寫回時才不會先寫出空的
   const [looks, setLooks] = useState(readLooks);
   const [stripType, setStripType] = useState("upperbody");
   const [occasion, setOccasion] = useState("");           // 「說個場合」輸入框
@@ -195,7 +222,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
 
   // 入口頁按「穿這套」帶進來的推薦穿搭,直接套上人形
   useEffect(() => {
-    if (initialOutfit) { dirtyRef.current = true; setWearing(initialOutfit); setAdjusting(null); setDaily(initialDaily); }
+    if (initialOutfit) { dirtyRef.current = true; setWearing(toStudio(initialOutfit)); setAdjusting(null); setDaily(initialDaily); }
   }, [initialOutfit]);   // eslint-disable-line react-hooks/exhaustive-deps -- 理由跟著那一套走,只在換一套帶進來時換
 
   // 記住身上這套:進頁面先從 localStorage 還原(入口頁帶進來的優先),之後只要使用者動過就存。
@@ -207,7 +234,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     const next = {};
     for (const [slot, id] of Object.entries(readWearing(closet))) {
       const item = items.find((existing) => existing.id === id);
-      if (item && item.part === slot) next[slot] = item;
+      if (item) next[slotOf(item)] = item;
     }
     if (Object.keys(next).length) setWearing(next);
   }, [items, initialOutfit, closet]);
@@ -231,15 +258,22 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));
   }, []);
 
+  // 衣架分頁的書籤底線:跟衣櫃目錄同一支(useIndexIndicator)
+  const rackNavRef = useRef(null);
+  const rackLineRef = useRef(null);
+
   const wardrobeByType = useMemo(() => {
     const groups = {};
     for (const slot of Object.keys(SLOT_STYLE)) groups[slot] = [];
-    for (const item of items) groups[item.part]?.push(item);
+    for (const item of items) groups[slotOf(item)]?.push(item);
     for (const slot of Object.keys(groups)) groups[slot].sort((a, b) => Number(Boolean(b.wishlist)) - Number(Boolean(a.wishlist)));
     return groups;
   }, [items]);
 
   const wornItems = Object.values(wearing).filter(Boolean);
+  // 分頁換了、件數變了、身上穿的變了(小點會讓分頁變寬)都要重量
+  const rackTabsKey = Object.keys(wardrobeByType).map((slot) => `${slot}:${wardrobeByType[slot].length}:${wearing[slot] ? 1 : 0}`).join("|");
+  useIndexIndicator(rackNavRef, rackLineRef, [stripType, rackTabsKey]);
   const fullImage = useFullImages(wornItems);   // 人台上的用原圖(自己加的衣服清單裡是縮圖)
 
   /* ---------- 幾何:算出一件衣服「未旋轉縮放前」的內容框(px) ---------- */
@@ -419,15 +453,16 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   const toggleWear = (item) => {
     pushHistory(wearing); dirtyRef.current = true;
     setWearing((current) => {
-      const removing = current[item.part]?.id === item.id;
-      if (removing && adjusting === item.part) setAdjusting(null);
-      return { ...current, [item.part]: removing ? null : item };
+      const slot = slotOf(item);
+      const removing = current[slot]?.id === item.id;
+      if (removing && adjusting === slot) setAdjusting(null);
+      return { ...current, [slot]: removing ? null : item };
     });
   };
 
   // 隨機一套:有天氣(推薦過一次、或背景抓到了)就避開跟今天差太多的;還沒抓到不等,完全隨機(審查 F27)
   const randomize = () => {
-    const next = randomOutfit(items, weatherRef.current);
+    const next = toStudio(randomOutfit(items, weatherRef.current));
     setAdjusting(null);
     pushHistory(wearing); dirtyRef.current = true;
     setWearing(next);
@@ -456,7 +491,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       for (const [slot, item] of Object.entries(outfit || {})) {
         if (!item) continue;
         const fresh = byId.get(item.id);
-        if (!fresh || fresh.part !== slot) { changed = true; continue; }
+        if (!fresh || slotOf(fresh) !== slot) { changed = true; continue; }
         if (fresh !== item) changed = true;
         next[slot] = fresh;
       }
@@ -472,7 +507,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       for (const [slot, piece] of Object.entries(current.outfit || {})) {
         if (!piece) continue;
         const fresh = byId.get(piece.id);
-        if (!fresh || fresh.part !== slot) { changed = true; continue; }
+        if (!fresh || slotOf(fresh) !== slot) { changed = true; continue; }
         if (fresh.image !== piece.image) changed = true;
         outfit[slot] = fresh.image !== piece.image ? fresh : piece;
       }
@@ -532,8 +567,9 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       if (!weatherRef.current) weatherRef.current = await fetchWeather();
       const weather = weatherRef.current;
       const wearLog = readWearLog();
-      const locked = {};
-      for (const slot of Object.keys(useLocks)) if (wearing[slot]) locked[slot] = wearing[slot];
+      const lockedStudio = {};
+      for (const slot of Object.keys(useLocks)) if (wearing[slot]) lockedStudio[slot] = wearing[slot];
+      const locked = toEngineLocks(lockedStudio);
       // 最近三次推薦出現過的往後排:「再推薦一套」才不會換來換去還是那幾件
       const avoid = new Map();
       for (const ids of shownRef.current) for (const id of ids) avoid.set(id, (avoid.get(id) || 0) + 1);
@@ -544,7 +580,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       // 眼鏡、手錶、配件現在引擎也會挑(2026-10-06);這次沒挑到的那格,身上有就留著,別每次推薦都被脫掉
       for (const slot of ["eyewear", "wrist", "belt", "necklace", "ring", "accessories_up", "carry"]) if (wearing[slot] && !result.outfit[slot]) result.outfit[slot] = wearing[slot];
       if (notes.length) result.reasons.unshift(...notes);
-      const lockedLabels = Object.keys(locked).map((slot) => SLOT_LABEL[slot]);
+      const lockedLabels = Object.keys(lockedStudio).map((slot) => SLOT_LABEL[slot]);
       if (lockedLabels.length) result.reasons.push(`鎖住沒動:${lockedLabels.join("、")}`);
       if (unknownRaw) {
         result.reasons.push(`「${unknownRaw}」我還沒學過,這套是純照天氣挑的;想更準可以說場合(約會、上班、看球賽)、色系(全黑、大地色)或「換成黑色襯衫」`);
@@ -562,7 +598,10 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       lastIntentRef.current = intent;
       setAdjusting(null);
       pushHistory(wearing); dirtyRef.current = true;
-      setWearing(result.outfit);
+      // 引擎照部位排 → 換成人台的格子;上衣、襯衫都鎖著的話,引擎只管上衣,鎖住的襯衫放回去
+      const studioOutfit = toStudio(result.outfit);
+      if (lockedStudio.shirt && lockedStudio.upperbody) studioOutfit.shirt = lockedStudio.shirt;
+      setWearing(studioOutfit);
       setDaily({
         weather, reasons: result.reasons,
         understood: unknownRaw ? `沒學過「${unknownRaw}」,先照天氣挑` : (intent?.understood || null),
@@ -624,17 +663,21 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     try {
       if (!weatherRef.current) weatherRef.current = await fetchWeather().catch(() => null);
       const weather = weatherRef.current || { temp: 25, feelsLike: 25, desc: "", rainProb: 0, tMax: 27, tMin: 22 };
-      const locked = {};
-      for (const key of ["upperbody", "lowerbody", "wholebody_up", "shoes", "socks", "bag"]) if (key !== slot && wearing[key]) locked[key] = wearing[key];
+      const lockedStudio = {};
+      for (const key of ["upperbody", "shirt", "lowerbody", "wholebody_up", "shoes", "socks", "bag"]) if (key !== slot && wearing[key]) lockedStudio[key] = wearing[key];
+      // 換上衣時身上的襯衫不算鎖(引擎會把它當上衣、整件不換);換襯衫時身上的上衣也一樣
+      if (slot === "upperbody" || slot === "shirt") { delete lockedStudio.upperbody; delete lockedStudio.shirt; }
+      const engineSlot = slot === "shirt" ? "upperbody" : slot;
       const avoid = new Map(wearing[slot] ? [[wearing[slot].id, 99]] : []);
-      const result = recommendOutfit(items, weather, readWearLog(), lastIntentRef.current, locked, avoid, readTaste());
-      const next = result.outfit?.[slot];
+      const result = recommendOutfit(items, weather, readWearLog(), lastIntentRef.current, toEngineLocks(lockedStudio), avoid, readTaste());
+      const next = result.outfit?.[engineSlot];
       const label = SLOT_LABEL[slot];
       if (!next || next.id === wearing[slot]?.id) { setDaily({ understood: `換${label}`, reasons: [`櫃裡沒有別的${label}可以換`] }); return; }
+      const nextSlot = slotOf(next);
       setAdjusting(null);
       pushHistory(wearing); dirtyRef.current = true;
-      setWearing((current) => ({ ...current, [slot]: next }));
-      noteRecommendation({ ...wearing, [slot]: next });
+      setWearing((current) => ({ ...current, [nextSlot]: next }));
+      noteRecommendation({ ...wearing, [nextSlot]: next });
       setDaily({ understood: `換${label}`, reasons: [`換上「${next.name}」,是配著身上其他幾件挑的`] });
     } finally {
       setDailyBusy(false);
@@ -646,6 +689,8 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   const handleRequest = (text = occasion) => {
     const req = parseRequest(text);
     if (!req) return;
+    // 句子裡講「襯衫」、要留著/解鎖/脫掉的是上衣那格:改成襯衫格(換單品不用改,找到的那件自己會放進襯衫格)
+    if (req.slot === "upperbody" && /襯衫/.test(req.raw || text) && ["keep", "unlock", "remove"].includes(req.kind)) req.slot = "shirt";
 
     if (req.kind === "undo") { undo(); return; }
 
@@ -691,7 +736,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       const askedSlotLabel = SLOT_LABEL[req.slot] || "這件";
       if (!found) { setDaily({ understood: `換${askedSlotLabel}`, reasons: [`櫃裡沒有${askedSlotLabel}這一類的單品`] }); return; }
       // 找到的那件可能建檔在別格(「灰色細針織開襟外套」在上衣):放進它自己的格子,不是硬塞進講的那一格
-      const slot = found.item.part;
+      const slot = slotOf(found.item);
       const label = SLOT_LABEL[slot];
       const asked = askedLabel(req, askedSlotLabel);
       setAdjusting(null);
@@ -846,7 +891,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     const next = {};
     for (const id of look.itemIds) {
       const item = items.find((existing) => existing.id === id);
-      if (item) next[item.part] = item;
+      if (item) next[slotOf(item)] = item;
     }
     setAdjusting(null);
     pushHistory(wearing); dirtyRef.current = true;
@@ -1157,7 +1202,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
                       title="做成一張可分享的圖"
                       onClick={() => {
                         const map = {};
-                        for (const id of look.itemIds) { const item = items.find((existing) => existing.id === id); if (item) map[item.part] = item; }
+                        for (const id of look.itemIds) { const item = items.find((existing) => existing.id === id); if (item) map[slotOf(item)] = item; }
                         openCard(map, { title: "收藏的穿搭" });
                       }}
                     >
@@ -1210,7 +1255,8 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       </div>
 
       <aside className="studio-rack">
-        <nav className="studio-rack-nav" aria-label="依類型挑衣服">
+        <nav ref={rackNavRef} className="studio-rack-nav" aria-label="依類型挑衣服">
+          <span ref={rackLineRef} className="closet-index-indicator" aria-hidden="true" />
           {/* 沒有衣服的分類不列(正在看的那類除外):分類多了,一整排 0 只是擋路 */}
           {Object.entries(SLOT_LABEL).filter(([slot]) => wardrobeByType[slot]?.length || stripType === slot).map(([slot, label]) => (
             <button
@@ -1218,10 +1264,12 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
               type="button"
               className={stripType === slot ? "active" : ""}
               aria-pressed={stripType === slot}
+              aria-label={`${label} ${wardrobeByType[slot]?.length || 0} 件${wearing[slot] ? ",身上有穿" : ""}`}
               onClick={() => setStripType(slot)}
             >
-              {label}
+              <span className="closet-index-label">{label}</span>
               <small>{wardrobeByType[slot]?.length || 0}</small>
+              {wearing[slot] && <span className="rack-worn-dot" aria-hidden="true" />}
             </button>
           ))}
         </nav>
@@ -1231,14 +1279,17 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
             <button
               key={item.id}
               type="button"
-              className={`studio-rack-item${wearing[item.part]?.id === item.id ? " wearing" : ""}`}
-              aria-pressed={wearing[item.part]?.id === item.id}
+              className={`studio-rack-item${wearing[slotOf(item)]?.id === item.id ? " wearing" : ""}`}
+              aria-pressed={wearing[slotOf(item)]?.id === item.id}
               aria-label={`${item.name || SLOT_LABEL[item.part]}${item.wishlist ? "(還沒買)" : ""}`}
               onClick={() => tapRackItem(item)}
               title={`${item.wishlist ? `${item.name}(還沒買)` : item.name}${onOpenItem ? "\n點兩下看資訊" : ""}`}
             >
-              <img src={item.thumbnail || item.image} alt={item.name || SLOT_LABEL[item.part]} loading="lazy" />
-              {item.wishlist && <span className="wish-badge">想買</span>}
+              <span className="studio-rack-thumb">
+                <img src={item.thumbnail || item.image} alt="" loading="lazy" />
+                {item.wishlist && <span className={item.dream ? "wish-badge is-dream" : "wish-badge"}>{item.dream ? "夢想" : "想買"}</span>}
+              </span>
+              <span className="studio-rack-name" aria-hidden="true">{item.name || SLOT_LABEL[item.part]}</span>
             </button>
           ))}
           {!(wardrobeByType[stripType] || []).length && (

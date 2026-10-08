@@ -40,6 +40,9 @@
 
   /* Cormorant 沒有中文字符,中文會自動落到 Noto Serif TC —— 拉丁字母拿到 Cormorant 的
      優雅比例,中文拿到正經的襯線體,兩者都不會掉到系統的細明體。 */
+  /* 動畫曲線(2026-10-08 加,目前只有目錄用):離場進場用 ease-out,在畫面上移動用 ease-in-out */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --font-display: "Cormorant", "Noto Serif TC", Georgia, serif;
   --font-body: "Noto Serif TC", Georgia, "Times New Roman", serif;
 
@@ -190,10 +193,23 @@ h1, h2, h3 {
 /* 衣櫃目錄(2026-10-06,取代橫向捲動的分類列):像書的目錄。第一行「全部」和想買的、垃圾桶;
    下面每組一行,組名在左一欄,分類照順序排、排不下就換行。行與行之間一條髮絲線,選中的那類墨色加一道金線。 */
 .closet-index {
+  position: relative;   /* 書籤底線用它當座標 */
   max-width: 760px;
   margin: 40px 0 0;
   border-bottom: 1px solid var(--line);
 }
+/* 書籤底線:整個目錄共用一條,JS 量好位置後放上去(useIndexIndicator)。只動 transform 和 opacity */
+.closet-index-indicator {
+  position: absolute; left: 0; top: 0; z-index: 1;
+  width: 100px; height: 1px;
+  background: var(--accent);
+  transform-origin: 0 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 240ms var(--ease-in-out);
+}
+/* 線就位之後,原本畫在字上的底線讓位(顏色透明,版面不動) */
+.closet-index.has-indicator button.active .closet-index-label { text-decoration-color: transparent; }
 .closet-index button {
   appearance: none;
   display: inline-flex;
@@ -212,6 +228,7 @@ h1, h2, h3 {
   cursor: pointer;
   transition: color 160ms ease;
 }
+.closet-index-count { transition: color 160ms ease; }
 .closet-index button:hover { color: var(--ink); }
 .closet-index button.active { color: var(--ink); }
 /* 底線只畫在名稱下:畫在整顆按鈕上會在名稱和件數中間斷成兩段 */
@@ -251,10 +268,12 @@ h1, h2, h3 {
 .closet-index-rows {
   display: grid;
   grid-template-rows: 1fr;
-  transition: grid-template-rows 260ms cubic-bezier(.2, .7, .2, 1);
+  transition: grid-template-rows 220ms var(--ease-out);
 }
-.closet-index-rows-inner { min-height: 0; overflow: hidden; }
+/* 2026-10-08:內容跟著淡入淡出,不再只是被高度硬裁掉(本人選的「展開收起淡入」) */
+.closet-index-rows-inner { min-height: 0; overflow: hidden; transition: opacity 200ms var(--ease-out); }
 .closet-index.is-folded .closet-index-rows { grid-template-rows: 0fr; }
+.closet-index.is-folded .closet-index-rows-inner { opacity: 0; }
 /* 收起時只剩第一行:它自己的底線和整塊目錄的底線會疊成兩條,拿掉一條 */
 .closet-index.is-folded .closet-index-top { border-bottom-color: transparent; }
 .closet-index-row {
@@ -3163,3 +3182,125 @@ h1, h2, h3 {
 .note-field textarea:focus { border-color: var(--ink); outline: none; }
 .note-field small { display: block; margin-top: 6px; font-size: 11.5px; color: var(--muted); }
 @media (max-width: 520px) { .note-field textarea { font-size: 16px; } }   /* iPhone 點了不會自動放大 */
+
+/* 目錄動畫的「減少動態」版:底線不滑(JS 也改成直接放、短淡入),高度不動畫,淡入淡出留著幫助看懂 */
+@media (prefers-reduced-motion: reduce) {
+  .closet-index-indicator { transition: none; }
+  .closet-index-rows { transition: none; }
+}
+
+/* ===== 搭配頁:人台和衣架靠在一起、衣架放大(2026-10-08 本人選「靠近加放大」) =====
+   舊版:左欄撐滿、衣架固定 320px 貼最右邊。2000px 寬的螢幕上人台跟衣架隔了約 600px,眼睛一直左右來回。
+   改成整頁限寬置中;衣架寬 320–440 跟著視窗,人台在 900 寬的筆電上也不會被擠扁。>860 才生效,平板手機照舊 */
+@media (min-width: 861px) {
+  .studio {
+    grid-template-columns: minmax(0, 1fr) clamp(320px, 34vw, 440px);
+    gap: 48px;
+    max-width: 1200px;
+    margin-inline: auto;
+  }
+  .studio-rack { padding-left: 32px; }
+}
+
+/* 分頁:跟衣櫃目錄同一套(文字＋件數＋書籤底線),不再是有框的小膠囊、選中整塊塗黑 */
+.studio-rack-nav {
+  position: relative;   /* 書籤底線的座標 */
+  column-gap: 20px;
+  row-gap: 0;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.studio-rack-nav button {
+  min-height: 38px;
+  border: 0;
+  padding: 8px 0;
+  background: none;
+  font-family: var(--font-body);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 14px;
+  color: var(--body);
+  transition: color 160ms ease;
+}
+.studio-rack-nav button:hover { color: var(--ink); background: none; }
+.studio-rack-nav button.active { border: 0; background: none; color: var(--ink); }
+.studio-rack-nav button small {
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: lining-nums tabular-nums;
+  transition: color 160ms ease;
+}
+.studio-rack-nav button.active small { color: var(--accent); }
+.studio-rack-nav button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* 底線還沒量好之前(第一次畫)先用字的底線,量好後讓位給會滑的那條 */
+.studio-rack-nav button.active .closet-index-label {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 7px;
+}
+.studio-rack-nav.has-indicator button.active .closet-index-label { text-decoration-color: transparent; }
+/* 身上有穿的那類:分頁旁邊一個小點 */
+.rack-worn-dot {
+  align-self: center;
+  width: 5px; height: 5px;
+  margin-left: -1px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* 衣架格子:縮圖放大(桌機一排三格,約 125px)、下面一行品名 */
+.studio-rack-grid {
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 18px 14px;
+}
+.studio-rack-item {
+  aspect-ratio: auto;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.studio-rack-thumb {
+  position: relative;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  overflow: hidden;   /* 沒有這個,比較高的照片會把正方形框撐長,一排格子上下對不齊(實測) */
+  min-height: 0;
+  transition: border-color 160ms ease;
+}
+.studio-rack-thumb img { width: 100%; height: 100%; object-fit: contain; }
+.studio-rack-item.wearing { border: 0; box-shadow: none; }
+.studio-rack-item.wearing .studio-rack-thumb { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+@media (hover: hover) and (pointer: fine) {
+  .studio-rack-item:hover .studio-rack-thumb { border-color: var(--fill); }
+  .studio-rack-item.wearing:hover .studio-rack-thumb { border-color: var(--accent); }
+}
+.studio-rack-item:focus-visible { outline: none; }
+.studio-rack-item:focus-visible .studio-rack-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
+.studio-rack-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  color: var(--body);
+}
+@media (prefers-reduced-motion: reduce) { .studio-rack-thumb { transition: none; } }
+/* 手機:衣架維持一排三格(最小 104 時 375 寬只排得下兩格,上衣 45 件要滑太久) */
+@media (max-width: 520px) {
+  .studio-rack-grid { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 14px 10px; }
+  .studio-rack-thumb { padding: 6px; }
+  .studio-rack-name { font-size: 11.5px; }
+}

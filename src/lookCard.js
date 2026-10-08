@@ -88,7 +88,13 @@ function flatlayBoxes(has) {
   const b = {};
   const outer = has("wholebody_up");
   if (outer) b.wholebody_up = { x: 0.00, y: 0.00, w: 0.50, h: 0.52 };
-  b.upperbody = outer ? { x: 0.26, y: 0.04, w: 0.44, h: 0.46 } : { x: 0.06, y: 0.02, w: 0.50, h: 0.48 };
+  const upper = outer ? { x: 0.26, y: 0.04, w: 0.44, h: 0.46 } : { x: 0.06, y: 0.02, w: 0.50, h: 0.48 };
+  // 襯衫疊在上衣外面(2026-10-08 加的襯衫格):襯衫佔上衣原本的位置,上衣縮小、往左下壓在前面
+  if (has("shirt") && has("upperbody")) {
+    b.shirt = upper;
+    b.upperbody = { x: Math.max(0, upper.x - 0.04), y: upper.y + 0.10, w: upper.w * 0.78, h: upper.h * 0.78 };
+  } else if (has("shirt")) b.shirt = upper;
+  else b.upperbody = upper;
   b.lowerbody = { x: 0.06, y: 0.50, w: 0.46, h: 0.50 };
 
   const column = [
@@ -105,7 +111,7 @@ function flatlayBoxes(has) {
   for (const c of column) { b[c.slot] = { x: c.x, y, w: c.w, h: c.h * fit }; y += c.h * fit + gap; }
   return b;
 }
-const FLATLAY_ORDER = ["wholebody_up", "lowerbody", "upperbody", "shoes", "bag", "accessories_up", "eyewear", "necklace", "wrist", "ring", "belt", "carry", "socks"];
+const FLATLAY_ORDER = ["wholebody_up", "lowerbody", "shirt", "upperbody", "shoes", "bag", "accessories_up", "eyewear", "necklace", "wrist", "ring", "belt", "carry", "socks"];
 
 function drawFlatlay(ctx, area, pieces) {
   const has = (slot) => pieces.some((p) => p.slot === slot);
