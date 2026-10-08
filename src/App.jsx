@@ -1,6 +1,6 @@
 // [本 fork 修改] 上游 tandpfun/wardrobe 既有檔案。本 fork 的改動:介面全繁中化並擴充分類,新增入口環/衣櫃/搭配三頁切換、IndexedDB 本機衣物合併與格子刪除鈕。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Camera, CaretDown, Check, Plus, Sparkle, Star, Trash, X } from "@phosphor-icons/react";
+import { Camera, CaretDown, Check, MagnifyingGlass, Plus, Sparkle, Star, Trash, X } from "@phosphor-icons/react";
 import { OptimizedImage } from "./OptimizedImage.jsx";
 import { OutfitStudio, rememberWearing } from "./OutfitStudio.jsx";
 import { LandingRing } from "./LandingRing.jsx";
@@ -9,11 +9,11 @@ import { SyncPanel } from "./SyncPanel.jsx";
 import { deleteLocalItem, findUrl, loadLocalItems, productUrlProblem, putLocalRecord, updateLocalItem } from "./localWardrobe.js";
 import { CAN_ADD, CAN_EDIT, canEditItem } from "./ownerMode.js";
 import { hasLocalChanges, lastSyncError, noteDeliberateDelete, scheduleSync, syncCode, syncNotice, syncNow } from "./sync.js";
-import { findSimilar, fitOf, guessWarmth, kindLabel, wishOutfits } from "./wishCheck.js";
+import { findSameStyle, findSimilar, fitOf, guessWarmth, kindLabel, wishOutfits } from "./wishCheck.js";
 import { colorLabel, colorName, colorRole, colorScore, isNeutral } from "./recommend.js";
 import { useDialog } from "./useDialog.js";
 import { ScrollRail } from "./ScrollRail.jsx";
-import { fetchPriceForUrl } from "./brandLink.js";
+import { fetchPriceForUrl, sameProduct } from "./brandLink.js";
 import { CURRENCIES, formatPrice, parsePrice } from "./price.js";
 import { downloadBackupZip, importBackupFile } from "./backup.js";
 import { backupReminder, inAppBrowser, isIos, isStandalone, requestPersist, snoozeBackupHint } from "./keepSafe.js";
@@ -69,6 +69,32 @@ const TAG_ZH = {
   samsonite: "Samsonite", timberland: "Timberland", "under armour": "Under Armour",
 };
 const tagLabel = (tag) => TAG_ZH[String(tag).toLowerCase()] || tag;
+
+/* 衣櫃搜尋(2026-10-08 本人:「可以增加搜尋欄?用關鍵字」)。
+   範圍是整個衣櫃(含想買的),不管目錄停在哪一類:停在「上衣」搜「褲」什麼都沒有,會以為壞了。
+   比對品名、品牌、分類、款式、版型、顏色(品名寫的和色碼猜的)、標籤(英文和中文)。空格隔開的每個詞都要對到:「黑 短褲」。 */
+const SEARCH_PART_WORDS = { upperbody: "衣服 上身", wholebody_up: "夾克", lowerbody: "褲子 褲 裙子", shoes: "鞋", socks: "襪", bag: "包包 包" };
+// 標籤裡跟品牌同名的不算(COACH 包的標籤 coach 會被翻成「教練外套」,搜「外套」就冒出一個包)
+const tagsBesidesBrand = (item) => {
+  const brand = (brandOf(item) || "").toLowerCase();
+  return (item.tags || []).filter((tag) => String(tag).toLowerCase() !== brand);
+};
+function searchTextOf(item) {
+  const part = PARTS[item.part] || {};
+  return [
+    item.name, brandOf(item), part.label, part.singular, part.short, SEARCH_PART_WORDS[item.part], kindLabel(item), fitOf(item),
+    // 顏色只用品名寫的(沒寫才用色碼猜):色碼常猜錯,軍綠短褲被猜成黑色,搜「黑」就會冒出來
+    colorLabel(item.name, item.color),
+    ...tagsBesidesBrand(item), ...tagsBesidesBrand(item).map(tagLabel), item.wishlist ? "想買 還沒買" : "",
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+const searchTermsOf = (query) => query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+// 英文、數字從單字開頭比(「gu」不會比到 burgundy、「nike」比得到「nike」),中文照字串比
+const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function termMatches(text, term) {
+  if (/^[a-z0-9]/.test(term)) return new RegExp(`(^|[^a-z0-9])${escapeRegex(term)}`).test(text);
+  return text.includes(term);
+}
 
 /* 站主那批衣服從哪裡來(2026-10-05 起完整衣櫃不再公開):
    訪客、?public 讀公開的 /data/wardrobe.json,只有示範的 20 件(src/demoCloset.js,人工挑過、品名去掉品牌)。
@@ -358,6 +384,44 @@ function readIndexOpen() {
 const BRAND_PREFIX = "brand:";
 const brandFilterOf = (activeType) => (activeType.startsWith(BRAND_PREFIX) ? activeType.slice(BRAND_PREFIX.length) : null);
 const BRANDS_SHOWN = 10;   // 品牌多的話先列件數最多的幾個,其他按「其他 N 個」
+
+/** 衣櫃搜尋欄。count = 搜尋中找到幾件;沒在搜尋給 null。桌機按「/」直接跳進來,Esc 清掉 */
+function ClosetSearch({ query, onChange, count }) {
+  const inputRef = useRef(null);
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      if (document.querySelector('[aria-modal="true"]')) return;   // 對話框開著不搶
+      event.preventDefault();
+      inputRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  return (
+    <div className="closet-search-wrap">
+      <div className="closet-search" role="search">
+        <MagnifyingGlass size={16} weight="regular" aria-hidden="true" />
+        <input
+          ref={inputRef}
+          type="search"
+          value={query}
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={(event) => { if (event.key === "Escape" && query) { event.stopPropagation(); onChange(""); } }}
+          placeholder="搜尋品名、品牌、顏色,例如「黑 短褲」"
+          aria-label="搜尋衣櫃"
+          enterKeyHint="search"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        {query && <button type="button" onClick={() => { onChange(""); inputRef.current?.focus(); }}>清除</button>}
+      </div>
+      {count !== null && <p className="closet-search-status" aria-live="polite">整個衣櫃找到 {count} 件</p>}
+    </div>
+  );
+}
 
 function ClosetIndex({ activeType, onChoose, counts, total, favCount = 0, wishCount, trashCount, brands = { list: [], none: 0 } }) {
   const [open, setOpen] = useState(readIndexOpen);
@@ -694,7 +758,7 @@ function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleSta
         </div>
         {onMerge && mergeCandidates.length > 0 && (
           <div className="qty-merge">
-            <p>櫃裡還有 {mergeCandidates.length} 件很像的。是同一款的話,併成這一格(那一張移到垃圾桶,可以復原):</p>
+            <p>櫃裡有 {mergeCandidates.length} 件看起來是同一款(品名、品牌、細節、顏色都對得上)。真的是同一款,就併成這一格(那一張移到垃圾桶,可以復原):</p>
             <ul>
               {mergeCandidates.slice(0, 3).map((other) => (
                 <li key={other.id}>
@@ -787,7 +851,7 @@ function ReadOnlyDetails({ item, onWear }) {
     item.color && { hex: item.color, label: "主色" },
     item.secondaryColor && { hex: item.secondaryColor, label: "副色" },
   ].filter(Boolean);
-  const tags = [...new Set((item.tags || []).map(tagLabel))];
+  const tags = [...new Set(tagsBesidesBrand(item).map(tagLabel))];   // 品牌已經寫在上面那行;COACH 不再顯示成「教練外套」
   return (
     <div className="viewer-readonly">
       <p className="viewer-ro-category">{brandOf(item) ? `${brandOf(item)} · ` : ""}{type}{qtyOf(item.quantity) > 1 ? ` · ${qtyOf(item.quantity)} 件` : ""}</p>
@@ -1140,9 +1204,10 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
     setSampling(null);
   };
 
-  // 同一款的另一張(很像:同分類、同款式、同色):可以併進這一格,數量加上去
+  // 同一款的另一張:可以併進這一格,數量加上去。2026-10-08 起改用 findSameStyle(品牌、細節、品名顏色、品名都要對得上);
+  // 舊版用「很像」(同分類同色就算),會叫人把素 T 跟印花 T、亨利領併在一起
   const mergeCandidates = useMemo(() => (
-    item.wishlist ? [] : findSimilar({ part: item.part, name: item.name, color: item.color }, owned).filter((other) => other.id !== item.id && !other.wishlist)
+    item.wishlist ? [] : findSameStyle(item, owned, { brandOf, sameProduct }).filter((other) => !other.wishlist)
   ), [item, owned]);
   const mergeWith = (other) => {
     const quantity = Math.min(99, qtyOf(draft.quantity) + qtyOf(other.quantity));
@@ -1510,8 +1575,12 @@ export function App() {
     return () => window.removeEventListener("wardrobe-synced", onSynced);
   }, []);
 
+  const [query, setQuery] = useState("");
+  const searchTerms = useMemo(() => searchTermsOf(query), [query]);
+  const searching = searchTerms.length > 0 && activeType !== "trash";
   const visibleItems = useMemo(() => {
-    const filtered = activeType === "all" ? ownedItems
+    const filtered = searching ? closetItems.filter((item) => { const text = searchTextOf(item); return searchTerms.every((term) => termMatches(text, term)); })
+      : activeType === "all" ? ownedItems
       : activeType === "wishlist" ? closetItems.filter((item) => item.wishlist)
       : activeType === "favorites" ? closetItems.filter((item) => favorites.has(item.id))
       : brandFilterOf(activeType) !== null ? closetItems.filter((item) => (brandOf(item) || "") === brandFilterOf(activeType))
@@ -1523,13 +1592,13 @@ export function App() {
         if (!b.createdAt) return -1;
         return b.createdAt.localeCompare(a.createdAt);
       }
-      if (activeType === "all" || activeType === "wishlist" || activeType === "favorites" || brandFilterOf(activeType) !== null) {
+      if (searching || activeType === "all" || activeType === "wishlist" || activeType === "favorites" || brandFilterOf(activeType) !== null) {
         const typeDifference = (TYPE_ORDER[a.part] ?? 99) - (TYPE_ORDER[b.part] ?? 99);
         if (typeDifference) return typeDifference;
       }
       return a.id.localeCompare(b.id);
     });
-  }, [activeType, closetItems, ownedItems, favorites]);
+  }, [activeType, closetItems, ownedItems, favorites, searching, searchTerms]);
 
   // 帶進搭配頁的那套只用一次:離開搭配頁就清掉,不然回來時又被套回入口那套,蓋掉後來自己換的
   useEffect(() => {
@@ -1574,6 +1643,7 @@ export function App() {
   const chooseType = (typeId) => {
     setActiveType(typeId);
     setSelectedId(null);
+    setQuery("");   // 點分類 = 回到逛分類,搜尋清掉
   };
 
   // 存進想買的、或從空狀態點過來:切到衣櫃的「想買的」。「全部」只列已經有的,不切過去會以為沒存成功。
@@ -1880,6 +1950,10 @@ export function App() {
             </div>
           </div>
           {!showWelcome && closetSwitch}
+          {/* 搜尋放在目錄上面:手機上品牌那行很長,放下面要先滑過整個目錄才找得到 */}
+          {view === "closet" && activeType !== "trash" && !!closetItems.length && (
+            <ClosetSearch query={query} onChange={setQuery} count={searching ? visibleItems.length : null} />
+          )}
           {view === "closet" && (
             <ClosetIndex
               activeType={activeType}
@@ -1976,14 +2050,17 @@ export function App() {
         )}
 
         {/* 示範衣櫃的眼鏡、手錶這幾類是 0 件,點下去整頁空白(審查 F52) */}
-        {view === "closet" && !!ownedItems.length && !visibleItems.length && activeType !== "wishlist" && activeType !== "trash" && (
+        {view === "closet" && !!ownedItems.length && !visibleItems.length && !searching && activeType !== "wishlist" && activeType !== "trash" && (
           <p className="status empty">這一類還沒有單品。</p>
+        )}
+        {view === "closet" && searching && !visibleItems.length && (
+          <p className="status empty search-empty">找不到「{query.trim()}」。試試品牌、顏色或分類,例如「GU」「黑」「短褲」。</p>
         )}
         {view === "closet" && activeType === "trash" && !!trashCount && (
           <TrashGrid items={trashItems} onRestore={restoreItem} onPurge={purgeItem} canPurge={canPurge} />
         )}
         {view === "closet" && !!closetItems.length && activeType !== "trash" && (
-          <section className="gallery-grid" aria-label={`${activeType === "wishlist" ? "想買的" : activeType === "favorites" ? "最愛的" : brandFilterOf(activeType) !== null ? brandFilterOf(activeType) || "沒寫品牌的" : TYPE_MAP[activeType]?.label || "全部"}衣物`}>
+          <section className="gallery-grid" aria-label={searching ? `「${query.trim()}」的搜尋結果` : `${activeType === "wishlist" ? "想買的" : activeType === "favorites" ? "最愛的" : brandFilterOf(activeType) !== null ? brandFilterOf(activeType) || "沒寫品牌的" : TYPE_MAP[activeType]?.label || "全部"}衣物`}>
             {visibleItems.map((item) => (
               <GalleryItem
                 key={item.id}

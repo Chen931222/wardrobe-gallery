@@ -6,13 +6,15 @@
 export const UPDATES = [
   {
     date: "2026-10-08",
-    title: "換成淺色,每件有自己的格子",
+    title: "淺色、搜尋、更準的「同一款」",
     items: [
       "底色從深咖啡換成淺木色。衣櫃大多是白、米、灰,在深底上每件都在發亮,看久了會累。",
       "衣櫃裡每件放進自己的格子,下面寫品名,不用只靠圖認。",
       "貼其他品牌的商品連結,品牌照網址自動填,第一個字大寫。蝦皮、momo 這類賣場不算品牌,留空讓你填。",
       "單品頁的「顏色」改成說這件在搭配裡算底色還是重點色,櫃裡幾件配得起來。顏色抓錯了,按「顏色抓錯了?改」。",
       "多了這個更新公告。",
+      "衣櫃有搜尋欄了。品名、品牌、顏色、分類都搜得到,空格隔開可以疊條件,例如「黑 短褲」。電腦上按 / 直接開始打。",
+      "單品頁的「併成一格」只找真的同一款:品名、品牌、細節、顏色都要對得上。之前黑色素 T 會被叫去跟印花 T、亨利領併在一起。",
     ],
   },
   {
@@ -84,18 +86,20 @@ export const UPDATES = [
 
 const SEEN_KEY = "open-wardrobe-updates-seen-v1";
 
+// 看過的標記 = 最新一則的日期＋條數:同一天又加了一條,也會再亮(2026-10-08 當天就加了搜尋和同一款兩條)
+const latestMark = () => `${UPDATES[0].date}#${UPDATES[0].items.length}`;
+
 /** 有沒有還沒看過的公告;讀不到儲存(無痕、被擋)就當看過,不要一直亮點 */
 export function hasUnseenUpdates() {
   try {
-    const seen = localStorage.getItem(SEEN_KEY) || "";
-    return seen < UPDATES[0].date;
+    return (localStorage.getItem(SEEN_KEY) || "") !== latestMark();
   } catch {
     return false;
   }
 }
 
 export function markUpdatesSeen() {
-  try { localStorage.setItem(SEEN_KEY, UPDATES[0].date); } catch { /* 存不了就算了,下次再亮一次 */ }
+  try { localStorage.setItem(SEEN_KEY, latestMark()); } catch { /* 存不了就算了,下次再亮一次 */ }
 }
 
 /** 2026-10-08 → 10.08 */

@@ -4,7 +4,7 @@ import { Plus, SpinnerGap, X } from "@phosphor-icons/react";
 import { cropBlob, deleteLocalItem, findUrl, garmentColors, productUrlProblem, refillGaps, saveLocalItem, shrinkImage, trimTransparent } from "./localWardrobe.js";
 import { PART_GROUPS, PARTS } from "./parts.js";
 import { fetchBrandProduct, fetchProductPage, parseBrandLink, partFromName, partFromProduct, sameProduct } from "./brandLink.js";
-import { findSimilar, kindLabel } from "./wishCheck.js";
+import { findSameStyle, findSimilar, kindLabel } from "./wishCheck.js";
 import { useDialog } from "./useDialog.js";
 import { ScrollRail } from "./ScrollRail.jsx";
 import { fixCutout, modelReady, preloadModel, removeBg } from "./cutout.js";
@@ -542,6 +542,11 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     [draft?.part, draft?.name, draft?.color, existing],
   );
   const dupes = sameLink ? [sameLink] : similar;
+  // 「數量 +1」只給真的同一款(同連結,或品名、品牌、細節、顏色都對得上);只是「很像」的照樣提醒,但不給 +1(2026-10-08)
+  const sameStyle = useMemo(
+    () => (draft?.part ? findSameStyle({ id: null, part: draft.part, name: draft.name, color: draft.color, brand: draft.brand || undefined, sourceUrl: draftUrl }, existing, { brandOf, sameProduct }) : []),
+    [draft?.part, draft?.name, draft?.color, draft?.brand, draftUrl, existing],
+  );
   // 很像的分成已經有的、想買的:只比到想買的那件,舊版還是寫「櫃裡已經有 1 件」(審查 F57)
   const similarText = () => {
     const kind = kindLabel({ part: draft.part, name: draft.name });
@@ -887,8 +892,8 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
                   {dupes.length > 4 && <span>還有 {dupes.length - 4} 件</span>}
                 </div>
                 {/* 同一款又買了一件(2026-10-06):不另存一格,原本那件數量 +1 */}
-                {onAddOne && !draft.wishlist && dupes.some((item) => !item.wishlist) && (() => {
-                  const target = dupes.find((item) => !item.wishlist);   // 同一個連結、或櫃裡很像的那件(已經有的,不是想買的)
+                {onAddOne && !draft.wishlist && (sameLink && !sameLink.wishlist ? [sameLink] : sameStyle).some((item) => !item.wishlist) && (() => {
+                  const target = (sameLink && !sameLink.wishlist ? [sameLink] : sameStyle).find((item) => !item.wishlist);   // 同一個連結、或同一款的那件(已經有的,不是想買的)
                   return (
                     <button type="button" className="add-dupe-one" onClick={() => { onAddOne(target); reset(); }}>
                       是同一款:不另存,「{target.name || "那件"}」數量 +1

@@ -1,7 +1,7 @@
 // [本 fork 新增] 想買的衣服「值不值得買」:櫃裡有沒有很像的、能跟現有的配出什麼。
 // 全部在瀏覽器裡算,只看分類、品名和主色,不連任何服務。
 
-import { colorScore, recommendOutfit } from "./recommend.js";
+import { colorLabel, colorScore, recommendOutfit } from "./recommend.js";
 
 /* 同一分類裡再細分的款式。順序有意義:「針織 Polo 衫」算 Polo、「針織背心」算背心。
    兩件都認得出款式、款式又不同,就不算像(白 T 跟白襯衫不是同一件事)。 */
@@ -89,6 +89,89 @@ export function findSimilar(wish, owned) {
     .filter(({ gap }) => gap <= SIMILAR_GAP)
     .sort((a, b) => Number(Boolean(wishFit) && b.fit === wishFit) - Number(Boolean(wishFit) && a.fit === wishFit) || a.gap - b.gap)
     .map(({ item }) => item);
+}
+
+/* ---------- 同一款(2026-10-08):給「併成一格」和新增時「數量 +1」用 ----------
+   findSimilar 回答的是「櫃裡有沒有類似的」(提醒別重複買),標準鬆:同分類、同款式、同色就算。
+   拿它來問「是不是同一款買了兩件」太鬆:本人截圖裡,黑色素 T 被叫去跟 ALONEMASTER 印花 T、
+   黑色丹寧亨利領併成一格;整個衣櫃 104 件有 38 件會跳出候選、72 組配對,幾乎都是不同的衣服。
+   同一款要多三個條件:
+     ① 商品連結是同一件 → 直接算(手機版、電腦版網址不同也認得,見 brandLink.sameProduct)
+     ② 兩邊都知道品牌、品牌又不同 → 不算
+     ③ 細節要完全一樣:一件有印花、另一件沒有,就不是同一款(細節清單在下面)
+     ④ 品名寫的顏色要一樣:照片抓的色碼,深藍西裝褲跟黑西裝褲差不到 10,品名寫的才準
+     ⑤ 品名要夠像(兩兩字一組比,重疊一半以上):同一件第二次加,品名幾乎一樣;
+        三件白 T「圓領寬版素T」「棉質寬版落肩短袖T恤」「Dickies 圓領短袖T恤」只重疊兩三成,是三件不同的 T
+   加了這些,站主 104 件裡跳出候選的從 38 件降到 0 件(2026-10-08 實測);寧可漏掉,也不要叫人把兩件不同的衣服併在一起。
+   漏掉的話,單品頁一樣可以自己把數量 +1、把另一張刪掉。 */
+const DETAILS = [
+  ["印花", /印花|圖案|graphic|print|logo|字樣|三葉草|串標|貼布|魷魚|slytherin|padres|nationals/i],
+  ["刺繡", /刺繡|embroider/i],
+  ["亨利領", /亨利領|henley/i],
+  ["立領", /立領|高領|mock ?neck|turtle/i],
+  ["V領", /V領|v-?neck/i],
+  ["翻領", /翻領|扣領|collar|button-?(up|down)/i],
+  ["連帽", /連帽|帽T|hood/i],
+  ["拉鍊", /拉鍊|zip/i],
+  ["口袋", /口袋|pocket|cargo|工裝/i],
+  ["五分袖", /五分袖|half-?sleeve/i],
+  ["長袖", /長袖|long-?sleeve|longsleeve/i],
+  ["丹寧", /丹寧|牛仔|denim|jeans/i],
+  ["水洗做舊", /水洗|做舊|刷破|破損|酸洗|washed|distressed|vintage/i],
+  ["撞色", /撞色|車線|contrast/i],
+  ["針織", /針織|毛衣|knit|sweater/i],
+  ["尼龍", /尼龍|nylon/i],
+  ["麂皮", /麂皮|suede/i],
+  ["皮革", /皮革|真皮|leather/i],
+  ["帆布", /帆布|canvas/i],
+  ["燈芯絨", /燈芯絨|corduroy/i],
+  ["斜紋", /斜紋|twill/i],
+  ["鬆餅紋", /鬆餅|waffle/i],
+];
+function detailsOf(item) {
+  const text = `${item.name || ""} ${(item.tags || []).join(" ")}`;
+  return DETAILS.filter(([, regex]) => regex.test(text)).map(([name]) => name).sort().join("|");
+}
+
+// 品名去掉括號裡的品牌、空白和標點,兩兩字一組
+function nameBigrams(item) {
+  const text = String(item.name || "").replace(/[(（][^)）]*[)）]/g, "").replace(/[\s,.、·・\-_/]+/g, "").toLowerCase();
+  const grams = new Set();
+  for (let i = 0; i < text.length - 1; i += 1) grams.add(text.slice(i, i + 2));
+  return grams;
+}
+function nameOverlap(a, b) {
+  const x = nameBigrams(a), y = nameBigrams(b);
+  if (!x.size || !y.size) return 0;
+  let common = 0;
+  for (const gram of x) if (y.has(gram)) common += 1;
+  return (2 * common) / (x.size + y.size);
+}
+const NAME_OVERLAP = 0.5;
+
+/** a、b 是不是同一款(同一個商品買了兩件)。brandOf、sameProduct 從外面給,這支檔不必依賴品牌和連結的模組。 */
+export function isSameStyle(a, b, { brandOf = (item) => item.brand || null, sameProduct = () => false } = {}) {
+  if (!a || !b || a.part !== b.part) return false;
+  if (a.sourceUrl && b.sourceUrl && sameProduct(a.sourceUrl, b.sourceUrl)) return true;
+  const kindA = kindOf(a), kindB = kindOf(b);
+  if (kindA && kindB && kindA !== kindB) return false;
+  if (patternOf(a) !== patternOf(b)) return false;
+  const fitA = fitOf(a), fitB = fitOf(b);
+  if (fitA && fitB && fitA !== fitB) return false;
+  if (colorGap(a.color, b.color) > SIMILAR_GAP) return false;
+  const brandA = brandOf(a), brandB = brandOf(b);
+  if (brandA && brandB && brandA !== brandB) return false;
+  if (detailsOf(a) !== detailsOf(b)) return false;
+  // 品名寫的顏色(沒寫就用色碼猜的):「深藍」跟「黑」、「米白」跟「白」都算不一樣
+  if (colorLabel(a.name, a.color) !== colorLabel(b.name, b.color)) return false;
+  return nameOverlap(a, b) >= NAME_OVERLAP;
+}
+
+/** 櫃裡跟這件同一款的(不含自己),顏色最近的排前面 */
+export function findSameStyle(item, owned, options) {
+  return owned
+    .filter((other) => other.id !== item.id && isSameStyle(item, other, options))
+    .sort((x, y) => colorGap(item.color, x.color) - colorGap(item.color, y.color));
 }
 
 export function kindLabel(item) {
