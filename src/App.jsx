@@ -85,7 +85,8 @@ function searchTextOf(item) {
     item.name, brandOf(item), part.label, part.singular, part.short, SEARCH_PART_WORDS[item.part], kindLabel(item), fitOf(item),
     // 顏色只用品名寫的(沒寫才用色碼猜):色碼常猜錯,軍綠短褲被猜成黑色,搜「黑」就會冒出來
     colorLabel(item.name, item.color),
-    ...tagsBesidesBrand(item), ...tagsBesidesBrand(item).map(tagLabel), item.wishlist ? "想買 還沒買" : "",
+    ...tagsBesidesBrand(item), ...tagsBesidesBrand(item).map(tagLabel),
+    item.wishlist ? (item.dream ? "夢想 夢想區 還沒買" : "想買 還沒買") : "", item.note,
   ].filter(Boolean).join(" ").toLowerCase();
 }
 const searchTermsOf = (query) => query.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -179,12 +180,14 @@ function readEdits() {
 
 // quantity(2026-10-06 本人要的:同一款買了兩件,不想佔兩格):數量,沒寫就是 1
 // brand(2026-10-07):品牌,沒寫就看品名、標籤、網址猜(brands.js);存成空白 = 刻意不寫
-const EDIT_FIELDS = ["name", "part", "color", "secondaryColor", "tags", "price", "priceCurrency", "quantity", "brand"];
+// note(2026-10-08 本人要的備註欄):自己寫給自己看的,公開的單品頁不顯示。跟其他欄位一樣逐欄記、逐欄同步
+const EDIT_FIELDS = ["name", "part", "color", "secondaryColor", "tags", "price", "priceCurrency", "quantity", "brand", "note"];
 const qtyOf = (value) => Math.min(99, Math.max(1, Math.floor(Number(value)) || 1));
 const editValue = (item, field) => {
   const value = item?.[field];
   if (field === "tags") return value || [];
   if (field === "name") return value || "";
+  if (field === "note") return String(value || "").trim();
   if (field === "quantity") return qtyOf(value);
   return value ?? null;
 };
@@ -339,7 +342,7 @@ function GalleryItem({ item, selected, onOpen, onDelete, favorite = false }) {
         className="gallery-item"
         type="button"
         onClick={() => onOpen(item.id)}
-        aria-label={`查看${label}${qtyOf(item.quantity) > 1 ? `(${qtyOf(item.quantity)} 件)` : ""}${item.wishlist ? "(還沒買)" : ""}${favorite ? "(最愛)" : ""}`}
+        aria-label={`查看${label}${qtyOf(item.quantity) > 1 ? `(${qtyOf(item.quantity)} 件)` : ""}${item.wishlist ? (item.dream ? "(夢想區)" : "(還沒買)") : ""}${favorite ? "(最愛)" : ""}`}
         aria-pressed={selected}
         data-testid={`wardrobe-item-${item.id}`}
       >
@@ -349,7 +352,7 @@ function GalleryItem({ item, selected, onOpen, onDelete, favorite = false }) {
           sizes="(max-width: 520px) calc(50vw - 16px), (max-width: 860px) calc(33vw - 18px), 260px"
           breakpoints={[120, 180, 240, 320, 480]}
         />
-        {item.wishlist && <span className="wish-badge">想買</span>}
+        {item.wishlist && <span className={item.dream ? "wish-badge is-dream" : "wish-badge"}>{item.dream ? "夢想" : "想買"}</span>}
         {favorite && <span className="fav-mark" aria-hidden="true"><Star size={13} weight="fill" /></span>}
         {qtyOf(item.quantity) > 1 && <span className="qty-badge" aria-hidden="true">×{qtyOf(item.quantity)}</span>}
       </button>
@@ -423,7 +426,7 @@ function ClosetSearch({ query, onChange, count }) {
   );
 }
 
-function ClosetIndex({ activeType, onChoose, counts, total, favCount = 0, wishCount, trashCount, brands = { list: [], none: 0 } }) {
+function ClosetIndex({ activeType, onChoose, counts, total, favCount = 0, wishCount, dreamCount = 0, trashCount, brands = { list: [], none: 0 } }) {
   const [open, setOpen] = useState(readIndexOpen);
   const [allBrands, setAllBrands] = useState(false);
   const toggle = () => {
@@ -465,10 +468,11 @@ function ClosetIndex({ activeType, onChoose, counts, total, favCount = 0, wishCo
             </>
           )}
         </span>
-        {(favCount > 0 || wishCount > 0 || trashCount > 0) && (
+        {(favCount > 0 || wishCount > 0 || dreamCount > 0 || trashCount > 0) && (
           <span className="closet-index-extra">
             {favCount > 0 && entry("favorites", "最愛", favCount)}
             {wishCount > 0 && entry("wishlist", "想買的", wishCount)}
+            {dreamCount > 0 && entry("dream", "夢想", dreamCount)}
             {trashCount > 0 && entry("trash", "垃圾桶", trashCount)}
           </span>
         )}
@@ -840,6 +844,19 @@ function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleSta
         <span>細節標籤</span>
         <TagEditor tags={draft.tags} onChange={(tags) => setDraft((current) => ({ ...current, tags }))} />
       </div>
+
+      {/* 備註(2026-10-08):放在所有欄位最下面。只有能編輯的人看得到,公開的單品頁不顯示 */}
+      <label className="field note-field">
+        <span>備註</span>
+        <textarea
+          value={draft.note || ""}
+          onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))}
+          rows={3}
+          maxLength={500}
+          placeholder="例:要手洗、M 號偏大、等打折再買"
+        />
+        <small>只有你看得到,公開的衣櫃不會顯示。</small>
+      </label>
     </div>
   );
 }
@@ -1011,7 +1028,7 @@ function WishCheck({ item, owned, onOpen, onWearOutfit }) {
   );
 }
 
-const DRAFT_FIELDS = ["name", "part", "color", "secondaryColor", "tags", "price", "priceCurrency", "quantity", "brand"];
+const DRAFT_FIELDS = ["name", "part", "color", "secondaryColor", "tags", "price", "priceCurrency", "quantity", "brand", "note"];
 
 function draftOf(item) {
   return {
@@ -1019,6 +1036,7 @@ function draftOf(item) {
     price: item.price ? String(item.price) : "", priceCurrency: item.priceCurrency || "TWD",
     quantity: qtyOf(item.quantity),
     brand: brandOf(item) || "",
+    note: item.note || "",
   };
 }
 
@@ -1031,7 +1049,7 @@ function rebaseDraft(draft, before, after) {
 }
 
 /** @param gone 這件在別台被刪掉或隱藏了:頁面留著(草稿還在、可以複製),但存檔、刪除、穿上這些動作都關掉 */
-function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWear, onBought, onSetUrl, onSetPrice, onOpen, onWearOutfit, onReplaceImage, onRestoreImage, favorite = false, onToggleFavorite = null, onMergeAway = null, brandOptions = [] }) {
+function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWear, onBought, onSetDream = null, onSetUrl, onSetPrice, onOpen, onWearOutfit, onReplaceImage, onRestoreImage, favorite = false, onToggleFavorite = null, onMergeAway = null, brandOptions = [] }) {
   const closeButtonRef = useRef(null);
   const dialogRef = useRef(null);
   // 焦點圈在單品頁裡、關掉後回到原本點的那格(審查 F46)。Esc 照下面自己的處理(先取消吸色、有沒存的先擋)
@@ -1081,6 +1099,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
       priceCurrency: parsePrice(draft.price) ? draft.priceCurrency || "TWD" : null,
       quantity: qtyOf(draft.quantity),
       brand: canonicalBrand(draft.brand) || "",
+      note: (draft.note || "").trim(),
     }) !== JSON.stringify({
       name: (item.name || "").trim(),
       part: item.part,
@@ -1091,6 +1110,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
       priceCurrency: item.price ? item.priceCurrency || "TWD" : null,
       quantity: qtyOf(item.quantity),
       brand: brandOf(item) || "",
+      note: (item.note || "").trim(),
     });
   }, [draft, item]);
 
@@ -1178,6 +1198,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
     onSave({
       ...item, ...draft, name: draft.name.trim(), tags: draft.tags.map((tag) => tag.trim()).filter(Boolean),
       price, priceCurrency: price ? draft.priceCurrency || "TWD" : null, quantity: qtyOf(draft.quantity), brand,
+      note: (draft.note || "").trim(),
     });
     setSampling(null);
     // 存完就關掉,回到原本那一格(2026-10-06 本人要的;舊版存完停在原地,只在表單裡寫一行「已儲存」)
@@ -1306,7 +1327,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
         )}
         {item.wishlist && (
           <div className="viewer-wish">
-            <p>還沒買,不會出現在公開的衣櫃;開了同步的話,你的其他裝置也看得到。</p>
+            <p>{item.dream ? "在夢想區:很想要、還沒打算買。" : "還沒買。"}不會出現在公開的衣櫃;開了同步的話,你的其他裝置也看得到。</p>
             <div className="viewer-wish-actions">
               {item.sourceUrl && !productUrlProblem(item.sourceUrl) && (
                 <a className="secondary-button" href={item.sourceUrl} target="_blank" rel="noopener noreferrer">回商品頁</a>
@@ -1315,6 +1336,11 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
                 <Sparkle size={15} weight="regular" aria-hidden="true" /> 穿上看看
               </button>
               <button className="secondary-button" type="button" onClick={() => onBought(item.id)} disabled={gone}>已經買了</button>
+              {onSetDream && (
+                <button className="secondary-button" type="button" onClick={() => onSetDream(item.id, !item.dream)} disabled={gone}>
+                  {item.dream ? "移回想買的" : "移到夢想區"}
+                </button>
+              )}
             </div>
             <WishLinkEditor item={item} onSetUrl={onSetUrl} disabled={gone} />
             <WishCheck item={item} owned={owned} onOpen={onOpen} onWearOutfit={onWearOutfit} />
@@ -1557,7 +1583,10 @@ export function App() {
   // 自己加、按了「已經買了」的衣服沒有保暖度,推薦引擎會整件跳過;從品名補一個。想買的不補,免得被當成已經有的拿去配
   const wearItems = useMemo(() => closetItems.map((item) => !item.wishlist && item.warmth === undefined ? { ...item, warmth: guessWarmth(item) } : item), [closetItems]);
   const ownedItems = useMemo(() => wearItems.filter((item) => !item.wishlist), [wearItems]);
-  const wishCount = closetItems.length - ownedItems.length;
+  // 還沒買的分兩層(2026-10-08):想買的 = 近期會買;夢想 = 很想要、還沒打算買。兩層都不算進衣櫃、不拿去配
+  const unownedCount = closetItems.length - ownedItems.length;
+  const dreamCount = useMemo(() => closetItems.filter((item) => item.wishlist && item.dream).length, [closetItems]);
+  const wishCount = unownedCount - dreamCount;
   // 垃圾桶跟著衣櫃走:站主看全部,訪客只看自己加的(示範衣櫃刪不了)
   const trashItems = useMemo(() => (closet === "all" ? trash : closet === "mine" ? trash.filter((item) => item.isLocal) : []), [trash, closet]);
   const trashCount = trashItems.length;
@@ -1581,7 +1610,8 @@ export function App() {
   const visibleItems = useMemo(() => {
     const filtered = searching ? closetItems.filter((item) => { const text = searchTextOf(item); return searchTerms.every((term) => termMatches(text, term)); })
       : activeType === "all" ? ownedItems
-      : activeType === "wishlist" ? closetItems.filter((item) => item.wishlist)
+      : activeType === "wishlist" ? closetItems.filter((item) => item.wishlist && !item.dream)
+      : activeType === "dream" ? closetItems.filter((item) => item.wishlist && item.dream)
       : activeType === "favorites" ? closetItems.filter((item) => favorites.has(item.id))
       : brandFilterOf(activeType) !== null ? closetItems.filter((item) => (brandOf(item) || "") === brandFilterOf(activeType))
       : closetItems.filter((item) => item.part === activeType);
@@ -1592,7 +1622,7 @@ export function App() {
         if (!b.createdAt) return -1;
         return b.createdAt.localeCompare(a.createdAt);
       }
-      if (searching || activeType === "all" || activeType === "wishlist" || activeType === "favorites" || brandFilterOf(activeType) !== null) {
+      if (searching || activeType === "all" || activeType === "wishlist" || activeType === "dream" || activeType === "favorites" || brandFilterOf(activeType) !== null) {
         const typeDifference = (TYPE_ORDER[a.part] ?? 99) - (TYPE_ORDER[b.part] ?? 99);
         if (typeDifference) return typeDifference;
       }
@@ -1632,7 +1662,7 @@ export function App() {
   useEffect(() => { if (hasMine) requestPersist(); }, [hasMine]);
 
   // 訪客自己的衣櫃還空著、人在入口:歡迎畫面。這時把件數和衣櫃切換收起來(都是 0,示範從歡迎畫面的按鈕進去)
-  const showWelcome = !error && !loading && !ownedItems.length && !wishCount && view === "landing" && closet === "mine";
+  const showWelcome = !error && !loading && !ownedItems.length && !unownedCount && view === "landing" && closet === "mine";
 
   // 「新增第一件」「去新增」:換到衣櫃(新增鈕在那裡的標題列),叫新增自己打開
   const requestAdd = () => {
@@ -1647,10 +1677,11 @@ export function App() {
   };
 
   // 存進想買的、或從空狀態點過來:切到衣櫃的「想買的」。「全部」只列已經有的,不切過去會以為沒存成功。
-  const showWishlist = () => {
+  const showWishlist = (type = "wishlist") => {
     setView("closet");
-    setActiveType("wishlist");
+    setActiveType(type);
     setSelectedId(null);
+    setQuery("");
   };
 
   // 亮著的分類一律露出來:手機上「想買的」在分類列最右邊要橫滑才看得到,
@@ -1679,11 +1710,12 @@ export function App() {
   // 想買的全買了或刪光,那顆分類就消失了;停在上面會一片空白、沒有任何一顆亮著,退回「全部」
   useEffect(() => {
     if (!loading && activeType === "wishlist" && !wishCount) setActiveType("all");
+    if (!loading && activeType === "dream" && !dreamCount) setActiveType("all");
     if (!loading && activeType === "trash" && !trashCount) setActiveType("all");
     if (!loading && activeType === "favorites" && !favCount) setActiveType("all");
     // 那個品牌的衣服都改掉、刪掉了:退回全部
     if (!loading && brandFilterOf(activeType) !== null && !visibleItems.length) setActiveType("all");
-  }, [loading, activeType, wishCount, trashCount, favCount, visibleItems.length]);
+  }, [loading, activeType, wishCount, dreamCount, trashCount, favCount, visibleItems.length]);
 
   const chooseCloset = (next) => {
     setClosetChoice(next);
@@ -1745,9 +1777,17 @@ export function App() {
 
   const markBought = async (id) => {
     const target = items.find((item) => item.id === id);
-    await updateLocalItem(id, { wishlist: false });
+    await updateLocalItem(id, { wishlist: false, dream: false });
     await refresh();
     say(`「${target?.name || "這件"}」放進衣櫃了。`);
+  };
+
+  // 想買的 ↔ 夢想區(2026-10-08):跟「已經買了」一樣改這件自己的紀錄,開了同步會跟著走
+  const setDream = async (id, dream) => {
+    const target = items.find((item) => item.id === id);
+    await updateLocalItem(id, { dream });
+    await refresh();
+    say(`「${target?.name || "這件"}」移到${dream ? "夢想區" : "想買的"}了。`);
   };
 
   const setWishUrl = async (id, sourceUrl) => {
@@ -1934,11 +1974,11 @@ export function App() {
                   }}
                   openRequest={addRequest}
                   onOpenHandled={() => setAddRequest(0)}
-                  onAdded={async (wishlist, name) => {
+                  onAdded={async (wishlist, name, dream = false) => {
                     if (!CAN_EDIT) { setClosetChoice("mine"); setPendingOutfit(null); }   // 換到我的衣櫃:示範衣櫃帶進來的那套不要跟過去
                     await refresh();
-                    if (wishlist) showWishlist();
-                    say(wishlist ? `「${name}」放進想買的了。` : `「${name}」加進衣櫃了。`);
+                    if (wishlist) showWishlist(dream ? "dream" : "wishlist");
+                    say(wishlist ? `「${name}」放進${dream ? "夢想區" : "想買的"}了。` : `「${name}」加進衣櫃了。`);
                   }}
                 />
               )}
@@ -1962,6 +2002,7 @@ export function App() {
               total={ownedItems.length}
               favCount={favCount}
               wishCount={wishCount}
+              dreamCount={dreamCount}
               trashCount={trashCount}
               brands={brandCounts}
             />
@@ -2023,12 +2064,13 @@ export function App() {
             }}
           />
         )}
-        {!error && !loading && !ownedItems.length && !(view === "closet" && activeType === "wishlist" && wishCount) && !(view === "closet" && activeType === "trash" && trashCount) && !showWelcome && (
-          wishCount ? (
+        {!error && !loading && !ownedItems.length && !(view === "closet" && (activeType === "wishlist" || activeType === "dream") && unownedCount) && !(view === "closet" && activeType === "trash" && trashCount) && !searching && !showWelcome && (
+          unownedCount ? (
             <p className="status empty">
-              你加的 {wishCount} 件在「想買的」裡。還沒買的不算進衣櫃,買了以後點開那件按「已經買了」。
+              你加的 {unownedCount} 件{wishCount && dreamCount ? "在「想買的」和「夢想」裡" : dreamCount ? "在「夢想」裡" : "在「想買的」裡"}。還沒買的不算進衣櫃,買了以後點開那件按「已經買了」。
               <br />
-              <button type="button" className="secondary-button" onClick={showWishlist}>看想買的</button>
+              {wishCount > 0 && <button type="button" className="secondary-button" onClick={() => showWishlist("wishlist")}>看想買的</button>}
+              {dreamCount > 0 && <button type="button" className="secondary-button" onClick={() => showWishlist("dream")}>看夢想</button>}
             </p>
           ) : (
             <p className="status empty">
@@ -2050,7 +2092,7 @@ export function App() {
         )}
 
         {/* 示範衣櫃的眼鏡、手錶這幾類是 0 件,點下去整頁空白(審查 F52) */}
-        {view === "closet" && !!ownedItems.length && !visibleItems.length && !searching && activeType !== "wishlist" && activeType !== "trash" && (
+        {view === "closet" && !!ownedItems.length && !visibleItems.length && !searching && activeType !== "wishlist" && activeType !== "dream" && activeType !== "trash" && (
           <p className="status empty">這一類還沒有單品。</p>
         )}
         {view === "closet" && searching && !visibleItems.length && (
@@ -2060,7 +2102,7 @@ export function App() {
           <TrashGrid items={trashItems} onRestore={restoreItem} onPurge={purgeItem} canPurge={canPurge} />
         )}
         {view === "closet" && !!closetItems.length && activeType !== "trash" && (
-          <section className="gallery-grid" aria-label={searching ? `「${query.trim()}」的搜尋結果` : `${activeType === "wishlist" ? "想買的" : activeType === "favorites" ? "最愛的" : brandFilterOf(activeType) !== null ? brandFilterOf(activeType) || "沒寫品牌的" : TYPE_MAP[activeType]?.label || "全部"}衣物`}>
+          <section className="gallery-grid" aria-label={searching ? `「${query.trim()}」的搜尋結果` : `${activeType === "wishlist" ? "想買的" : activeType === "dream" ? "夢想區的" : activeType === "favorites" ? "最愛的" : brandFilterOf(activeType) !== null ? brandFilterOf(activeType) || "沒寫品牌的" : TYPE_MAP[activeType]?.label || "全部"}衣物`}>
             {visibleItems.map((item) => (
               <GalleryItem
                 key={item.id}
@@ -2092,6 +2134,7 @@ export function App() {
           onDelete={deleteItem}
           onWear={(item) => { wearOutfit({ [item.part]: item }); setSelectedId(null); setView("styling"); }}
           onBought={markBought}
+          onSetDream={setDream}
           onSetUrl={setWishUrl}
           onSetPrice={setItemPrice}
           onReplaceImage={CAN_ADD && canEditItem(selectedItem) ? (item) => setReplaceRequest({ item, n: Date.now() }) : null}

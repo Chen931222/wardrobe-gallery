@@ -1730,7 +1730,7 @@ h1, h2, h3 {
 .crop-dim { position: absolute; background: rgba(0, 0, 0, .45); pointer-events: none; }
 
 /* ===== 想買 ===== */
-.add-owned { display: flex; gap: 18px; margin: 0; padding: 0; border: 0; font-size: 14px; color: var(--ink); }
+.add-owned { display: flex; flex-wrap: wrap; column-gap: 18px; row-gap: 0; margin: 0; padding: 0; border: 0; font-size: 14px; color: var(--ink); }   /* 三個選項(多了夢想),窄螢幕可以換行 */
 .add-owned legend { float: left; margin-right: 4px; padding: 0; color: var(--muted); font-size: 13px; }
 .add-owned label { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; cursor: pointer; }
 .add-owned input { accent-color: var(--accent); width: 18px; height: 18px; }
@@ -3140,3 +3140,26 @@ h1, h2, h3 {
   .closet-search-wrap { margin-top: 14px; }
 }
 @media (prefers-reduced-motion: reduce) { .closet-search { transition: none; } }
+
+/* ===== 夢想區、備註(2026-10-08) ===== */
+/* 格子上的「夢想」:實心,跟空心的「想買」一眼分得開 */
+.wish-badge.is-dream { color: var(--paper); background: var(--accent); }
+/* 備註:跟其他欄位同一套方框,佔滿一整列 */
+.note-field { grid-column: 1 / -1; }
+.note-field textarea {
+  width: 100%;
+  min-height: 84px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  padding: 9px 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+}
+.note-field textarea::placeholder { color: var(--muted); }
+.note-field textarea:focus { border-color: var(--ink); outline: none; }
+.note-field small { display: block; margin-top: 6px; font-size: 11.5px; color: var(--muted); }
+@media (max-width: 520px) { .note-field textarea { font-size: 16px; } }   /* iPhone 點了不會自動放大 */

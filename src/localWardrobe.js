@@ -244,11 +244,13 @@ export function localFullImage(id) {
   return fullPending.get(id);
 }
 
-export async function saveLocalItem({ id, name, part, color, secondaryColor, tags, blob, wishlist, sourceUrl, price, priceCurrency, brand }) {
+export async function saveLocalItem({ id, name, part, color, secondaryColor, tags, blob, wishlist, dream, sourceUrl, price, priceCurrency, brand }) {
   await tx("readwrite", (store) => store.put({
     id, name, part, color, secondaryColor: secondaryColor || null,
     tags: tags || [], blob, createdAt: new Date().toISOString(),
     wishlist: Boolean(wishlist), sourceUrl: sourceUrl || null,
+    // 夢想區(2026-10-08):想買的裡面另一層,很想要、還沒打算買。只有還沒買的才有
+    ...(wishlist && dream ? { dream: true } : {}),
     price: price ?? null, priceCurrency: price ? priceCurrency || "TWD" : null,
     // 品牌:新增時填的或商品連結讀到的;沒填就不存這個欄位,之後看品名、網址猜(brands.js)
     ...(brand ? { brand } : {}),

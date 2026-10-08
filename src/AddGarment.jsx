@@ -433,6 +433,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
           secondaryColor: null,
           // 貼了商品連結才預設「還沒買」;從相簿選的多半是自己已經有的
           wishlist: kept ? kept.wishlist : Boolean(link?.url),
+          dream: kept ? Boolean(kept.dream) : false,   // 夢想區(2026-10-08):還沒買的另一層,很想要、還沒打算買
           sourceUrl: kept ? kept.sourceUrl : link?.url || "",
           // 價錢:商品頁或 GU、UNIQLO 讀得到就先填好,讀不到留空讓人填
           price: kept ? kept.price : link?.price?.amount ? String(link.price.amount) : "",
@@ -574,6 +575,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
       tags: [],
       blob: draft.blob,
       wishlist: draft.wishlist,
+      dream: draft.wishlist && Boolean(draft.dream),
       sourceUrl: draft.wishlist ? findUrl(draft.sourceUrl) : null,
       price: parsePrice(draft.price),
       priceCurrency: draft.priceCurrency || "TWD",
@@ -581,7 +583,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
       brand: canonicalBrand(draft.brand) || brandInUrl(link?.url) || undefined,
     });
     try { navigator.storage?.persist?.(); } catch { /* 不支援就算了 */ }
-    onAdded(draft.wishlist, name);
+    onAdded(draft.wishlist, name, draft.wishlist && Boolean(draft.dream));
     reset();
   };
 
@@ -795,17 +797,26 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
                 <input
                   type="radio"
                   name="owned"
-                  checked={draft.wishlist}
-                  onChange={() => setDraft((current) => ({ ...current, wishlist: true }))}
+                  checked={draft.wishlist && !draft.dream}
+                  onChange={() => setDraft((current) => ({ ...current, wishlist: true, dream: false }))}
                 />
-                還沒買
+                想買
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="owned"
+                  checked={draft.wishlist && Boolean(draft.dream)}
+                  onChange={() => setDraft((current) => ({ ...current, wishlist: true, dream: true }))}
+                />
+                夢想
               </label>
               <label>
                 <input
                   type="radio"
                   name="owned"
                   checked={!draft.wishlist}
-                  onChange={() => setDraft((current) => ({ ...current, wishlist: false }))}
+                  onChange={() => setDraft((current) => ({ ...current, wishlist: false, dream: false }))}
                 />
                 已經有了
               </label>
@@ -906,7 +917,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
             <div className="add-actions">
               <button type="button" className="secondary-button" onClick={requestClose}>取消</button>
               <button type="button" className="primary-button" onClick={save} disabled={urlInvalid || !draft.part || !draft.blob}>
-                {!draft.blob ? "去背好就能存" : dupes.length ? "還是要存" : draft.wishlist ? "放進想買的" : "加入衣櫃"}
+                {!draft.blob ? "去背好就能存" : dupes.length ? "還是要存" : draft.wishlist ? (draft.dream ? "放進夢想區" : "放進想買的") : "加入衣櫃"}
               </button>
             </div>
           </div>
