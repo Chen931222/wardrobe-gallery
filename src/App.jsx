@@ -18,6 +18,8 @@ import { CURRENCIES, formatPrice, parsePrice } from "./price.js";
 import { downloadBackupZip, importBackupFile } from "./backup.js";
 import { backupReminder, inAppBrowser, isIos, isStandalone, requestPersist, snoozeBackupHint } from "./keepSafe.js";
 import { Welcome } from "./Welcome.jsx";
+import { UpdatesSheet } from "./Updates.jsx";
+import { hasUnseenUpdates } from "./updates.js";
 import { demoCloset } from "./demoCloset.js";
 import { PART_GROUPS, PART_ORDER, PARTS } from "./parts.js";
 import { FAVORITES_KEY, readFavorites, toggleFavorite } from "./favorites.js";
@@ -1316,6 +1318,10 @@ export function App() {
   const [pendingOutfit, setPendingOutfit] = useState(null);   // 由入口頁的今日推薦帶進搭配頁
   const [closetChoice, setClosetChoice] = useState(null);     // 訪客手動選的衣櫃;null = 照有沒有自己的衣服決定
   const [syncOpen, setSyncOpen] = useState(false);
+  // 更新公告:有還沒看過的就在入口亮點,打開就熄(看過的日期存在這台,見 updates.js)
+  const [updatesOpen, setUpdatesOpen] = useState(false);
+  const [updatesUnseen, setUpdatesUnseen] = useState(hasUnseenUpdates);
+  const closeUpdates = useCallback(() => { setUpdatesOpen(false); setUpdatesUnseen(false); }, []);
   const [pendingDaily, setPendingDaily] = useState(null);   // 入口今日推薦的天氣和理由,跟著那套帶進搭配頁(審查 F25)
   const [addRequest, setAddRequest] = useState(0);
   // 做完一件事的一行回饋:剛加入的、按了「已經買了」、剛加入同步(審查 F18、F55、F63)
@@ -1813,6 +1819,8 @@ export function App() {
             items={ownedItems}
             onSync={CAN_ADD ? () => setSyncOpen(true) : null}
             syncAlert={syncAlert}
+            onUpdates={() => setUpdatesOpen(true)}
+            updatesUnseen={updatesUnseen}
             onOpen={setSelectedId}
             onEnter={setView}
             onAdd={CAN_ADD ? requestAdd : null}
@@ -1820,6 +1828,8 @@ export function App() {
           />
         )}
         {view === "landing" && loading && <p className="status">衣櫃載入中</p>}
+
+        {updatesOpen && <UpdatesSheet onClose={closeUpdates} />}
 
         {/* 同步放在入口:手機第一眼就找得到。?public 不出現 */}
         {syncOpen && (
@@ -1930,6 +1940,7 @@ export function App() {
             onAdd={requestAdd}
             onDemo={() => chooseCloset("demo")}
             onSync={() => setSyncOpen(true)}
+            onUpdates={() => setUpdatesOpen(true)}
             trashCount={trashCount}
             onOpenTrash={() => { setView("closet"); setActiveType("trash"); }}
             onImportFile={async (file) => {

@@ -3056,3 +3056,54 @@ h1, h2, h3 {
 .color-fix-toggle:hover { color: var(--ink); }
 .color-fix-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .color-field .colors-editor { margin-top: 14px; }
+
+/* ===== 更新公告(2026-10-08) =====
+   沿用同步的小視窗;內容靠左排,日期用 Cormorant 數字。整個遮罩捲動(不限高),ScrollRail 畫捲軸 */
+.updates-sheet {
+  width: min(520px, 100%);
+  max-height: none;
+  overflow: visible;
+  padding: 30px 28px 28px;
+  text-align: left;
+}
+.updates-sheet h2 { margin-bottom: 6px; }
+.updates-lede { margin: 0 0 22px; font-size: 12.5px; color: var(--muted); }
+.updates-list { list-style: none; margin: 0; padding: 0; }
+.updates-list > li + li { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--line); }
+.updates-head {
+  display: flex; align-items: baseline; gap: 14px;
+  margin: 0 0 8px;
+  font-size: 14px; font-weight: 500; letter-spacing: .02em; color: var(--ink);
+}
+.updates-head time {
+  flex: none;
+  font-family: var(--font-display); font-size: 17px; font-weight: 500;
+  color: var(--accent); font-variant-numeric: lining-nums tabular-nums;
+}
+.updates-list ul { margin: 0; padding-left: 1.1em; list-style: disc; }   /* 巢狀在 ol 裡預設是空心圈,看起來像待勾選的清單 */
+.updates-list ul li::marker { color: var(--fill); }
+.updates-list ul li { font-size: 13px; line-height: 1.75; color: var(--body); }
+.updates-list ul li + li { margin-top: 2px; }
+/* 有新公告的小點:用強調色,不用同步出狀況的紅 */
+.update-dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  margin-left: 6px;
+  vertical-align: 2px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+@media (max-width: 520px) {
+  .updates-sheet { padding: 26px 20px 22px; }
+}
+/* 入口導覽四顆(多了「更新」)之後,320 寬標題被擠成直排一字一行(2026-10-08 實測 27px 寬)。
+   窄螢幕縮按鈕左右留白,標題不換行 */
+@media (max-width: 400px) {
+  .landing-top h1 { white-space: nowrap; }
+  .landing-top nav button { padding: 8px 10px; letter-spacing: .02em; }
+}
+@media (max-width: 340px) {
+  .landing-top { padding-inline: 14px; }
+  .landing-top h1 { font-size: 17px; }
+  .landing-top nav button { padding: 8px 8px; }
+}

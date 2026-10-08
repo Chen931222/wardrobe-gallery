@@ -73,7 +73,7 @@ const ROW_MAX = 3;
  * @param onAdd        推薦不了(缺上衣或下身)時給一顆「去新增」;沒給就不顯示
  * @param syncAlert    同步有狀況(停掉、上次失敗):「同步」旁亮一個點
  */
-export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = null, onAdd = null, syncAlert = false, title = "我的衣櫃", note = null }) {
+export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = null, onAdd = null, syncAlert = false, onUpdates = null, updatesUnseen = false, title = "我的衣櫃", note = null }) {
   // 手機(<640)重排:少放幾件圓環卡才夠大可點,今日推薦從環心移到環下方長條,不再壓卡片
   const [phone, setPhone] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches);
   useEffect(() => {
@@ -376,6 +376,12 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
           {onSync && (
             <button type="button" onClick={onSync} className={syncAlert ? "has-alert" : undefined} aria-label={syncAlert ? "同步(有狀況,打開看)" : undefined}>
               同步{syncAlert && <span className="sync-dot" aria-hidden="true" />}
+            </button>
+          )}
+          {/* 更新公告(2026-10-08):有還沒看過的,旁邊亮一個小點 */}
+          {onUpdates && (
+            <button type="button" onClick={onUpdates} aria-label={updatesUnseen ? "更新(有新的)" : undefined}>
+              更新{updatesUnseen && <span className="update-dot" aria-hidden="true" />}
             </button>
           )}
         </nav>

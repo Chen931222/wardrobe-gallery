@@ -39,7 +39,7 @@ function MiniLook({ outfit }) {
  * @param onAdd / onDemo / onSync 三個出口;onImportFile(file) 匯入備份檔
  */
 /** @param trashCount 垃圾桶裡有幾件(刪光了回到這裡,還要找得到);onOpenTrash 打開垃圾桶 */
-export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashCount = 0, onOpenTrash = null }) {
+export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashCount = 0, onOpenTrash = null, onUpdates = null }) {
   const fileRef = useRef(null);
   const [weather, setWeather] = useState(null);
   const city = useCity();
@@ -104,6 +104,12 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
             <>
               <span aria-hidden="true"> · </span>
               垃圾桶裡有 {trashCount} 件<button type="button" onClick={onOpenTrash}>打開</button>
+            </>
+          )}
+          {onUpdates && (
+            <>
+              <span aria-hidden="true"> · </span>
+              最近改了什麼?<button type="button" onClick={onUpdates}>看更新</button>
             </>
           )}
           <input
