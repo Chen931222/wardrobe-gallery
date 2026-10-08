@@ -3323,3 +3323,39 @@ h1, h2, h3 {
 }
 /* 衣架搜尋:跟衣櫃頁的搜尋欄同一套,放在分頁上面 */
 .rack-search { max-width: none; margin: 0 0 6px; }
+
+/* ===== 手機搭配頁變清爽(2026-10-08 本人:「手機畫面這裡有一點雜」) =====
+   ① 語音鈕拿掉後,指令框和「照這句挑」併成一行(舊版:框一行、麥克風＋送出一行)
+   ② 例句平常藏起來,聚焦指令框才展開、自動換行(舊版:一列橫滑,左右被切掉)
+   ③ 衣架分頁併成 6 格,配件、鞋襪裡用小標題分 */
+@media (max-width: 520px) {
+  .studio-occasion { flex-wrap: nowrap; }
+  .studio-occasion input { flex: 1 1 auto; min-width: 0; }
+  .studio-occasion button[type="submit"] { flex: 0 0 auto; padding-inline: 12px; }
+}
+@media (max-width: 640px) {
+  .studio-examples { display: none; }
+  .studio-examples.is-open {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    overflow: visible;
+    margin: -8px 0 0;
+    padding: 0;
+  }
+}
+/* 配件、鞋襪裡每一類的小標題:佔滿一整列,像目錄裡的分組名 */
+.studio-rack-group {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 6px 0 -6px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: .12em;
+  color: var(--muted);
+}
+.studio-rack-group:first-child { margin-top: 0; }
+.studio-rack-group small { font-size: 12px; font-variant-numeric: lining-nums tabular-nums; }
+.studio-rack-group .rack-worn-dot { margin-left: 2px; }
