@@ -1,7 +1,7 @@
 // [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useIndexIndicator } from "./useIndexIndicator.js";
-import { ArrowCounterClockwise, ArrowsClockwise, CalendarCheck, Export, FloppyDisk, ImageSquare, Lock, LockOpen, Microphone, Sparkle, Trash, X } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, ArrowsClockwise, CalendarCheck, Export, FloppyDisk, ImageSquare, Lock, LockOpen, MagnifyingGlass, Microphone, Sparkle, Trash, X } from "@phosphor-icons/react";
 import { CitySelect } from "./CitySelect.jsx";
 import { adjustIntent, fetchWeather, findItemForSwap, parseRequest, randomOutfit, readWearLog, recommendOutfit, recordWear, unrecordWear } from "./recommend.js";
 import { syncCode } from "./sync.js";
@@ -170,10 +170,27 @@ function askedLabel(spec, fallback) {
  */
 /* 衣架(2026-10-08 本人選「靠近加放大」＋「分頁標出身上有穿」):分頁改成跟衣櫃目錄同一套(文字、件數、書籤底線),
    身上有穿的那類旁邊一個小點;縮圖放大、下面寫品名(上衣 45 件,好幾件灰 T 只看圖分不出來)。 */
-export function OutfitStudio({ items, initialOutfit = null, initialDaily = null, onOpenItem = null, closet = "all" }) {
+export function OutfitStudio({ items, initialOutfit = null, initialDaily = null, onOpenItem = null, closet = "all", itemMatches = null }) {
   const [wearing, setWearing] = useState(() => toStudio(initialOutfit));   // 帶一套進來時一開始就穿著,寫回時才不會先寫出空的
   const [looks, setLooks] = useState(readLooks);
   const [stripType, setStripType] = useState("upperbody");
+  // 衣架搜尋(2026-10-08 本人:「右邊一樣加入搜尋的地方」):跟衣櫃頁同一套比對(App 傳進來的 itemMatches),
+  // 範圍是整個衣架、不限目前停的分頁;點分頁就清掉,回到逛分類
+  const [rackQuery, setRackQuery] = useState("");
+  const rackSearching = Boolean(itemMatches) && rackQuery.trim().length > 0;
+  const chooseStrip = (slot) => { setStripType(slot); setRackQuery(""); };
+  // 人台到按鈕這一段跟著畫面走(桌機):比畫面高時先捲到按鈕露出來才停,按鈕不會被擋在畫面外
+  const stickyRef = useRef(null);
+  useEffect(() => {
+    const el = stickyRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const place = () => { el.style.top = `${Math.min(24, window.innerHeight - el.offsetHeight - 16)}px`; };
+    const observer = new ResizeObserver(place);
+    observer.observe(el);
+    window.addEventListener("resize", place);
+    place();
+    return () => { observer.disconnect(); window.removeEventListener("resize", place); };
+  }, []);
   const [occasion, setOccasion] = useState("");           // 「說個場合」輸入框
   const [locks, setLocks] = useState({});                 // 槽位→true:重挑時那格不動
   const [past, setPast] = useState([]);                   // 復原用:最近幾套 wearing
@@ -271,6 +288,10 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   }, [items]);
 
   const wornItems = Object.values(wearing).filter(Boolean);
+  // 衣架現在要列的:搜尋中 = 整個衣架裡對得上的(照分頁順序排),否則 = 這一類
+  const rackItems = rackSearching
+    ? Object.keys(SLOT_LABEL).flatMap((slot) => (wardrobeByType[slot] || []).filter((item) => itemMatches(item, rackQuery)))
+    : (wardrobeByType[stripType] || []);
   // 分頁換了、件數變了、身上穿的變了(小點會讓分頁變寬)都要重量
   const rackTabsKey = Object.keys(wardrobeByType).map((slot) => `${slot}:${wardrobeByType[slot].length}:${wearing[slot] ? 1 : 0}`).join("|");
   useIndexIndicator(rackNavRef, rackLineRef, [stripType, rackTabsKey]);
@@ -969,6 +990,9 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   return (
     <div className="studio">
       <div className="studio-stage-column">
+        {/* 桌機:這一段(人台、指令框、例句、理由、按鈕)跟著畫面走;收藏、準不準、備份留在這一欄最下面(2026-10-08 本人) */}
+        <div className="studio-stage-main">
+        <div className="studio-stage-sticky" ref={stickyRef}>
         <div
           ref={stageRef}
           className={`studio-stage${adjusting ? " is-adjusting" : ""}`}
@@ -1176,6 +1200,9 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
           </div>
         </div>
 
+        </div>
+        </div>
+
         {(!!looks.length || lookUndo) && (
           <div className="studio-looks">
             <h3>收藏的穿搭</h3>
@@ -1255,6 +1282,26 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       </div>
 
       <aside className="studio-rack">
+        {itemMatches && (
+          <div className="closet-search-wrap rack-search">
+            <div className="closet-search" role="search">
+              <MagnifyingGlass size={16} weight="regular" aria-hidden="true" />
+              <input
+                type="search"
+                value={rackQuery}
+                onChange={(event) => setRackQuery(event.target.value)}
+                onKeyDown={(event) => { if (event.key === "Escape" && rackQuery) { event.stopPropagation(); setRackQuery(""); } }}
+                placeholder="搜尋衣架,例如「黑 短褲」"
+                aria-label="搜尋衣架"
+                enterKeyHint="search"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {rackQuery && <button type="button" onClick={() => setRackQuery("")}>清除</button>}
+            </div>
+            {rackSearching && <p className="closet-search-status" aria-live="polite">衣架上找到 {rackItems.length} 件,點一下穿上</p>}
+          </div>
+        )}
         <nav ref={rackNavRef} className="studio-rack-nav" aria-label="依類型挑衣服">
           <span ref={rackLineRef} className="closet-index-indicator" aria-hidden="true" />
           {/* 沒有衣服的分類不列(正在看的那類除外):分類多了,一整排 0 只是擋路 */}
@@ -1265,7 +1312,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
               className={stripType === slot ? "active" : ""}
               aria-pressed={stripType === slot}
               aria-label={`${label} ${wardrobeByType[slot]?.length || 0} 件${wearing[slot] ? ",身上有穿" : ""}`}
-              onClick={() => setStripType(slot)}
+              onClick={() => chooseStrip(slot)}
             >
               <span className="closet-index-label">{label}</span>
               <small>{wardrobeByType[slot]?.length || 0}</small>
@@ -1275,7 +1322,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
         </nav>
         {onOpenItem && <p className="studio-rack-hint">點一下穿上,點兩下看資訊</p>}
         <div className="studio-rack-grid">
-          {(wardrobeByType[stripType] || []).map((item) => (
+          {rackItems.map((item) => (
             <button
               key={item.id}
               type="button"
@@ -1292,8 +1339,8 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
               <span className="studio-rack-name" aria-hidden="true">{item.name || SLOT_LABEL[item.part]}</span>
             </button>
           ))}
-          {!(wardrobeByType[stripType] || []).length && (
-            <p className="studio-rack-empty">這一類還沒有單品</p>
+          {!rackItems.length && (
+            <p className="studio-rack-empty">{rackSearching ? `衣架上找不到「${rackQuery.trim()}」。試試品牌、顏色或分類` : "這一類還沒有單品"}</p>
           )}
         </div>
       </aside>

@@ -93,6 +93,13 @@ function searchTextOf(item) {
 const searchTermsOf = (query) => query.trim().toLowerCase().split(/\s+/).filter(Boolean);
 // 英文、數字從單字開頭比(「gu」不會比到 burgundy、「nike」比得到「nike」),中文照字串比
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** 一件衣服對不對得上這段搜尋字(空的算對得上)。衣櫃搜尋和搭配頁衣架的搜尋共用 */
+function itemMatchesQuery(item, query) {
+  const terms = searchTermsOf(query);
+  if (!terms.length) return true;
+  const text = searchTextOf(item);
+  return terms.every((term) => termMatches(text, term));
+}
 function termMatches(text, term) {
   if (/^[a-z0-9]/.test(term)) return new RegExp(`(^|[^a-z0-9])${escapeRegex(term)}`).test(text);
   return text.includes(term);
@@ -2108,7 +2115,7 @@ export function App() {
         )}
 
         {view === "styling" && !loading && !!ownedItems.length && (
-          <OutfitStudio key={closet} closet={closet} items={wearItems} initialOutfit={pendingOutfit} initialDaily={pendingDaily} onOpenItem={setSelectedId} />
+          <OutfitStudio key={closet} closet={closet} items={wearItems} initialOutfit={pendingOutfit} initialDaily={pendingDaily} onOpenItem={setSelectedId} itemMatches={itemMatchesQuery} />
         )}
 
         {/* 示範衣櫃的眼鏡、手錶這幾類是 0 件,點下去整頁空白(審查 F52) */}

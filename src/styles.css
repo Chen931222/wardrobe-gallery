@@ -3304,3 +3304,22 @@ h1, h2, h3 {
   .studio-rack-thumb { padding: 6px; }
   .studio-rack-name { font-size: 11.5px; }
 }
+
+/* ===== 搭配頁:人台那一段跟著畫面走、衣架搜尋(2026-10-08) =====
+   本人:滑右邊衣服時,人台和下面的指令框、按鈕要一起跟著。舊版整欄跟頁面捲走,滑到第三排衣服人台就不見了。
+   外框兩層:.studio-stage-main 撐滿這一欄扣掉收藏/備份的高度,裡面的 .studio-stage-sticky 在它範圍內黏住
+   (只黏在 main 裡,往下滑不會蓋到收藏、備份)。top 由 JS 算:比畫面高時用負值,先捲到按鈕露出來才停。 */
+.studio-stage-main,
+.studio-stage-sticky { display: flex; flex-direction: column; gap: 20px; }
+@media (min-width: 861px) {
+  .studio-stage-column { align-self: stretch; }
+  .studio-stage-main { flex: 1 0 auto; }
+  .studio-stage-sticky { position: sticky; top: 24px; }
+}
+/* 手機的貼底列靠「人台欄裡的每一塊都是同一層」排順序:兩層外框在手機上當作不存在 */
+@media (max-width: 640px) {
+  .studio-stage-main,
+  .studio-stage-sticky { display: contents; }
+}
+/* 衣架搜尋:跟衣櫃頁的搜尋欄同一套,放在分頁上面 */
+.rack-search { max-width: none; margin: 0 0 6px; }
