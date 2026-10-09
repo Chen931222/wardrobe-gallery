@@ -10,6 +10,8 @@
 // 也只收常見的點陣圖(svg 能帶程式,從我們的網域送出去等於開一個洞)。
 
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 
 const UA = "Mozilla/5.0 (compatible; WardrobeLinkPreview/1.0; +https://wardrobe-gallery.vercel.app)";
 const MAX_HTML = 2_000_000;
@@ -30,10 +32,32 @@ export function checkUrl(text) {
   return url;
 }
 
-/** 自己跟轉址(最多 5 次,每一站都檢查),讀到上限就停。 */
+/* 網域實際指到哪(2026-10-09 資安盤點):checkUrl 只看網址字串,擋得掉 127.0.0.1,擋不掉「名字正常、但解析到內網」的網域
+   (實測 localtest.me → 127.0.0.1、169.254.169.254.nip.io → 雲端主機資訊位址,舊版都真的連過去,只是 Vercel 上那裡沒東西)。
+   連線前先查 DNS,任何一個位址是內網、本機、保留段就不打。限制:查完到真正連線之間 DNS 還是可能換(rebinding),
+   要完全擋得改成連到查到的那個 IP;Vercel 上目前沒有可以打的內部服務,先做到這樣。 */
+function isPrivateIp(address) {
+  if (isIP(address) === 4) {
+    const [a, b] = address.split(".").map(Number);
+    return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254)
+      || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 198 && (b === 18 || b === 19)) || a >= 224;
+  }
+  const v6 = address.toLowerCase();
+  if (v6 === "::" || v6 === "::1") return true;
+  const mapped = v6.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (mapped) return isPrivateIp(mapped[1]);
+  return /^(fc|fd|fe8|fe9|fea|feb|ff)/.test(v6);
+}
+async function assertPublicHost(url) {
+  const records = await lookup(url.hostname, { all: true, verbatim: true });
+  if (!records.length || records.some((record) => isPrivateIp(record.address))) throw new Error("這個網址指到不允許的位址");
+}
+
+/** 自己跟轉址(最多 5 次,每一站都檢查:網址字串＋實際解析到的位址),讀到上限就停。 */
 async function fetchLimited(start, accept, limit, { truncate }) {
   let current = start;
   for (let hop = 0; hop < 6; hop += 1) {
+    await assertPublicHost(current);
     const response = await fetch(current, {
       headers: { "User-Agent": UA, Accept: accept, "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.6" },
       redirect: "manual",
