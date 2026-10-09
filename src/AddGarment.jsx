@@ -809,7 +809,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
                   checked={draft.wishlist && Boolean(draft.dream)}
                   onChange={() => setDraft((current) => ({ ...current, wishlist: true, dream: true }))}
                 />
-                夢想
+                夢幻逸品
               </label>
               <label>
                 <input
@@ -917,7 +917,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
             <div className="add-actions">
               <button type="button" className="secondary-button" onClick={requestClose}>取消</button>
               <button type="button" className="primary-button" onClick={save} disabled={urlInvalid || !draft.part || !draft.blob}>
-                {!draft.blob ? "去背好就能存" : dupes.length ? "還是要存" : draft.wishlist ? (draft.dream ? "放進夢想區" : "放進想買的") : "加入衣櫃"}
+                {!draft.blob ? "去背好就能存" : dupes.length ? "還是要存" : draft.wishlist ? (draft.dream ? "放進夢幻逸品" : "放進想買的") : "加入衣櫃"}
               </button>
             </div>
           </div>

@@ -1371,7 +1371,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
             >
               <span className="studio-rack-thumb">
                 <img src={item.thumbnail || item.image} alt="" loading="lazy" />
-                {item.wishlist && <span className={item.dream ? "wish-badge is-dream" : "wish-badge"}>{item.dream ? "夢想" : "想買"}</span>}
+                {item.wishlist && <span className={item.dream ? "wish-badge is-dream" : "wish-badge"}>{item.dream ? "夢幻逸品" : "想買"}</span>}
               </span>
               <span className="studio-rack-name" aria-hidden="true">{item.name || SLOT_LABEL[item.part]}</span>
             </button>
