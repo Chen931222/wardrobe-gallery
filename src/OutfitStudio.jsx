@@ -5,6 +5,7 @@ import { ArrowCounterClockwise, ArrowsClockwise, CalendarCheck, Export, FloppyDi
 import { CitySelect } from "./CitySelect.jsx";
 import { adjustIntent, fetchWeather, findItemForSwap, parseRequest, randomOutfit, readWearLog, recommendOutfit, recordWear, unrecordWear } from "./recommend.js";
 import { syncCode } from "./sync.js";
+import { track } from "./analytics.js";
 import { downloadBackupZip, importBackupFile } from "./backup.js";
 import { LookCard } from "./LookCard.jsx";
 import { PART_ORDER, PARTS } from "./parts.js";
@@ -936,6 +937,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     const next = [look, ...current].slice(0, 30);
     setLooks(next);
     localStorage.setItem(LOOKS_KEY, JSON.stringify(next));
+    track("存搭配", { 件數: look.itemIds.length });
     if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));
   };
 

@@ -10,6 +10,7 @@
 // 兩邊都改過同一件時,剛輸入同步碼的那台讓雲端贏(加入別人的衣櫃),之後讓手上這台贏。
 // 編輯、隱藏這類一整包 JSON 的,再往下一層逐項合,兩台各改不同件時不會互相蓋掉。
 
+import { track } from "./analytics.js";
 import { deleteLocalItem, putLocalRecord, readLocalRecord, readLocalRecords, shrinkImage } from "./localWardrobe.js";
 
 const CODE_KEY = "open-wardrobe-sync-code";
@@ -376,6 +377,7 @@ export async function startSync() {
   const code = newSyncCode();
   await openSpace(code);
   setSyncCode(code);
+  track("開通同步");
   return syncNow();
 }
 

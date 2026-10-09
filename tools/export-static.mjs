@@ -84,6 +84,7 @@ await writeFile(join(OUT, "package.json"), JSON.stringify({ private: true, type:
 //   api.open-meteo.com           今日推薦的天氣
 //   staticimgly.com              去背模型(第一次約 80MB)與它的 WASM 執行檔
 //   www.gu-global.com/uniqlo.com 貼連結挑圖:縮圖要顯示、大圖要下載回來去背
+//   cloud.umami.is / gateway.umami.is 使用統計的腳本與送出位址(2026-10-09;src/analytics.js,擁有者模式不載入)
 //   blob: / data:                自己加的衣服(IndexedDB 的圖)、去背中間結果、匯入備份檔裡的圖;
 //                                字型的 data: 是 Vite 把小於 4KB 的字型檔直接內嵌進 CSS
 //   'wasm-unsafe-eval' + blob:   去背的 WASM 執行檔是先下載成 blob 再載入的(onnxruntime-web)
@@ -92,9 +93,9 @@ await writeFile(join(OUT, "package.json"), JSON.stringify({ private: true, type:
 //                                主要的防線(不准內嵌 <script>、不准從別的網域載程式、只能連上面這幾個地方)都還在
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob:",
+  "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://cloud.umami.is",
   "worker-src 'self' blob:",
-  "connect-src 'self' blob: data: https://api.open-meteo.com https://staticimgly.com https://www.gu-global.com https://www.uniqlo.com",
+  "connect-src 'self' blob: data: https://api.open-meteo.com https://staticimgly.com https://www.gu-global.com https://www.uniqlo.com https://gateway.umami.is",
   "img-src 'self' blob: data: https://www.gu-global.com https://www.uniqlo.com",
   "style-src 'self'",
   "font-src 'self' data:",

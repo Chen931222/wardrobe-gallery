@@ -10,6 +10,7 @@ import { ScrollRail } from "./ScrollRail.jsx";
 import { fixCutout, modelReady, preloadModel, removeBg } from "./cutout.js";
 import { CURRENCIES, parsePrice } from "./price.js";
 import { brandInUrl, brandOf, brandSuggestions, canonicalBrand } from "./brands.js";
+import { track } from "./analytics.js";
 
 // 分類清單在 src/parts.js(新增的選單照組排:衣服、鞋襪、配件、小物)
 
@@ -583,6 +584,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
       brand: canonicalBrand(draft.brand) || brandInUrl(link?.url) || undefined,
     });
     try { navigator.storage?.persist?.(); } catch { /* 不支援就算了 */ }
+    track("加衣服", { 種類: draft.wishlist ? (draft.dream ? "夢幻逸品" : "想買") : "已經有" });
     onAdded(draft.wishlist, name, draft.wishlist && Boolean(draft.dream));
     reset();
   };
