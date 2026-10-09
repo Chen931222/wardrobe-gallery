@@ -112,6 +112,8 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
               最近改了什麼?<button type="button" onClick={onUpdates}>看更新</button>
             </>
           )}
+          <span aria-hidden="true"> · </span>
+          <a href="/privacy.html">隱私與使用說明</a>
           <input
             ref={fileRef}
             type="file"

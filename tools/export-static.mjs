@@ -62,6 +62,7 @@ await cp(join(ROOT, "dist"), OUT, { recursive: true });
 // 貼 GU／UNIQLO 連結時查品名(瀏覽器被對方 CORS 擋,只能從伺服器問)
 await mkdir(join(OUT, "api"), { recursive: true });
 await copyFile(join(ROOT, "functions", "brand-product.mjs"), join(OUT, "api", "brand-product.mjs"));
+await copyFile(join(ROOT, "functions", "_rate-limit.mjs"), join(OUT, "api", "_rate-limit.mjs"));   // 公開 API 的次數限制(2026-10-09)
 // 同步:sync.mjs 是路由,_sync-core.mjs 底線開頭不會變成路由。function 要用 @vercel/blob,
 // 所以輸出資料夾放一份只列這個套件的 package.json,Vercel 部署時會自己裝。
 await copyFile(join(ROOT, "functions", "sync.mjs"), join(OUT, "api", "sync.mjs"));

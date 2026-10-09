@@ -33,6 +33,7 @@ export function UpdatesSheet({ onClose }) {
               </li>
             ))}
           </ol>
+          <p className="updates-foot"><a href="/privacy.html">隱私與使用說明</a> · 資料存在哪、會連到哪些服務、怎麼刪掉</p>
         </div>
       </div>
       <ScrollRail target={ref} />

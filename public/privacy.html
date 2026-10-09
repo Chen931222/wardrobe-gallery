@@ -1,0 +1,62 @@
+<!doctype html>
+<!-- [本 fork 新增] 隱私與使用說明(2026-10-09 資安盤點補的)。只寫程式裡查得到的事;改了資料流就要回來改這頁。
+     CSP 不准內嵌樣式,所以樣式在 privacy.css。 -->
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>隱私與使用說明 · 我的衣櫃</title>
+    <link rel="stylesheet" href="/privacy.css" />
+  </head>
+  <body>
+    <main>
+      <p class="back"><a href="/">← 回衣櫃</a></p>
+      <h1>隱私與使用說明</h1>
+      <p class="updated">最後更新:2026 年 10 月 9 日</p>
+
+      <h2>一句話</h2>
+      <p>你加的衣服存在你自己的瀏覽器裡。沒有帳號、沒有 cookie、沒有廣告、沒有流量分析。開了同步,雲端也只存加密過、我們看不懂的一份。</p>
+
+      <h2>資料存在哪</h2>
+      <ul>
+        <li><b>你的瀏覽器</b>:衣服的照片(去背後的圖)、名稱、價錢、備註、穿著紀錄、收藏、人台上的微調,都存在這個瀏覽器的儲存空間裡,不會自動送到任何地方。</li>
+        <li><b>同步(選用,要開通)</b>:開了同步,資料先在你的瀏覽器裡用同步碼加密,才上傳到雲端(Vercel 的私有儲存)。伺服器只看得到密文的大小和數量,看不到內容。伺服器不存同步碼本身。</li>
+        <li><b>備份檔</b>:按「匯出」產生的 ZIP 存在你手上,不經過雲端。可以選擇加密。</li>
+      </ul>
+
+      <h2>同步碼就是鑰匙</h2>
+      <p>同步碼弄丟了,雲端那份就打不開,我們也救不回來——這是加密的代價。請另外記下同步碼,或定期匯出備份。</p>
+
+      <h2>會連到別人的服務的時候</h2>
+      <ul>
+        <li><b>天氣</b>:今日推薦會向 open-meteo.com 查你選的城市的天氣,送出的是城市的經緯度。</li>
+        <li><b>去背</b>:第一次新增衣服時,瀏覽器會從 staticimgly.com 下載去背模型(約 80 MB)。照片本身不會送出,去背在你的裝置上做。</li>
+        <li><b>貼商品連結</b>:你貼的商品頁由這個網站的伺服器代為讀取品名和商品圖,品牌那邊看到的是我們的伺服器。GU、UNIQLO 的品名也是這樣查的。</li>
+        <li><b>電腦上的語音輸入</b>:按麥克風時,語音會送到瀏覽器內建的辨識服務(Chrome 是 Google、Safari 是 Apple)。手機版沒有這顆按鈕。</li>
+      </ul>
+      <p>上面這些服務都看得到你的網路位址(IP),這是連線本來就會帶的。</p>
+
+      <h2>怎麼刪掉</h2>
+      <ul>
+        <li>單件:點開那件按刪除,先進垃圾桶,30 天後自動刪掉;垃圾桶裡可以永久刪除。</li>
+        <li>雲端:同步面板裡的「刪除雲端」會刪掉整份加密資料。</li>
+        <li>全部:清除這個網站的瀏覽器資料。</li>
+      </ul>
+
+      <h2>使用規則</h2>
+      <ul>
+        <li>目前免費,照現狀提供,不保證不會壞、不保證資料不會遺失。重要的請匯出備份。</li>
+        <li>品牌的商品圖屬於原本的權利人,只供你自己整理衣櫃用。</li>
+        <li>不要上傳別人的照片或含有別人臉的照片。</li>
+        <li>不要用程式大量呼叫這個網站的伺服器;太頻繁會被暫時擋下。</li>
+      </ul>
+
+      <h2>原始碼與授權</h2>
+      <p>這個網站的原始碼公開在 <a href="https://github.com/Chen931222/wardrobe-gallery" rel="noopener">GitHub</a>,改自 MIT 授權的 Open Wardrobe。去背元件 <a href="https://github.com/imgly/background-removal-js" rel="noopener">@imgly/background-removal</a> 是 AGPL-3.0 授權。</p>
+
+      <h2>有問題</h2>
+      <p>到 <a href="https://github.com/Chen931222/wardrobe-gallery/issues" rel="noopener">GitHub 的 Issues</a> 留言。</p>
+    </main>
+  </body>
+</html>

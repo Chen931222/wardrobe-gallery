@@ -9,6 +9,7 @@
 // 不是開放代理:只打兩個寫死的網域,商品編號與地區都先過格式檢查,回傳也只挑品名和分類。
 // 這兩支 API 沒有公開文件,品牌一改版就會壞;壞了前端照樣能手動填品名。
 
+import { overLimit, tooMany } from "./_rate-limit.mjs";
 const HOSTS = {
   gu: "https://d.gu-global.com",
   uniqlo: "https://d.uniqlo.com",
@@ -46,6 +47,8 @@ export async function lookupBrandProduct({ brand, region, code }) {
 
 /* Vercel function 入口(Web 標準 Request/Response)。 */
 export async function GET(request) {
+  const wait = overLimit(request, "brand-product", 30);   // 每個 IP 每分鐘 30 次(2026-10-09 資安盤點)
+  if (wait) return tooMany(wait);
   const params = new URL(request.url).searchParams;
   let result;
   try {
