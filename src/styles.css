@@ -3391,3 +3391,41 @@ h1, h2, h3 {
 .pick-dock button { flex: none; }
 /* 挑選時格子底下留空間,最後一排不會被動作列蓋住 */
 .gallery-pane:has(.pick-dock) .gallery-grid { padding-bottom: 120px; }
+
+/* ===== 人台(2026-10-09 本人三點) =====
+   ① 每件右上一個 ✕ 脫掉 ② 衣服只畫在框裡、拖曳不出框 ③ 框放大:大螢幕上限 380 → 500(螢幕高度允許的話),手機也放大一點 */
+.studio-garments { position: absolute; inset: 0; overflow: hidden; z-index: 1; isolation: isolate; }   /* 自成一層:裡面怎麼排都壓在選取框(95)下面 */
+.studio-garment-remove {
+  position: absolute;
+  z-index: 96;   /* 選取框(95)上面 */
+  width: 26px; height: 26px;
+  margin: -13px 0 0 -13px;   /* 以中心對準算好的那一點 */
+  display: grid; place-items: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--body);
+  cursor: pointer;
+  opacity: .85;
+  transition: opacity 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+.studio-garment-remove:hover { opacity: 1; color: var(--danger); border-color: var(--danger); }
+.studio-garment-remove:focus-visible { opacity: 1; outline: 2px solid var(--accent); outline-offset: 2px; }
+/* 觸控:點擊範圍撐到 36px,圖示一樣大 */
+@media (hover: none) {
+  .studio-garment-remove { width: 32px; height: 32px; margin: -16px 0 0 -16px; opacity: 1; }
+}
+@media (min-width: 861px) {
+  .studio-stage {
+    max-width: 500px;
+    width: min(100%, 500px, calc((100vh - 330px) * 200 / 340));
+    width: min(100%, 500px, calc((100svh - 330px) * 200 / 340));
+  }
+}
+@media (max-width: 640px) {
+  .studio-stage {
+    width: min(100%, 420px, calc(62vh * 200 / 340));
+    width: min(100%, 420px, calc(62svh * 200 / 340));
+  }
+}
+.studio-fit-tools button:disabled { opacity: .4; cursor: default; }

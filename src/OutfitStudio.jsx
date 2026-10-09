@@ -271,6 +271,13 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   }, [wearing, closet]);
 
   const fitOf = useCallback((item) => (item && fits[item.id]) || DEFAULT_FIT, [fits]);
+  /* 層次(2026-10-09 本人:「上下疊穿的問題」)。槽位的層次是固定的(外套蓋上衣、上衣蓋褲子),但模特兒穿著拍的商品照
+     會帶到手、袖口、上半身,固定的順序怎麼排都會穿幫;上衣要紮進褲子也是反過來。所以每件可以自己往前、往後一層,
+     記在這件的微調裡(fit.z,跟位置大小一樣以衣服 id 為鍵)。沒調過就照槽位 */
+  const layerOf = useCallback((slot, item) => {
+    const z = fitOf(item).z;
+    return typeof z === "number" ? z : SLOT_STYLE[slot].z;
+  }, [fitOf]);
 
   // 收藏、微調寫入時一律拿 localStorage 的現值當底(read-modify-write),不拿 state:同步剛寫進來、還沒重讀,
   // 或同一台開了兩個分頁時,state 可能比 localStorage 舊,直接寫回去會把別台的收藏、微調蓋掉,
@@ -280,7 +287,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     const base = current[itemId] || DEFAULT_FIT;
     const merged = { ...DEFAULT_FIT, ...base, ...(typeof patch === "function" ? patch(base) : patch) };
     const next = { ...current, [itemId]: merged };
-    if (merged.dx === 0 && merged.dy === 0 && merged.scale === 1 && merged.rot === 0) delete next[itemId];
+    if (merged.dx === 0 && merged.dy === 0 && merged.scale === 1 && merged.rot === 0 && merged.z == null) delete next[itemId];
     try { localStorage.setItem(FIT_KEY, JSON.stringify(next)); } catch { /* 存不了就只在這次畫面上生效 */ }
     setFits(next);
     if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));
@@ -374,7 +381,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   const hitTest = (clientX, clientY) => {
     const entries = Object.entries(wearing)
       .filter(([, item]) => item)
-      .sort((a, b) => SLOT_STYLE[b[0]].z - SLOT_STYLE[a[0]].z);   // 由上層往下找
+      .sort((a, b) => layerOf(b[0], b[1]) - layerOf(a[0], a[1]));   // 由上層往下找(含自己調過的層次)
     for (const [slot, item] of entries) {
       const g = contentGeometry(slot, item);
       if (!g) continue;
@@ -402,6 +409,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       mode, slot, itemId: item.id,
       startX: event.clientX, startY: event.clientY,
       base: { ...fit },
+      chPct: (g.ch / g.rect.height) * 100,   // 內容高(%),算內容中心用
       center: { x: g.rect.left + g.cx, y: g.rect.top + g.cy },
       rect: g.rect,
     };
@@ -430,9 +438,14 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     const drag = dragRef.current;
     if (!drag) return;
     if (drag.mode === "move") {
+      // 衣服只能在框裡拖(2026-10-09 本人):內容中心留在框內 4%–96%,不會拖到框外、蓋到下面的按鈕
+      const s = SLOT_STYLE[drag.slot];
+      const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+      const dx = drag.base.dx + ((event.clientX - drag.startX) / drag.rect.width) * 100;
+      const dy = drag.base.dy + ((event.clientY - drag.startY) / drag.rect.height) * 100;
       writeFit(drag.itemId, {
-        dx: drag.base.dx + ((event.clientX - drag.startX) / drag.rect.width) * 100,
-        dy: drag.base.dy + ((event.clientY - drag.startY) / drag.rect.height) * 100,
+        dx: clamp(dx, 4 - s.left - s.width / 2, 96 - s.left - s.width / 2),
+        dy: clamp(dy, 4 - s.top - drag.chPct / 2, 96 - s.top - drag.chPct / 2),
       });
     } else if (drag.mode === "scale") {
       const d0 = Math.hypot(drag.startX - drag.center.x, drag.startY - drag.center.y) || 1;
@@ -1021,6 +1034,8 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
           onWheel={onStageWheel}
         >
           <Silhouette />
+          {/* 衣服只畫在框裡(2026-10-09 本人:「不然會移到畫面別的地方去」):這一層裁掉框外的部分;選取框、提示在這層外面,不會被裁 */}
+          <div className="studio-garments">
           {Object.entries(wearing).map(([slot, item]) => {
             if (!item || slot === "socks") return null;   // 襪子不畫在人形上(浮在短褲和鞋中間很假),改用下面一行字
             const s = SLOT_STYLE[slot];
@@ -1054,11 +1069,36 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
                   top: `${s.top + fit.dy}%`,
                   width: `${s.width}%`,
                   height: `${s.height}%`,
-                  zIndex: isActive ? 90 : s.z,
+                  zIndex: isActive ? 900 : Math.round(layerOf(slot, item) * 10),
                   transform: fit.scale !== 1 || fit.rot ? `rotate(${fit.rot || 0}deg) scale(${fit.scale})` : undefined,
                   transformOrigin: origin,
                 }}
               />
+            );
+          })}
+
+          </div>
+
+          {/* 每件右上一個 ✕,點了脫掉(2026-10-09 本人)。正在調整的那件不放(四角是縮放把手),改用下面工具列的「脫掉這件」 */}
+          {Object.entries(wearing).map(([slot, item]) => {
+            if (!item || slot === "socks" || slot === adjusting) return null;
+            const g = contentGeometry(slot, item);
+            if (!g) return null;
+            const x = Math.min(g.rect.width - 14, Math.max(14, g.cx + (g.cw * g.scale) / 2 - 6));
+            const y = Math.min(g.rect.height - 14, Math.max(14, g.cy - (g.ch * g.scale) / 2 + 6));
+            return (
+              <button
+                key={`x-${slot}`}
+                type="button"
+                className="studio-garment-remove"
+                style={{ left: `${x}px`, top: `${y}px` }}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => toggleWear(item)}
+                aria-label={`脫掉${item.name || SLOT_LABEL[slot]}`}
+                title={`脫掉${item.name || SLOT_LABEL[slot]}`}
+              >
+                <X size={12} weight="bold" aria-hidden="true" />
+              </button>
             );
           })}
 
@@ -1090,6 +1130,22 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
             <span className="studio-fit-hint">
               {SLOT_LABEL[adjusting]}:框內拖曳移動,拉角落縮放,拉頂端圓點旋轉
             </span>
+            {(() => {
+              const item = wearing[adjusting];
+              const others = Object.entries(wearing).filter(([slot, other]) => other && slot !== adjusting && slot !== "socks");
+              const mine = layerOf(adjusting, item);
+              const above = others.map(([slot, other]) => layerOf(slot, other)).filter((z) => z > mine);
+              const below = others.map(([slot, other]) => layerOf(slot, other)).filter((z) => z < mine);
+              // 往前:放到上面最近那件的上面一點;往後:放到下面最近那件的下面一點
+              const move = (target) => writeFit(item.id, { z: target });
+              return (
+                <>
+                  <button type="button" className="studio-fit-reset" onClick={() => move(Math.min(...above) + 0.5)} disabled={!above.length}>往前一層</button>
+                  <button type="button" className="studio-fit-reset" onClick={() => move(Math.max(...below) - 0.5)} disabled={!below.length}>往後一層</button>
+                  <button type="button" className="studio-fit-reset" onClick={() => toggleWear(item)}>脫掉這件</button>
+                </>
+              );
+            })()}
             <button type="button" className="studio-fit-reset" onClick={() => resetFit(wearing[adjusting])}>
               重設這件
             </button>

@@ -156,7 +156,8 @@ function drawDoll(ctx, area, pieces, fits, slotStyle, theme) {
 
   const ordered = [...pieces]
     .filter((p) => p.slot !== "socks" && slotStyle[p.slot])     // 襪子跟畫面上一樣不畫
-    .sort((a, b) => slotStyle[a.slot].z - slotStyle[b.slot].z);
+    // 層次:這件自己調過(fit.z,2026-10-09)就照它,沒有就照槽位
+    .sort((a, b) => (fits[a.item.id]?.z ?? slotStyle[a.slot].z) - (fits[b.item.id]?.z ?? slotStyle[b.slot].z));
   for (const { slot, item, img } of ordered) {
     const s = slotStyle[slot];
     const fit = fits[item.id] || { dx: 0, dy: 0, scale: 1, rot: 0 };
