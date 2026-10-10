@@ -37,6 +37,11 @@ export function fitOf(item) {
   return null;
 }
 
+/* 店裡比一下的款式、版型按鈕(2026-10-10):店裡單手打字很難,點一下就寫進品名。直接用上面認款式、版型的清單,
+   所以點出來的字一定認得出來。實測同一件深藍 T:不寫品名比出 13 件深色上衣,寫「寬版短袖T恤」只剩 3 件 */
+export const kindChoices = (part) => (KINDS[part] || []).map(([kind]) => kind);
+export const fitChoices = (part) => (FIT_PARTS.includes(part) ? FITS.map(([fit]) => fit) : []);
+
 /* sRGB → CIELAB,用 ΔE 比兩個顏色:比 RGB 直接相減更接近眼睛看到的差別。 */
 function lab(hex) {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
@@ -63,6 +68,19 @@ function colorGap(a, b) {
    黑對深藍 12.6–13.6、白對米色 21.9 不算(畫面上寫的是「同色」,不能把深藍說成黑)。 */
 const SIMILAR_GAP = 10;
 
+/* 店裡比一下(2026-10-10)用的寬鬆版:店裡拍的照片明暗跟在家拍的差很多,ΔE 幾乎全差在明度。
+   實測本人的深藍 Oversize T:衣櫃裡存的 #232c3b,掛門邊暗處拍再去背量到 #121318,ΔE 14(明度差 11.8、藍度差 7.4),
+   照原本的標準不算同色,反而只抓到黑 T。明度只算一半:這件深藍就抓得到,代價是黑和深藍會一起出現,
+   所以畫面上寫「顏色相近」不寫「同色」。只給店裡比一下用,單品頁的「同色」照舊。
+   兩邊都很深(明度 25 以下)時色相也只算一半:照片一暗,藍色的彩度跟著掉(同一件第二次量到 #101216,
+   明度減半後還差 10.5),黑、深藍、深灰在照片裡本來就分不清。 */
+function looseGap(a, b) {
+  const p = lab(a), q = lab(b);
+  if (!p || !q) return Infinity;
+  const hue = p[0] < 25 && q[0] < 25 ? 0.5 : 1;
+  return Math.hypot((p[0] - q[0]) / 2, (p[1] - q[1]) * hue, (p[2] - q[2]) * hue);
+}
+
 /* 花紋:條紋、格紋跟素面不算同一件。主色再接近,條紋衣跟素色 T 恤也不是重複買(審查 F20)。
    品名沒寫花紋的當素面,所以兩件只要一件有花紋、或花紋不同,就不算像。 */
 const PATTERNS = [["條紋", /條紋|直紋|橫紋|stripe|pinstripe/i], ["格紋", /格紋|格子|plaid|check|tartan|千鳥/i], ["迷彩", /迷彩|camo/i]];
@@ -73,7 +91,8 @@ function patternOf(item) {
 }
 
 /** 櫃裡同分類、同款式、同花紋、同版型(認得出的話)、主色接近的。版型確定一樣的排前面,其次看顏色多近。 */
-export function findSimilar(wish, owned) {
+export function findSimilar(wish, owned, { loose = false } = {}) {
+  const gapOf = loose ? looseGap : colorGap;
   const wishKind = kindOf(wish);
   const wishFit = fitOf(wish);
   const wishPattern = patternOf(wish);
@@ -84,7 +103,7 @@ export function findSimilar(wish, owned) {
       return !wishKind || !kind || kind === wishKind;
     })
     .filter((item) => patternOf(item) === wishPattern)
-    .map((item) => ({ item, fit: fitOf(item), gap: colorGap(wish.color, item.color) }))
+    .map((item) => ({ item, fit: fitOf(item), gap: gapOf(wish.color, item.color) }))
     .filter(({ fit }) => !wishFit || !fit || fit === wishFit)
     .filter(({ gap }) => gap <= SIMILAR_GAP)
     .sort((a, b) => Number(Boolean(wishFit) && b.fit === wishFit) - Number(Boolean(wishFit) && a.fit === wishFit) || a.gap - b.gap)

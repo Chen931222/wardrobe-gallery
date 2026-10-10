@@ -1877,10 +1877,12 @@ h1, h2, h3 {
 }
 .wish-check p { color: var(--ink); font-size: 14px; line-height: 1.6; }
 .wish-thumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.wish-thumbs button {
+.wish-thumbs button,
+.wish-thumbs > span:not(.wish-more) {   /* 店裡比一下:縮圖不能點,用 span,大小一樣 */
   width: 64px; height: 64px; padding: 4px;
   background: var(--paper); border: 1px solid var(--line); cursor: pointer;
 }
+.wish-thumbs > span:not(.wish-more) { cursor: default; }
 .wish-thumbs button:hover, .wish-thumbs button:focus-visible { border-color: var(--accent); outline: none; }
 .wish-thumbs img, .wish-outfit-pieces img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .wish-more { font-size: 13px; color: var(--muted); }
@@ -3433,3 +3435,45 @@ h1, h2, h3 {
 /* 更新公告最下面的隱私頁連結(2026-10-09) */
 .updates-foot { margin: 24px 0 0; padding-top: 16px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
 .updates-foot a, .welcome-note a { color: var(--accent); text-underline-offset: 3px; }
+
+/* ===== 在店裡比一下(2026-10-10) =====
+   拍一張 → 框 → 點分類 → 家裡像的、能配的。分類用一排大按鈕(店裡單手點),結果直接用單品頁的 .wish-check */
+.add-store-preview .add-preview { max-height: 34vh; }
+.add-store-parts { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 0; padding: 0; border: 0; }
+.add-store-parts legend { width: 100%; margin-bottom: 6px; padding: 0; color: var(--muted); font-size: 13px; }
+.add-store-parts label { position: relative; cursor: pointer; }
+.add-store-parts input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.add-store-parts label span,
+.add-store-parts select {
+  display: inline-flex; align-items: center;
+  min-height: 44px; padding: 0 14px;
+  border: 1px solid var(--line); background: var(--paper);
+  color: var(--ink); font: inherit; font-size: 14px;
+}
+.add-store-parts input:checked + span { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.add-store-parts input:focus-visible + span,
+.add-store-parts select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.add-store-parts select { cursor: pointer; }
+.add-store-result { margin-top: 4px; padding-top: 14px; border-top: 1px solid var(--line); }
+.add-store-result .wish-check { margin: 0; }
+.add-store-bought {
+  align-self: center; min-height: 44px; padding: 0 8px;
+  border: 0; background: none; color: var(--muted); font: inherit; font-size: 14px;
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.add-store-bought:hover:not(:disabled) { color: var(--ink); }
+.add-store-bought:disabled { opacity: .45; cursor: default; }
+/* 入口:跟「新增」並排,外框樣式分出主次。手機上第一行放不下(375 寬實測整頁橫向溢出 78px),
+   換到第二行整排寬:在店裡用的就是手機,整排也好按 */
+.add-store-button { background: transparent; color: var(--ink); }
+@media (max-width: 640px) {
+  .header-tools { flex-wrap: wrap; row-gap: 10px; }
+  .add-store-button { order: 3; width: 100%; justify-content: center; }
+}
+.add-store-actions button { min-height: 44px; }   /* 店裡單手按,比新增表單的 36 高 */
+/* 320 寬:「新增」+ 頁面切換差一點放不下(加了入口換行後才看出來,頁面切換會自己掉到第二行),左右留白縮一點 */
+@media (max-width: 360px) {
+  .header-tools { column-gap: 8px; }
+  .header-tools > .add-garment-button:not(.add-store-button) { padding-left: 12px; padding-right: 12px; }
+  .view-nav button { padding-left: 11px; padding-right: 11px; }
+}

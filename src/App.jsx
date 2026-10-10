@@ -989,13 +989,15 @@ function WishLinkEditor({ item, onSetUrl, disabled = false }) {
 const PIECE_ORDER = ["wholebody_up", "upperbody", "lowerbody", "shoes", "bag", "socks", "eyewear", "wrist"];
 const PART_NAME = { upperbody: "上衣", lowerbody: "下身", wholebody_up: "外套", shoes: "鞋", bag: "包", socks: "襪子" };
 
-/** 想買的那件:櫃裡有沒有很像的、跟已經有的能配出什麼。買之前看一眼用。 */
-function WishCheck({ item, owned, onOpen, onWearOutfit }) {
+/** 想買的那件:櫃裡有沒有很像的、跟已經有的能配出什麼。買之前看一眼用。
+ *  店裡比一下(AddGarment)也用這個:那件還沒存,onOpen、onWearOutfit 給 null,縮圖不能點、沒有「穿上看看」 */
+function WishCheck({ item, owned, onOpen, onWearOutfit, loose = false }) {
   // 只在這件或衣櫃清單真的變了才重算:三套是亂數配的,同步重讀衣櫃就換一組,使用者正要按「穿這套」
   const keyOf = (piece) => [piece.id, piece.part, piece.name, piece.color, piece.secondaryColor, (piece.tags || []).join(",")].join(":");
   const ownedKey = owned.map(keyOf).join("|");   // 名稱、標籤、副色都會影響「很像」和配色,要算進來
   const itemKey = keyOf(item);
-  const similar = useMemo(() => findSimilar(item, owned), [itemKey, ownedKey]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const similar = useMemo(() => findSimilar(item, owned, { loose }), [itemKey, ownedKey, loose]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const same = loose ? "顏色相近" : "同色";   // 店裡比一下比的是相近,不能說成同色
   const plan = useMemo(() => wishOutfits(item, owned), [itemKey, ownedKey]);     // eslint-disable-line react-hooks/exhaustive-deps
   const kind = kindLabel(item);
   const fit = fitOf(item);
@@ -1008,20 +1010,24 @@ function WishCheck({ item, owned, onOpen, onWearOutfit }) {
         {similar.length ? (
           <>
             <p>
-              已經有 {similar.length} 件同色的{kind}
+              已經有 {similar.length} 件{same}的{kind}
               {fit && (sameFit === similar.length ? `,都是${fit}` : sameFit ? `,其中 ${sameFit} 件也是${fit}` : `,版型看不出是不是${fit}`)}。
             </p>
             <div className="wish-thumbs">
-              {similar.slice(0, 4).map((piece) => (
+              {similar.slice(0, 4).map((piece) => (onOpen ? (
                 <button key={piece.id} type="button" onClick={() => onOpen(piece.id)} aria-label={`查看${piece.name}`} title={piece.name}>
                   <OptimizedImage src={piece.thumbnail || piece.image} alt="" sizes="72px" breakpoints={[120, 180]} />
                 </button>
-              ))}
+              ) : (
+                <span key={piece.id} title={piece.name}>
+                  <OptimizedImage src={piece.thumbnail || piece.image} alt={piece.name} sizes="72px" breakpoints={[120, 180]} />
+                </span>
+              )))}
               {similar.length > 4 && <span className="wish-more">還有 {similar.length - 4} 件</span>}
             </div>
           </>
         ) : (
-          <p>櫃裡沒有同色{fit ? `、同樣${fit}` : ""}的{kind},這件不重複。</p>
+          <p>櫃裡沒有{same}{fit ? `、同樣${fit}` : ""}的{kind},這件不重複。</p>
         )}
       </section>
 
@@ -1048,7 +1054,7 @@ function WishCheck({ item, owned, onOpen, onWearOutfit }) {
                         </span>
                       ))}
                     </div>
-                    <button className="secondary-button" type="button" onClick={() => onWearOutfit(outfit)}>穿上看看</button>
+                    {onWearOutfit && <button className="secondary-button" type="button" onClick={() => onWearOutfit(outfit)}>穿上看看</button>}
                   </li>
                 );
               })}
@@ -2028,6 +2034,7 @@ export function App() {
               {CAN_ADD && (
                 <AddGarment
                   existing={closet === "all" ? items : items.filter((item) => item.isLocal)}
+                  renderCheck={(wish, owned) => <WishCheck item={wish} owned={owned} onOpen={null} onWearOutfit={null} loose />}
                   onAddOne={(item) => {
                     setQuantity(item.id, qtyOf(item.quantity) + 1);
                     say(`沒有另存:「${item.name || "那件"}」改成 ×${qtyOf(item.quantity) + 1}。`);
