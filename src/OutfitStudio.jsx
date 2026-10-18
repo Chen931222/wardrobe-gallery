@@ -635,7 +635,11 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       const dropped = new Set((intent?.exclude || []).filter((ex) => ex.whole).map((ex) => ex.slot));
       for (const slot of ["eyewear", "wrist", "belt", "necklace", "ring", "accessories_up", "carry"]) if (wearing[slot] && !result.outfit[slot] && !dropped.has(slot)) result.outfit[slot] = wearing[slot];
       if (notes.length) result.reasons.unshift(...notes);
-      const lockedLabels = Object.keys(lockedStudio).filter((slot) => !dropped.has(slot)).map((slot) => SLOT_LABEL[slot]);
+      // 「不要短褲」碰到鎖住的短褲:引擎放掉那個鎖(result.unlocked),就不能再寫「鎖住沒動」
+      const released = new Set(result.unlocked || []);
+      const lockedLabels = Object.keys(lockedStudio)
+        .filter((slot) => !dropped.has(slot) && !released.has(slot) && !(slot === "shirt" && released.has("upperbody")))
+        .map((slot) => SLOT_LABEL[slot]);
       if (lockedLabels.length) result.reasons.push(`鎖住沒動:${lockedLabels.join("、")}`);
       if (unknownRaw) {
         result.reasons.push(`「${unknownRaw}」我還沒學過,這套是純照天氣挑的;想更準可以說場合(約會、上班、看球賽)、色系(全黑、大地色)或「換成黑色襯衫」`);
@@ -807,12 +811,21 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     }
 
     if (req.kind === "remove") {
-      const label = SLOT_LABEL[req.slot];
-      const had = !!wearing[req.slot];
-      if (adjusting === req.slot) setAdjusting(null);
+      // 「不帶包包也不要外套」一次脫好幾樣(req.slots);身上有的拿掉、本來就沒穿的照實講
+      const slots = req.slots?.length ? req.slots : [req.slot];
+      const names = (list) => list.map((slot) => SLOT_LABEL[slot]).join("、");
+      const had = slots.filter((slot) => wearing[slot]);
+      const missing = slots.filter((slot) => !wearing[slot]);
+      if (slots.includes(adjusting)) setAdjusting(null);
       pushHistory(wearing); dirtyRef.current = true;
-      setWearing((current) => ({ ...current, [req.slot]: null }));
-      setDaily({ understood: `脫掉${label}`, reasons: [had ? `${label}拿掉了` : `身上本來就沒穿${label}`] });
+      setWearing((current) => {
+        const next = { ...current };
+        for (const slot of slots) next[slot] = null;
+        return next;
+      });
+      const reason = !had.length ? `身上本來就沒穿${names(slots)}`
+        : missing.length ? `${names(had)}拿掉了;身上本來就沒穿${names(missing)}` : `${names(had)}拿掉了`;
+      setDaily({ understood: `脫掉${names(slots)}`, reasons: [reason] });
       return;
     }
 
