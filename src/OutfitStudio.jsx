@@ -630,10 +630,12 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       if (result.error) { setDaily({ error: result.error }); return; }
       noteRecommendation(result.outfit, result.recalled);
       shownRef.current = [Object.values(result.outfit).filter(Boolean).map((item) => item.id), ...shownRef.current].slice(0, 3);
-      // 眼鏡、手錶、配件現在引擎也會挑(2026-10-06);這次沒挑到的那格,身上有就留著,別每次推薦都被脫掉
-      for (const slot of ["eyewear", "wrist", "belt", "necklace", "ring", "accessories_up", "carry"]) if (wearing[slot] && !result.outfit[slot]) result.outfit[slot] = wearing[slot];
+      // 眼鏡、手錶、配件現在引擎也會挑(2026-10-06);這次沒挑到的那格,身上有就留著,別每次推薦都被脫掉。
+      // 但這句話講了不要的那格(「不要戴眼鏡」)就不放回去
+      const dropped = new Set((intent?.exclude || []).filter((ex) => ex.whole).map((ex) => ex.slot));
+      for (const slot of ["eyewear", "wrist", "belt", "necklace", "ring", "accessories_up", "carry"]) if (wearing[slot] && !result.outfit[slot] && !dropped.has(slot)) result.outfit[slot] = wearing[slot];
       if (notes.length) result.reasons.unshift(...notes);
-      const lockedLabels = Object.keys(lockedStudio).map((slot) => SLOT_LABEL[slot]);
+      const lockedLabels = Object.keys(lockedStudio).filter((slot) => !dropped.has(slot)).map((slot) => SLOT_LABEL[slot]);
       if (lockedLabels.length) result.reasons.push(`鎖住沒動:${lockedLabels.join("、")}`);
       if (unknownRaw) {
         result.reasons.push(`「${unknownRaw}」我還沒學過,這套是純照天氣挑的;想更準可以說場合(約會、上班、看球賽)、色系(全黑、大地色)或「換成黑色襯衫」`);
@@ -765,12 +767,14 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     }
 
     if (req.kind === "adjust") {
-      const { intent, notes } = adjustIntent(lastIntentRef.current, req);
-      runRecommend(intent, null, null, locks, notes);
+      // req.base:這句自己也講了場合(「上課,舒服一點」),就接在這句上;沒講才接上一句
+      const { intent, notes } = adjustIntent(req.base || lastIntentRef.current, req);
+      runRecommend(intent, null, null, locks, [...(req.notes || []), ...notes]);
       return;
     }
 
-    if (req.kind === "outfit") { runRecommend(req.intent, req.pin || null); return; }
+    // 照場合挑整套:沒用上的字、還聽到但沒照的場合(req.notes)放在理由最前面,一眼看到它聽懂了多少
+    if (req.kind === "outfit") { runRecommend(req.intent, req.pin || null, null, locks, req.notes || []); return; }
 
     if (req.kind === "swap") {
       const vague = !req.color && !req.category && !(req.descriptors || []).length && !req.byText;   // 「換一件上衣」→ 要跟身上那件不一樣

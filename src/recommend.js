@@ -342,36 +342,47 @@ const INTENT_FORMALITY = [
   { formality: "formal", label: "正式場合", keys: ["面試", "interview", "正式", "正裝", "上台", "報告", "簡報", "發表", "presentation", "婚禮", "wedding", "喜宴", "喜酒", "婚宴", "訂婚", "伴郎", "喪禮", "告別式", "典禮", "畢業", "頒獎", "見家長", "商務", "演講", "開會", "會議", "meeting", "面談", "口試", "答辯", "見客戶", "提案"] },
   { formality: "smart", label: "得體一點", keys: ["約會", "date", "吃飯", "聚餐", "晚餐", "dinner", "餐廳", "下午茶", "咖啡廳", "咖啡店", "見面", "看展", "展覽", "工作", "上班", "打工", "實習", "辦公", "公司", "拜訪", "拍照", "約拍", "證件照", "大頭照", "畢業照", "派對", "party", "演唱會", "音樂會", "酒吧", "夜店", "喝酒", "同學會", "聚會", "聯誼", "相親", "家教", "慶生", "生日", "尾牙", "春酒", "告白", "女朋友", "男朋友", "女友", "男友", "曖昧", "約"] },
   { formality: "sporty", label: "運動", activity: "sport", keys: ["運動", "健身", "gym", "跑步", "慢跑", "run", "打球", "打棒球", "打籃球", "打羽球", "籃球", "羽球", "桌球", "網球", "排球", "足球", "游泳", "瑜珈", "重訓", "爬山", "登山", "hiking", "騎車", "單車", "腳踏車", "健走", "workout", "練球", "棒球"] },
-  { formality: "casual", label: "上課", occasionPref: "school", keys: ["上課", "上學", "學校", "class", "school", "考試", "圖書館", "念書", "讀書", "自習", "實驗室", "社團"] },
+  { formality: "casual", label: "上課", occasionPref: "school", keys: ["上完課", "下課", "放學", "上課", "上學", "學校", "class", "school", "考試", "圖書館", "念書", "讀書", "自習", "實驗室", "社團"] },
   { formality: "casual", label: "在家耍廢", keys: ["耍廢", "在家", "宅", "躺", "睡", "休息", "放假", "廢"] },
   { formality: "casual", label: "去海邊", boost: ["短褲", "shorts", "拖鞋", "slides"], keys: ["海邊", "沙灘", "墾丁", "玩水", "泳池"] },
   { formality: "casual", label: "日常出門", keys: ["出門", "日常", "隨便", "逛街", "出去玩", "出遊", "旅行", "旅遊", "野餐", "露營", "看電影", "買菜", "超市", "便利商店", "倒垃圾", "見朋友", "朋友", "拜拜", "散步", "chill", "夜市", "洗車", "醫院", "看醫生", "診所", "回家", "過年", "回老家", "掃墓", "拜年", "買東西", "宵夜", "早餐", "遛狗", "搭車", "坐車", "高鐵", "機場", "銀行", "郵局", "理髮", "剪頭髮", "接人", "載人", "兜風"] },
 ];
 
 /** 把使用者輸入解析成意圖;沒任何關鍵字命中就回 { understood: null },讓引擎照天氣走。 */
+// 否定:「不想穿太正式」「不要太正式」「不冷」不該命中正式/冷。把否定詞連同後面 4 個字一起挖掉再比對。
+const NEG_WORDS = ["不想", "不要", "不用", "不太", "沒有要", "不想要", "別穿", "別太", "不冷", "不熱", "不涼", "不會冷", "不會熱", "不下雨"];
+
 export function parseIntent(text) {
   const raw = (text || "").trim();
   if (!raw) return null;
-  // 否定：「不想穿太正式」「不要太正式」「不冷」不該命中正式/冷。把否定詞連同後面 4 個字一起挖掉再比對。
-  const NEG = ["不想", "不要", "不用", "不太", "沒有要", "不想要", "別穿", "別太", "不冷", "不熱", "不涼", "不會冷", "不會熱", "不下雨"];
-  let t = raw.toLowerCase();
-  for (const n of NEG) {
+  // 「不要外套」「不穿短褲」先挖出來當排除條件(parseExclusions),場合照剩下的字判。
+  // 不先挖的話,下面的否定處理會把「不要」後面 4 個字一起挖掉:「不要外套去上課」連「去上」都被挖走,只剩「課」
+  const exclusions = parseExclusions(raw);
+  let t = exclusions.rest;
+  for (const n of NEG_WORDS) {
     let i;
     while ((i = t.indexOf(n)) !== -1) t = `${t.slice(0, i)} ${t.slice(i + n.length + 4)}`;
   }
   const has = (list) => list.some((k) => t.includes(k.toLowerCase()));
 
-  let formality = null, label = null, activity = null, occasionPref = null, boost = null;
+  let formality = null, label = null, activity = null, occasionPref = null, boost = null, guessed = false, heard = null;
+  // 一句講了兩個場合(「上完課去約會」):一套只能照一個,照排前面的那條;正式程度不同的另一個記下來,回覆時老實說。
+  // 用過的字先挖掉,「看棒球」的「棒球」才不會再被運動那條撿到
+  const alsoHeard = [];
+  let rest = t;
   for (const rule of INTENT_FORMALITY) {
-    if (has(rule.keys)) {
-      formality = rule.formality; label = rule.label;
+    const key = rule.keys.find((k) => rest.includes(k.toLowerCase()));
+    if (!key) continue;
+    if (!formality) {
+      formality = rule.formality; label = rule.label; heard = key;   // heard:使用者自己講的那個字,回覆時照他的說法講
       activity = rule.activity || null; occasionPref = rule.occasionPref || null; boost = rule.boost || null;
-      break;
-    }
+    } else if (rule.formality !== formality) alsoHeard.push(key);
+    for (const k of [...rule.keys].sort((a, b) => b.length - a.length)) rest = rest.split(k.toLowerCase()).join(" ");
   }
-  // 地點列不完(全聯、KTV、補習班、牙醫…):句子長得像「要去哪、要吃什麼」就當成一般出門,不回「沒學過」
+  // 地點列不完(全聯、KTV、補習班、牙醫…):句子長得像「要去哪、要吃什麼」就當成一般出門,不回「沒學過」;
+  // 但記下這是猜的,回覆時講「沒學過,先當一般出門挑」
   if (!formality && /去|吃|喝|買|逛|看|找|陪|載|接|拿|領|搭|坐/.test(t) && !/換|穿|脫|那件|這件|那雙|這雙/.test(t)) {
-    formality = "casual"; label = "日常出門";
+    formality = "casual"; label = "日常出門"; guessed = true;
   }
 
   // 天氣覆寫(和場合獨立):使用者可能同時提到冷熱或雨
@@ -384,7 +395,7 @@ export function parseIntent(text) {
   const forceRainy = has(["下雨", "會下雨", "雨天", "雷雨", "陣雨", "下雨天", "颱風", "大雨", "暴雨", "梅雨", "淋雨", "會濕"]);
   const palette = paletteOf(t) || null;
 
-  const intent = { raw, understood: null, formality, label, activity, occasionPref, boost, warmthDelta, forceRainy, palette };
+  const intent = { raw, understood: null, formality, label, activity, occasionPref, boost, warmthDelta, forceRainy, palette, exclude: exclusions.list, alsoHeard, guessed, heard };
   intent.understood = describeIntent(intent);
   return intent;
 }
@@ -396,6 +407,8 @@ function describeIntent(intent) {
   if (intent.warmthDelta) bits.push(warmthPhrase(intent.warmthDelta));
   if (intent.forceRainy) bits.push("當下雨天");
   if (intent.palette) bits.push(intent.palette.label);
+  // 不要的東西也是採用的條件;「不要上衣」這種做不到的不列(引擎會另外講沒照做)
+  for (const ex of intent.exclude || []) if (!(ex.whole && CORE_SLOT.has(ex.slot))) bits.push(`不要${ex.word}`);
   return bits.length ? bits.join(" · ") : null;
 }
 
@@ -493,6 +506,140 @@ const CATEGORY_ALIASES = {
   "涼鞋": ["涼鞋", "sandal"],
   "靴": ["靴", "boot"],
 };
+
+/* ---------- 「不要外套」「不穿短褲」「別帶包」:句子裡講明不要的東西(2026-10-18) ----------
+ * 舊版一句話只走一條路:「今天去上課,不要外套」先被判成「脫掉外套」就回話了,「上課」解析出來卻沒用上,
+ * 只回一句「身上本來就沒穿外套」(本人實測回報)。現在先把每一段「否定詞＋品類」挖出來當排除條件,
+ * 場合照剩下的字判;引擎挑之前把這些排掉,「再推薦一套」「再正式一點」也照樣不挑。 */
+const NO_WORDS = ["不想要", "不想穿", "不想帶", "不要穿", "不要帶", "不要戴", "不用穿", "不用帶", "不用戴", "不要", "不穿", "不帶", "不戴", "不揹", "不背", "別穿", "別帶", "別戴", "免穿", "不用"];
+const NO_LINKS = ["還有", "跟", "和", "及", "與", "或", "、", ",", "，", " "];   // 「不要外套跟短褲」:後面那件也算不要
+// 講這些字 = 那一格整個不要(「不要外套」是不穿外套);其他字只避開那一類(「不要短褲」照樣要穿褲子)
+const WHOLE_SLOT_WORDS = new Set(["外套", "上衣", "衣服", "褲", "褲子", "鞋", "襪", "襪子", "包", "包包", "眼鏡", "墨鏡", "手錶", "手環", "錶", "皮帶", "腰帶", "項鍊", "戒指", "帽子", "帽", "圍巾"]);
+const CORE_NAME = { upperbody: "上衣", lowerbody: "下身", shoes: "鞋子" };
+let slotWordList = null;
+const slotWordsByLength = () => {
+  if (!slotWordList) slotWordList = SLOT_WORDS.flatMap((group) => group.words.map((word) => ({ word, slot: group.slot }))).sort((a, b) => b.word.length - a.word.length);
+  return slotWordList;
+};
+
+/** 挖出「否定詞＋品類」:回 { list: [{ slot, word, whole }], rest: 這幾段換成空白之後的句子(小寫) }。
+ *  「不要換上衣」「不要動外套」「不要那麼黑」後面接的不是品類,不算。 */
+export function parseExclusions(text) {
+  let t = String(text || "").toLowerCase();
+  const list = [];
+  const negs = [...NO_WORDS].sort((a, b) => b.length - a.length);
+  const take = (at) => {
+    const hit = slotWordsByLength().find(({ word }) => t.startsWith(word, at));
+    if (!hit) return null;
+    let end = at + hit.word.length;
+    if ((hit.word === "襪" || hit.word === "帽") && t[end] === "子") end += 1;
+    const word = t.slice(at, end);
+    if (!list.some((ex) => ex.slot === hit.slot && ex.word === word)) list.push({ slot: hit.slot, word, whole: WHOLE_SLOT_WORDS.has(word) });
+    return end;
+  };
+  let i = 0;
+  while (i < t.length) {
+    const neg = negs.find((word) => t.startsWith(word, i));
+    if (!neg) { i += 1; continue; }
+    let j = i + neg.length;
+    if (j < t.length && "穿帶戴揹".includes(t[j])) j += 1;   // 「不要穿外套」「不用帶包」
+    let end = take(j);
+    if (end === null) { i = j; continue; }
+    // 「不要外套跟短褲」「不要外套、包包」:連接詞後面緊接著品類的,一起算
+    for (;;) {
+      const link = NO_LINKS.find((word) => t.startsWith(word, end));
+      if (!link) break;
+      const next = take(end + link.length);
+      if (next === null) break;
+      end = next;
+    }
+    t = `${t.slice(0, i)}${" ".repeat(end - i)}${t.slice(end)}`;
+    i = end;
+  }
+  return { list, rest: t };
+}
+
+/** 推薦前套上排除條件。上衣、下身、鞋整格拿掉做不到(總得穿);避開某一類會讓那格空掉也不做。
+ *  回 { items, locked, applied: 照做的字, notes: 沒照做的原因, noOuter }。 */
+function applyExclusions(items, locked, exclude) {
+  const out = { items, locked, applied: [], notes: [], noOuter: false };
+  if (!exclude?.length) return out;
+  out.locked = { ...locked };
+  for (const ex of exclude) {
+    if (ex.whole) {
+      if (CORE_SLOT.has(ex.slot)) {
+        out.notes.push(`「不要${ex.word}」沒照做:${CORE_NAME[ex.slot]}總得穿;想換掉身上那件,說「換一件${CORE_NAME[ex.slot]}」`);
+        continue;
+      }
+      out.items = out.items.filter((item) => item.part !== ex.slot);
+      delete out.locked[ex.slot];
+      if (ex.slot === "wholebody_up") out.noOuter = true;
+      out.applied.push(ex.word);
+      continue;
+    }
+    const words = (CATEGORY_ALIASES[ex.word] || [ex.word]).map((word) => word.toLowerCase());
+    const hit = (item) => words.some((word) => itemText(item).includes(word));
+    const rest = out.items.filter((item) => !hit(item));
+    const emptied = [...CORE_SLOT].find((part) => out.items.some((item) => item.part === part) && !rest.some((item) => item.part === part));
+    if (emptied) { out.notes.push(`櫃裡的${CORE_NAME[emptied]}都是${ex.word},「不要${ex.word}」這次做不到`); continue; }
+    out.items = rest;
+    for (const [slot, item] of Object.entries(out.locked)) if (item && hit(item)) delete out.locked[slot];
+    out.applied.push(ex.word);
+  }
+  return out;
+}
+
+/** 合併兩批排除條件(「再正式一點,不要包」接在上一句的「不要外套」後面)。 */
+function mergeExclude(a = [], b = []) {
+  const list = [...a];
+  for (const ex of b) if (!list.some((old) => old.slot === ex.slot && old.word === ex.word)) list.push(ex);
+  return list;
+}
+
+// 「哪幾個字沒用上」用的字表:場合、天氣、色系、顏色、品類、款式、各種動詞,加上口語的贅字。剩下的就是沒聽懂的
+const CHATTER = ["今天", "明天", "後天", "今晚", "明晚", "晚上", "早上", "中午", "下午", "等一下", "等下", "待會", "等等", "晚點", "現在",
+  "這週", "週末", "禮拜", "星期", "整天", "我們", "我", "你", "幫我", "給我", "要去", "要", "想", "去", "會", "的", "了", "吧", "啊", "呢", "嗎",
+  "啦", "喔", "哦", "欸", "耶", "還有", "然後", "而且", "但是", "但", "也", "都", "就", "很", "有點", "一點", "一下", "點", "配", "一套", "套",
+  "穿什麼", "穿", "搭", "適合", "可以", "好", "準備", "打算", "在", "到", "個", "什麼", "甚麼", "怎麼", "該", "應該", "比較", "有", "是", "這", "那",
+  "時候", "完", "後", "前", "天氣", "跟", "和", "及", "與", "或"];
+const WEATHER_WORDS = ["寒流", "天冷", "變冷", "冷", "微涼", "涼", "很熱", "超熱", "大熱天", "炎熱", "熱", "下雨", "會下雨", "雨天", "雷雨", "陣雨",
+  "下雨天", "颱風", "大雨", "暴雨", "梅雨", "淋雨", "會濕", "雨"];   // 跟 parseIntent 的天氣判斷同一批字
+let knownWords = null;
+function knownWordList() {
+  if (knownWords) return knownWords;
+  const all = [
+    ...INTENT_FORMALITY.flatMap((rule) => rule.keys), ...WEATHER_WORDS, ...NEG_WORDS, ...NO_WORDS, ...CHATTER, ...FILLER,
+    ...PALETTES.flatMap((palette) => palette.keys), ...PALETTE_CLEAR, "色系", "一身", "整套", "全身", "都穿", "色",
+    ...COLOR_WORDS.flatMap((color) => color.words), ...SLOT_WORDS.flatMap((group) => group.words), ...DESCRIPTORS.flat(),
+    ...SWAP_HINTS, ...REPLACE_HINTS, ...REMOVE_HINTS, ...STRIP_HINTS, ...DISLIKE_HINTS, ...KEEP_HINTS, ...UNLOCK_HINTS, ...UNDO_HINTS,
+    ...REROLL_HINTS, ...MORE_FORMAL, ...MORE_CASUAL, ...COOLER, ...WARMER,
+  ];
+  knownWords = [...new Set(all.map((word) => word.toLowerCase()))].sort((a, b) => b.length - a.length);
+  return knownWords;
+}
+
+/** 句子裡沒用上的片段(中文兩個字以上、英文三個字母以上),照原句的大小寫,最多三段。 */
+function unusedWords(raw, rest) {
+  let t = rest;
+  for (const word of knownWordList()) t = t.split(word).join(" ");
+  const lower = raw.toLowerCase();
+  const pieces = t.split(/[\s,，。.!！?？、;；:：~～()（）「」"'/]+/).map((piece) => piece.trim())
+    .filter((piece) => (/[一-鿿]/.test(piece) ? piece.length >= 2 : piece.length >= 3));
+  return [...new Set(pieces)].slice(0, 3).map((piece) => {
+    const at = lower.indexOf(piece);
+    return at >= 0 ? raw.slice(at, at + piece.length) : piece;
+  });
+}
+
+/** 照場合挑整套時要講給使用者聽的:哪幾個字沒用上、是不是猜的、還聽到哪個場合沒照。 */
+function heardNotes(intent, raw) {
+  const notes = [];
+  const unused = unusedWords(raw, parseExclusions(raw).rest);
+  if (intent.guessed) notes.push(unused.length ? `「${unused.join("」「")}」我還沒學過,先當一般出門挑` : "沒聽出是什麼場合,先當一般出門挑");
+  else if (unused.length) notes.push(`這幾個字沒用上:「${unused.join("」「")}」,這套沒照它們挑`);
+  if (intent.alsoHeard?.length) notes.push(`也聽到「${intent.alsoHeard.join("」「")}」,但一套只照一個場合,先照「${intent.heard || intent.label}」挑`);
+  return notes;
+}
 
 // 描述字(款式、材質、圖案):「開襟外套」的「開襟」、「燈芯絨西裝外套」的「燈芯絨」。舊版只認品類和顏色,
 // 「換成開襟外套」只看「外套」,給了一件普通外套(2026-10-03 本人回報)。名稱是中文、tags 常是英文,兩邊都認。
@@ -612,17 +759,20 @@ const LADDER_LABEL = { casual: "輕鬆一點", smart: "得體一點", formal: "�
 export function adjustIntent(prev, adj) {
   const base = prev
     ? { ...prev }
-    : { raw: "", understood: null, formality: null, label: null, activity: null, occasionPref: null, boost: null, warmthDelta: 0, forceRainy: false, palette: null };
+    : { raw: "", understood: null, formality: null, label: null, activity: null, occasionPref: null, boost: null, warmthDelta: 0, forceRainy: false, palette: null, exclude: [] };
   const notes = [];
   if (adj.formalityStep) {
     const cur = base.formality === "sporty" ? "casual" : base.formality;      // 運動當作休閒那一階
     const idx = cur ? LADDER.indexOf(cur) : (adj.formalityStep > 0 ? 0 : 1);   // 沒場合:往上從休閒起跳→得體,往下→輕鬆
     const next = LADDER[Math.max(0, Math.min(LADDER.length - 1, idx + adj.formalityStep))];
+    // 已經到頂(底)了:照實講,場合名稱(「上課」)留著,不要被蓋成「輕鬆一點」
     if (cur && next === cur) notes.push(adj.formalityStep > 0 ? "已經是最正式的了" : "已經是最輕鬆的了");
-    base.formality = next; base.label = LADDER_LABEL[next]; base.activity = null; base.occasionPref = null; base.boost = null;
+    else { base.formality = next; base.label = LADDER_LABEL[next]; base.activity = null; base.occasionPref = null; base.boost = null; }
   }
   if (adj.warmthDelta) base.warmthDelta = Math.max(-12, Math.min(12, (base.warmthDelta || 0) + adj.warmthDelta));
   if (adj.palette !== undefined) base.palette = adj.palette;   // 色系接在原本的場合上;null = 不限顏色了
+  if (adj.exclude?.length) base.exclude = mergeExclude(base.exclude, adj.exclude);   // 「再正式一點,不要包」
+  base.alsoHeard = []; base.guessed = false;   // 這兩個只對說出它的那一句有意義,接著用不再講
   base.understood = describeIntent(base);
   base.raw = adj.raw;
   return { intent: base, notes };
@@ -652,10 +802,15 @@ const REROLL_RE = /(再|另|換|下).{0,3}套|不要這套|這套不|換別的|�
 export function parseRequest(text) {
   const raw = (text || "").trim();
   if (!raw) return null;
-  const t = raw.toLowerCase();
+  const intent = parseIntent(raw);
+  // 有場合(或天氣、色系)又講了不要什麼(「今天去上課,不要外套」):不要的那幾段已經記在 intent.exclude,
+  // 其他部分用挖掉那幾段的句子判,整套照場合挑。不然「不要外套」會先被當成「脫掉外套」,整句只做了一半(2026-10-18 本人回報)。
+  // 沒講場合的「不要外套」照舊:脫掉身上那件就好,不重挑整套
+  const scene = Boolean(intent && (intent.formality || intent.warmthDelta || intent.forceRainy || intent.palette));
+  const t = scene && intent.exclude.length ? parseExclusions(raw).rest : raw.toLowerCase();
+  const notes = scene ? heardNotes(intent, raw) : [];
   const slotHit = detectSlot(t) || (TEE_SHORT.test(t) ? { slot: "upperbody", category: "t恤" } : null);
   const color = detectColor(t);
-  const intent = parseIntent(raw);
   const has = (list) => list.some((h) => t.includes(h));
   const dislikes = has(DISLIKE_HINTS);
   // 「不穿襪子」裡的「穿」不是要換、「不好看」也不是「好看」:先把否定的說法挖掉,再看有沒有要換、要留的意思
@@ -677,7 +832,13 @@ export function parseRequest(text) {
   const paletteOnly = palette !== undefined && (palette === null || (!intent?.formality && !intent?.warmthDelta && !intent?.forceRainy));
   const reroll = has(REROLL_HINTS) || REROLL_RE.test(t);
   if (!slotHit && (step || warm || reroll || paletteOnly)) {
-    return { kind: "adjust", raw, formalityStep: step, warmthDelta: warm, ...(palette !== undefined ? { palette } : {}) };
+    // 這句除了「帥一點」「舒服一點」還講了場合(「明天去學校考試,帥一點」):微調接在這句的場合上,不是接上一句的。
+    // 先把微調的說法挖掉再判,不然「再正式一點」本身的「正式」會被當成場合
+    let sceneText = t;
+    for (const word of [...MORE_FORMAL, ...MORE_CASUAL, ...COOLER, ...WARMER, ...REROLL_HINTS].sort((a, b) => b.length - a.length)) sceneText = sceneText.split(word).join(" ");
+    const own = parseIntent(sceneText);
+    const base = own?.formality && !own.guessed ? { ...own, exclude: intent?.exclude || [] } : null;
+    return { kind: "adjust", raw, formalityStep: step, warmthDelta: warm, ...(palette !== undefined ? { palette } : {}), exclude: intent?.exclude || [], base, notes };
   }
 
   const descriptors = detectDescriptors(t);
@@ -694,13 +855,13 @@ export function parseRequest(text) {
   if (slotHit && REPLACE_HINTS.some((h) => t.includes(h))) return { kind: "swap", raw, ...spec };
   if (slotHit && intent?.formality) {
     // 「面試要穿襯衫」:整套照場合挑,再把指定那格釘成指定單品
-    return { kind: "outfit", raw, intent, pin: spec };
+    return { kind: "outfit", raw, intent, pin: spec, notes };
   }
   if (slotHit) return { kind: "swap", raw, ...spec };
   // 沒講品類,但講了款式或材質(「穿開襟的」「來件燈芯絨」):整櫃找
   const pointing = /那件|這件|那雙|這雙|那條|這條|那個|那頂/.test(t);
   if (descriptors.length && (wantsSwap || pointing) && !intent?.understood) return { kind: "swap", raw, ...spec };
-  if (intent?.understood) return { kind: "outfit", raw, intent };
+  if (intent?.understood) return { kind: "outfit", raw, intent, notes };
   // 沒講品類也沒講場合,但像在點名某一件(「穿哈利波特那件」「那件 Nike 的」):拿這段字去品名、標籤裡找;
   // 找不到的話,畫面那邊會退回「沒學過這個詞」
   if (phrase && (wantsSwap || pointing)) return { kind: "swap", raw, ...spec, byText: true };
@@ -858,6 +1019,10 @@ export function randomOutfit(items, weather = null) {
 /** @param taste 自己穿過、收藏過、嫌過的組合(taste.js 的 readTaste);沒給就只看規則
  *  回傳的 recalled = 這套是「回味」穿過、收藏過的組合(三成的推薦會這樣挑) */
 export function recommendOutfit(items, weather, wearLog, intent = null, locked = {}, avoid = null, taste = null) {
+  // 「不要外套」「不要短褲」:挑之前就排掉(鎖住的那件也一樣),理由裡講照做了哪些、哪些做不到
+  const exclusion = applyExclusions(items, locked, intent?.exclude);
+  items = exclusion.items;
+  locked = exclusion.locked;
   // 次數 ≥ 99 = 這件一定不要(「換一件上衣」時身上那件)
   const seen = (item, weight) => {
     const count = (avoid && item && avoid.get(item.id)) || 0;
@@ -1099,6 +1264,11 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
       reasons.push(`${why},搭${name}`);
     } else reasons.push(`${intent?.forceRainy ? "你說會下雨" : "會下雨"},加件${name}`);
   }
+  if (exclusion.applied.length) {
+    const cold = exclusion.noOuter && wantOuter ? `;體感 ${feel}° 本來會加件外套,怕冷就自己帶一件` : "";
+    reasons.push(`照你說的不要${exclusion.applied.join("、")}${cold}`);
+  }
+  reasons.push(...exclusion.notes);
   // 使用者自己說會下雨時,別報「降雨 80%」(那是被覆寫的假數字,和面板上的真預報打架);用「你說會下雨」誠實表述
   if (intent?.forceRainy) reasons.push("你說會下雨,記得帶傘");
   else if (weather.rainProb >= 50) reasons.push(`降雨 ${weather.rainProb}%,記得帶傘`);
