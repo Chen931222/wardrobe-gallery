@@ -311,7 +311,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
 
   /* ---------- 幾何:一件衣服在人台上的框(px) ---------- */
   // 身形量好了就照 src/dollLayout.js 的同一把尺擺(肩線對肩、腰線對腰、鞋底踩地);量不到照舊版槽位 contain。
-  // 框跟圖一樣比例,選取框、命中測試、✕ 都以它為準;縮放旋轉以框的中心為軸。
+  // 選取框、命中測試、✕ 都以這個框為準;縮放旋轉以框的中心為軸。框通常跟圖同比例,長褲太長時只壓高度(圖跟著拉伸,object-fit: fill)。
   // 這張圖量過就用;還沒量(縮圖剛換成原圖)先沿用這件上次量到的,不用先藏起來
   const shapeKnown = (slot, item) => {
     const shape = cachedShape(slot, fullImage(item));
@@ -1081,6 +1081,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
                   zIndex: isActive ? 900 : Math.round(layerOf(slot, item) * 10),
                   transform: p.scale !== 1 || p.rot ? `rotate(${p.rot}deg) scale(${p.scale})` : undefined,
                   transformOrigin: "50% 50%",
+                  objectFit: "fill",   // 長褲只壓高度時框跟圖不同比例,要拉伸;其他框跟圖同比例,fill 跟 contain 一樣
                   opacity: ready ? undefined : 0,
                 }}
               />

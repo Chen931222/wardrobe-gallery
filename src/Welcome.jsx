@@ -43,7 +43,7 @@ function MiniLook({ outfit }) {
             style={{
               left: `${(p.x / DOLL.w) * 100}%`, top: `${(p.y / DOLL.h) * 100}%`,
               width: `${(p.w / DOLL.w) * 100}%`, height: `${(p.h / DOLL.h) * 100}%`,
-              zIndex: SLOT_STYLE[slot].z, opacity: ready ? undefined : 0,
+              zIndex: SLOT_STYLE[slot].z, opacity: ready ? undefined : 0, objectFit: "fill",
             }}
           />
         );

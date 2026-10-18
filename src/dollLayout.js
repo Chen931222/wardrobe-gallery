@@ -5,7 +5,7 @@
 // 實測 104 件:舊版畫出來的上衣身寬 54–89、外套 78–104、褲子腰寬 29–62 人台單位,同一類差到快兩倍。
 // 新版:先量出每件的身形(src/garmentShape.js),再用同一把尺放:
 //   上衣、襯衫、外套 → 身寬畫成固定寬,肩線對到人台的肩
-//   褲子 → 腰寬畫成固定寬,腰線對到人台的腰;長度跟著照片走,短褲自然短、長褲到腳踝
+//   褲子 → 腰寬畫成固定寬,腰線對到人台的腰;長度跟著照片走,短褲自然短,長褲停在鞋面上方(不蓋住鞋)
 //   鞋 → 鞋長畫成固定長,鞋底踩在地上;包 → 包身畫成固定寬,掛在右腰
 // 量不到(圖還沒載入、讀不到透明度)和沒有標準值的格子(眼鏡、皮帶、手錶…)照舊版的框畫。
 import { measureShape } from "./garmentShape.js";
@@ -34,16 +34,25 @@ export const SLOT_STYLE = {
 
 // 量得到身形的格子用的那把尺(人台單位)。人台的軀幹(肩 y58 到胯下 y178)約 75cm,所以約 1.6 單位/cm;衣服照平鋪的真實尺寸換算:
 //   T 恤身寬約 50cm → 78(比 56 寬的軀幹寬,平放的衣服本來就比身體正面寬),長約 70cm,下擺落在胯下附近
-//   褲子腰寬平放約 40cm → 62,長褲約 100cm,從腰(y162)垂到腳踝;鞋長約 28cm → 46;包身約 28cm → 46
+//   褲子腰寬平放約 40cm → 62,從腰(y162)往下;鞋長約 28cm → 45;包身約 28cm → 44
 // key = 基準尺寸畫多寬(鞋是多長);x = 中線;y = 對齊線(肩/腰/鞋底/包頂);
 // height = 衣服本身(不含透明邊)的合理高度範圍:量歪了(去背破洞、袖子貼著身體)才不會畫成一條或蓋掉整個人
+// hem = 下擺最低到哪(長褲);outline = 整件連背帶最多多寬多高(包)
+//
+// 鞋是俯拍的一雙、直著畫,從地上往上佔 45 高,鞋面在 y292。長褲照真的長度會垂到腳踝、把鞋蓋掉一半(2026-10-19 本人:
+// 「長褲停在鞋面上方、不要蓋住鞋子」),所以下擺最低就到鞋面(驗收:原本多 3 會切到鞋尖)。真的長褲穿起來本來就停在鞋面上。
+// 半月包、斜背包的背帶攤開很長,只照包身算會甩出人台外(本人:「包連背帶一起限制大小」),所以連背帶整件再限一次。
+const FLOOR = 337;
+const SHOE_KEY = 45;
+const HEM_LINE = FLOOR - SHOE_KEY;   // 292 = 鞋面
+const MAX_SQUASH = 0.85;                 // 長褲太長時先只壓長度(腰寬不變),最多壓到 85%;還不夠才整件縮
 const TARGET = {
   upperbody:    { key: 78, x: 100, y: 58,  height: [88, 150] },
   shirt:        { key: 80, x: 100, y: 57,  height: [95, 165] },
   wholebody_up: { key: 86, x: 100, y: 56,  height: [95, 165] },
-  lowerbody:    { key: 62, x: 100, y: 162, height: [45, 166] },   // 166:腰 162 往下到腳踝 328,不蓋過腳
-  shoes:        { key: 48, x: 100, y: 337, height: [34, 60] },
-  bag:          { key: 46, x: 138, y: 150, height: [24, 85] },
+  lowerbody:    { key: 62, x: 100, y: 162, height: [45, 400], hem: HEM_LINE },
+  shoes:        { key: SHOE_KEY, x: 100, y: FLOOR, height: [34, 60] },
+  bag:          { key: 44, x: 140, y: 152, height: [24, 85], outline: [50, 62] },   // 50×62:連背帶不超過大腿那麼寬,背帶尾巴不甩出人台;後背包比較高,高度留多一點
 };
 export const MEASURED_SLOTS = Object.keys(TARGET);
 
@@ -60,6 +69,27 @@ export function baseBox(slot, shape, nat) {
       w *= f;
       h *= f;
     }
+    // 長褲:腰線以下的長度超過「腰到鞋面」就先只壓長度,壓到 85% 還不夠才整件縮(腰寬盡量不變)
+    let squash = 1;
+    if (target.hem) {
+      const below = (shape.by + shape.bh - shape.anchor) * h;
+      const room = target.hem - target.y;
+      if (below > room) {
+        const f = room / below;
+        squash = Math.max(MAX_SQUASH, f);
+        const shrink = f / squash;
+        w *= shrink;
+        h *= shrink;
+      }
+    }
+    // 包:整件(連背帶)超過上限就整件縮
+    if (target.outline) {
+      const [maxW, maxH] = target.outline;
+      const f = Math.min(1, maxW / (shape.bw * w), maxH / (shape.bh * h));
+      w *= f;
+      h *= f;
+    }
+    h *= squash;   // 只壓高度:框跟圖不再同比例,畫的時候要拉伸(object-fit: fill),不能 contain
     return { x: target.x - shape.axis * w, y: target.y - shape.anchor * h, w, h, auto: true };
   }
   const s = SLOT_STYLE[slot] || SLOT_STYLE.upperbody;
@@ -89,6 +119,8 @@ export function effectiveFit(slot, fit, shape, nat) {
   if (!fit) return { ...DEFAULT_FIT, v: FIT_VERSION };
   if (fit.v === FIT_VERSION) {
     const at = fit.at;
+    // 只調過層次(z)、沒拉過位置大小的,跟著新底框走,不用 at 釘在舊位置(驗收:不然改了版面它不跟著改)
+    if (!moved(fit)) return { ...DEFAULT_FIT, ...layer, v: FIT_VERSION };
     if (!at || !(at.w > 0)) return { ...DEFAULT_FIT, ...fit };
     const base = baseBox(slot, shape, nat);
     const cx = base.x + base.w / 2, cy = base.y + base.h / 2;
