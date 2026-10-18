@@ -6,6 +6,7 @@
 //
 // 顏色與字型直接讀站上的 CSS 變數,卡片跟網站同一個味道(印刷品,不是 AI 生圖)。
 
+import { DOLL, placeGarment, shapeFromImage } from "./dollLayout.js";
 import { fullImageOf } from "./useFullImage.js";
 
 const W = 1080, H = 1350, PAD = 80, CAPTION_H = 200;
@@ -158,16 +159,17 @@ function drawDoll(ctx, area, pieces, fits, slotStyle, theme) {
     .filter((p) => p.slot !== "socks" && slotStyle[p.slot])     // 襪子跟畫面上一樣不畫
     // 層次:這件自己調過(fit.z,2026-10-09)就照它,沒有就照槽位
     .sort((a, b) => (fits[a.item.id]?.z ?? slotStyle[a.slot].z) - (fits[b.item.id]?.z ?? slotStyle[b.slot].z));
+  // 跟搭配頁同一把尺(src/dollLayout.js):量身形、照肩線腰線擺,微調(位移、縮放、旋轉)以框中心為軸
+  const k = stage.w / DOLL.w;
   for (const { slot, item, img } of ordered) {
-    const s = slotStyle[slot];
-    const fit = fits[item.id] || { dx: 0, dy: 0, scale: 1, rot: 0 };
-    const box = {
-      x: stage.x + ((s.left + fit.dx) / 100) * stage.w,
-      y: stage.y + ((s.top + fit.dy) / 100) * stage.h,
-      w: (s.width / 100) * stage.w,
-      h: (s.height / 100) * stage.h,
-    };
-    drawFitted(ctx, img, box, { rot: fit.rot || 0, scale: fit.scale || 1, top: true, shadow: 0.18 });
+    const p = placeGarment(slot, shapeFromImage(img, slot), { w: img.naturalWidth, h: img.naturalHeight }, fits[item.id]);
+    ctx.save();
+    ctx.translate(stage.x + p.cx * k, stage.y + p.cy * k);
+    ctx.rotate((p.rot * Math.PI) / 180);
+    ctx.scale(p.scale, p.scale);
+    ctx.shadowColor = "rgba(0,0,0,0.18)"; ctx.shadowBlur = 30; ctx.shadowOffsetY = 14;
+    ctx.drawImage(img, -(p.w * k) / 2, -(p.h * k) / 2, p.w * k, p.h * k);
+    ctx.restore();
   }
 }
 

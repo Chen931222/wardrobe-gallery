@@ -4,29 +4,47 @@
 // 現在直接放一套示範穿搭穿在人台上、配今天的天氣(城市可以選,預設台中),一眼看懂;再講清楚加兩件就能配出第一套。
 // 示範用的是站主衣櫃的那一小份樣本(App 的 demoSample),不會多露出別的衣服。
 import { useEffect, useMemo, useRef, useState } from "react";
-import { SLOT_STYLE, Silhouette } from "./OutfitStudio.jsx";
+import { Silhouette } from "./OutfitStudio.jsx";
+import { DOLL, MEASURED_SLOTS, SLOT_STYLE, cachedShape, placeGarment, shapeFromImage } from "./dollLayout.js";
 import { fetchWeather, recommendOutfit } from "./recommend.js";
 import { CitySelect, useCity } from "./CitySelect.jsx";
 import { inAppBrowser, isIos, isStandalone } from "./keepSafe.js";
 
 const FALLBACK_WEATHER = { temp: null, feelsLike: 25, desc: "", rainProb: 0, tMax: 27, tMin: 22 };
 
-/** 一套穿搭穿在人台上,只看不能動。 */
+/** 一套穿搭穿在人台上,只看不能動。比例跟搭配頁同一把尺(src/dollLayout.js):圖載入時量身形,量好才顯示。 */
 function MiniLook({ outfit }) {
+  const [nats, setNats] = useState({});
+  const [, setTick] = useState(0);
   return (
     <div className="mini-look" role="img" aria-label={`示範穿搭:${Object.values(outfit).filter(Boolean).map((item) => item.name).join("、")}`}>
       <Silhouette />
       {Object.entries(outfit).map(([slot, item]) => {
-        const place = SLOT_STYLE[slot];
-        if (!item || !place || slot === "socks") return null;
+        if (!item || !SLOT_STYLE[slot] || slot === "socks") return null;
+        const src = item.thumbnail || item.image;   // 人台只有 128–240px 寬,縮圖(長邊 460px)就夠;原圖一張 ~150KB,新訪客第一眼要下載四張
+        const shape = cachedShape(slot, src);
+        const p = placeGarment(slot, shape ?? null, typeof nats[item.id] === "object" ? nats[item.id] : undefined, null);
+        const ready = nats[item.id] === "broken" || (Boolean(nats[item.id]) && (!MEASURED_SLOTS.includes(slot) || shape !== undefined));
         return (
           <img
             key={slot}
             className="studio-garment"
-            src={item.thumbnail || item.image /* 人台只有 128–240px 寬,縮圖(長邊 460px)就夠;原圖一張 ~150KB,新訪客第一眼要下載四張 */}
+            src={src}
             alt=""
             draggable={false}
-            style={{ left: `${place.left}%`, top: `${place.top}%`, width: `${place.width}%`, height: `${place.height}%`, zIndex: place.z }}
+            crossOrigin="anonymous"
+            onLoad={(event) => {
+              const img = event.currentTarget;
+              shapeFromImage(img, slot);
+              setNats((current) => ({ ...current, [item.id]: { w: img.naturalWidth, h: img.naturalHeight } }));
+              setTick((n) => n + 1);
+            }}
+            onError={() => setNats((current) => ({ ...current, [item.id]: "broken" }))}
+            style={{
+              left: `${(p.x / DOLL.w) * 100}%`, top: `${(p.y / DOLL.h) * 100}%`,
+              width: `${(p.w / DOLL.w) * 100}%`, height: `${(p.h / DOLL.h) * 100}%`,
+              zIndex: SLOT_STYLE[slot].z, opacity: ready ? undefined : 0,
+            }}
           />
         );
       })}

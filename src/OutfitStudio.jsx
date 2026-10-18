@@ -11,6 +11,7 @@ import { LookCard } from "./LookCard.jsx";
 import { PART_ORDER, PARTS } from "./parts.js";
 import { noteDislike, noteRecommendation, noteWear, readTaste, recoStats, unnoteWear } from "./taste.js";
 import { useFullImages } from "./useFullImage.js";
+import { DOLL, DEFAULT_FIT, FIT_VERSION, MEASURED_SLOTS, SLOT_STYLE, anchorOf, cachedShape, effectiveFit, placeGarment, shapeFromImage } from "./dollLayout.js";
 
 // 搭配工作室:把去背衣物疊在人形上組穿搭。
 //
@@ -25,35 +26,12 @@ const LOOKS_KEY = "open-wardrobe-looks-v1";
 const FIT_KEY = "open-wardrobe-fit-v1";
 const WEARING_KEY = "open-wardrobe-wearing-v1";   // 身上這套(槽位→id),刷新後還原
 const HISTORY_MAX = 5;                             // 復原最多退幾步
-const DEFAULT_FIT = { dx: 0, dy: 0, scale: 1, rot: 0 };
-const SCALE_MIN = 0.35, SCALE_MAX = 2.4;
+// 0.2–3.2:舊版的微調換算成新底框後,縮放可能落在 0.24–3.0(驗收實算),範圍太窄第一次縮放會跳一下
+const SCALE_MIN = 0.2, SCALE_MAX = 3.2;
 
-// 槽位 = 每件衣服的「起始位置」,使用者拖過之後以 fit 為準。
-export const SLOT_STYLE = {
-  socks:          { left: 35, top: 70,   width: 30, height: 12,   z: 2 },
-  // 鞋子是俯拍的一雙(長寬比 0.6~0.88,偏高),不是側視圖。原本又寬又扁的框會把
-  // 高筒鞋壓成 44px 寬的一條(旁邊短褲 144px)。改成窄而高,寬度才回得到 70~101px。
-  // 襪子跟著上移,維持「襪子在鞋子上方、不重疊」。
-  shoes:          { left: 36, top: 82,   width: 28, height: 18,   z: 3 },
-  lowerbody:      { left: 31, top: 51,   width: 38, height: 44,   z: 4 },
-  upperbody:      { left: 25, top: 16,   width: 50, height: 36,   z: 5 },
-  // 襯衫層(2026-10-08 本人:「有時候襯衫可以跟上衣一起搭配」):疊在上衣外面、外套裡面,框比上衣大一點(襯衫通常比較長)
-  shirt:          { left: 24, top: 15.5, width: 52, height: 38,   z: 6 },
-  // 2026-10-06 加的皮帶、項鍊、戒指、隨身小物(位置對著 Silhouette 的 200×340:腰 y≈165–178、脖子 y≈46–60、
-  // 右手下緣 y≈150–165、胸前口袋 x≈108–122)。皮帶壓在上衣下擺上面,不然整條被上衣蓋住;外套還是在它上面
-  belt:           { left: 34, top: 48.5, width: 32, height: 5.5,  z: 7 },
-  wholebody_up:   { left: 22, top: 14.5, width: 56, height: 42,   z: 8 },
-  necklace:       { left: 41, top: 15,   width: 18, height: 9,    z: 9 },
-  // 包的長寬比從 0.84(後背包)到 1.40(半月斜背包)都有。框開 38% 寬時全部都會
-  // 撐到 144px = 跟寬褲一樣寬,像揹了個行李箱。收到 26% 後一律渲染 98px 寬,
-  // 約寬褲的七成,才像掛在右腰的包。
-  bag:            { left: 54, top: 46,   width: 26, height: 19,   z: 10 },
-  eyewear:        { left: 38, top: 3.5,  width: 24, height: 8,    z: 11 },
-  wrist:          { left: 23, top: 41,   width: 15, height: 8,    z: 11 },
-  ring:           { left: 66, top: 44,   width: 8,  height: 5,    z: 11 },
-  carry:          { left: 56, top: 20,   width: 6,  height: 10,   z: 11 },
-  accessories_up: { left: 62, top: 1,    width: 30, height: 15,   z: 11 },
-};
+// 槽位、每件衣服畫在哪、多大:src/dollLayout.js(2026-10-18 改成先量身形再用同一把尺擺;搭配頁、歡迎畫面、分享圖共用)。
+// 這裡照舊匯出 SLOT_STYLE,給還在用的地方。
+export { SLOT_STYLE };
 
 /* 襯衫在衣櫃裡還是「上衣」(部位 upperbody),推薦引擎也照舊把它當上衣挑;只有搭配頁的人台另外給它一格。
    所以人台上「哪件放哪格」一律問 slotOf,不再直接用 item.part:
@@ -245,6 +223,10 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   const [fits, setFits] = useState(readFits);
   const [adjusting, setAdjusting] = useState(null);       // 選取中的槽位
   const [natSizes, setNatSizes] = useState({});            // itemId → {w,h} 圖片原始尺寸
+  const [, setShapeTick] = useState(0);                    // 量完一件的身形就重畫(身形存在 dollLayout 的快取裡)
+  const fitBaseRef = useRef(null);                         // 寫微調時拿「這件現在的微調」當底(舊版的換算成新版),每次 render 更新
+  const lastShapeRef = useRef(new Map());                  // 「格子|衣服 id」→ 上次量到的身形:縮圖換成原圖時沿用,不用先藏起來再出現
+  const [broken, setBroken] = useState(() => new Set());   // 載入失敗的圖:不等量身形,照舊版槽位顯示(至少看得到壞圖和 ✕)
   const stageRef = useRef(null);
   const dragRef = useRef(null);                            // { mode, itemId, ... }
   const alphaCache = useRef(new Map());                    // itemId → ctx(原始解析度) 供命中測試
@@ -285,8 +267,12 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   // 下一次合併就被當成「這台刪了」。寫完通知同步(5 秒後推)。
   const writeFit = useCallback((itemId, patch) => {
     const current = readFits();
-    const base = current[itemId] || DEFAULT_FIT;
-    const merged = { ...DEFAULT_FIT, ...base, ...(typeof patch === "function" ? patch(base) : patch) };
+    // 舊版存的微調是以舊槽位為底的:先換算成新版(畫面上的位置大小不變)再改,寫回去一律是新版(v: 2)
+    const resolved = fitBaseRef.current?.(itemId, current[itemId]);
+    if (!resolved) return;   // 不在人台上的衣服沒有底框可以對,不寫
+    const { fit: base, at } = resolved;
+    // at:寫入當下的底框,之後底框變了(圖量到了、換裝置)照它補回來,位置大小不跑
+    const merged = { ...DEFAULT_FIT, ...base, ...(typeof patch === "function" ? patch(base) : patch), v: FIT_VERSION, at };
     const next = { ...current, [itemId]: merged };
     if (merged.dx === 0 && merged.dy === 0 && merged.scale === 1 && merged.rot === 0 && merged.z == null) delete next[itemId];
     try { localStorage.setItem(FIT_KEY, JSON.stringify(next)); } catch { /* 存不了就只在這次畫面上生效 */ }
@@ -323,34 +309,42 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   useIndexIndicator(rackNavRef, rackLineRef, [stripType, rackTabsKey]);
   const fullImage = useFullImages(wornItems);   // 人台上的用原圖(自己加的衣服清單裡是縮圖)
 
-  /* ---------- 幾何:算出一件衣服「未旋轉縮放前」的內容框(px) ---------- */
-  // 圖片以 object-fit: contain、object-position: center top 放進槽位框,
-  // 這裡把 contain 的結果算出來,選取框和命中測試都以它為基準。
-  const contentGeometry = useCallback((slot, item) => {
+  /* ---------- 幾何:一件衣服在人台上的框(px) ---------- */
+  // 身形量好了就照 src/dollLayout.js 的同一把尺擺(肩線對肩、腰線對腰、鞋底踩地);量不到照舊版槽位 contain。
+  // 框跟圖一樣比例,選取框、命中測試、✕ 都以它為準;縮放旋轉以框的中心為軸。
+  // 這張圖量過就用;還沒量(縮圖剛換成原圖)先沿用這件上次量到的,不用先藏起來
+  const shapeKnown = (slot, item) => {
+    const shape = cachedShape(slot, fullImage(item));
+    if (shape !== undefined) { lastShapeRef.current.set(`${slot}|${item.id}`, shape); return true; }
+    return lastShapeRef.current.has(`${slot}|${item.id}`);
+  };
+  const shapeOf = (slot, item) => {
+    const shape = cachedShape(slot, fullImage(item));
+    return shape !== undefined ? shape : (lastShapeRef.current.get(`${slot}|${item.id}`) ?? null);
+  };
+  const placementOf = (slot, item) => placeGarment(slot, shapeOf(slot, item), natSizes[item.id], fits[item.id]);
+  fitBaseRef.current = (itemId, raw) => {
+    const entry = Object.entries(wearing).find(([, worn]) => worn?.id === itemId);
+    if (!entry) return null;
+    const [slot, item] = entry;
+    const shape = shapeOf(slot, item), nat = natSizes[itemId];
+    return { fit: effectiveFit(slot, raw, shape, nat), at: anchorOf(slot, shape, nat) };
+  };
+  const contentGeometry = (slot, item) => {
     const stage = stageRef.current;
-    const nat = natSizes[item.id];
-    if (!stage || !nat) return null;
+    if (!stage || !natSizes[item.id]) return null;
     const rect = stage.getBoundingClientRect();
-    const fit = fitOf(item);
-    const s = SLOT_STYLE[slot];
-    const boxX = (rect.width * (s.left + fit.dx)) / 100;
-    const boxY = (rect.height * (s.top + fit.dy)) / 100;
-    const boxW = (rect.width * s.width) / 100;
-    const boxH = (rect.height * s.height) / 100;
-    const ar = nat.w / nat.h;
-    let cw, ch;
-    if (ar > boxW / boxH) { cw = boxW; ch = boxW / ar; } else { ch = boxH; cw = boxH * ar; }
+    const p = placementOf(slot, item);
+    const kx = rect.width / DOLL.w, ky = rect.height / DOLL.h;
     return {
       rect,
-      cx: boxX + boxW / 2,          // 內容中心 x(object-position: center)
-      cy: boxY + ch / 2,            // 內容中心 y(object-position: top → 內容貼齊框頂)
-      cw, ch,
-      scale: fit.scale,
-      rot: fit.rot || 0,
-      contentTopInBox: 0,
-      boxW,
+      cx: p.cx * kx, cy: p.cy * ky,
+      cw: p.w * kx, ch: p.h * ky,
+      scale: p.scale, rot: p.rot,
+      boxW: p.w * kx,
+      placement: p,
     };
-  }, [natSizes, fitOf]);
+  };
 
   /* ---------- 像素命中測試:點到哪一件? ---------- */
   const alphaAt = (item, nx, ny) => {
@@ -405,12 +399,13 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     const item = wearing[slot];
     const g = contentGeometry(slot, item);
     if (!g) return;
-    const fit = fitOf(item);
+    const { fit, base } = g.placement;
     dragRef.current = {
       mode, slot, itemId: item.id,
       startX: event.clientX, startY: event.clientY,
       base: { ...fit },
-      chPct: (g.ch / g.rect.height) * 100,   // 內容高(%),算內容中心用
+      // 底框(沒拖過時)的中心,人台的 %:拖曳時把中心限制在框內
+      baseCenter: { x: ((base.x + base.w / 2) / DOLL.w) * 100, y: ((base.y + base.h / 2) / DOLL.h) * 100 },
       center: { x: g.rect.left + g.cx, y: g.rect.top + g.cy },
       rect: g.rect,
     };
@@ -439,14 +434,13 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     const drag = dragRef.current;
     if (!drag) return;
     if (drag.mode === "move") {
-      // 衣服只能在框裡拖(2026-10-09 本人):內容中心留在框內 4%–96%,不會拖到框外、蓋到下面的按鈕
-      const s = SLOT_STYLE[drag.slot];
+      // 衣服只能在框裡拖(2026-10-09 本人):中心留在框內 4%–96%,不會拖到框外、蓋到下面的按鈕
       const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
       const dx = drag.base.dx + ((event.clientX - drag.startX) / drag.rect.width) * 100;
       const dy = drag.base.dy + ((event.clientY - drag.startY) / drag.rect.height) * 100;
       writeFit(drag.itemId, {
-        dx: clamp(dx, 4 - s.left - s.width / 2, 96 - s.left - s.width / 2),
-        dy: clamp(dy, 4 - s.top - drag.chPct / 2, 96 - s.top - drag.chPct / 2),
+        dx: clamp(dx, 4 - drag.baseCenter.x, 96 - drag.baseCenter.x),
+        dy: clamp(dy, 4 - drag.baseCenter.y, 96 - drag.baseCenter.y),
       });
     } else if (drag.mode === "scale") {
       const d0 = Math.hypot(drag.startX - drag.center.x, drag.startY - drag.center.y) || 1;
@@ -1057,40 +1051,37 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
           <div className="studio-garments">
           {Object.entries(wearing).map(([slot, item]) => {
             if (!item || slot === "socks") return null;   // 襪子不畫在人形上(浮在短褲和鞋中間很假),改用下面一行字
-            const s = SLOT_STYLE[slot];
-            const fit = fitOf(item);
-            const nat = natSizes[item.id];
-            // 旋轉/縮放的軸心 = 內容中心。內容貼齊框頂置中,所以軸心在 (框寬/2, 內容高/2)。
-            let origin;
-            if (nat && stageRef.current) {
-              const rect = stageRef.current.getBoundingClientRect();
-              const boxW = (rect.width * s.width) / 100, boxH = (rect.height * s.height) / 100;
-              const ar = nat.w / nat.h;
-              const ch = ar > boxW / boxH ? boxW / ar : boxH;
-              origin = `50% ${ch / 2}px`;
-            }
+            const src = fullImage(item);
+            const p = placementOf(slot, item);
+            // 圖載入、要量身形的格子量好之前先不顯示:不然先畫在舊槽位,量完跳一下。載入失敗的照舊顯示
+            const ready = broken.has(src) || (Boolean(natSizes[item.id]) && (!MEASURED_SLOTS.includes(slot) || shapeKnown(slot, item)));
             const isActive = adjusting === slot;
             return (
               <img
                 key={slot}
                 data-item={item.id}
                 className={`studio-garment${isActive ? " is-adjusting" : ""}${adjusting && !isActive ? " is-dimmed" : ""}`}
-                src={fullImage(item)}
+                src={src}
                 alt={item.name || SLOT_LABEL[slot]}
                 draggable={false}
                 crossOrigin="anonymous"
                 onLoad={(event) => {
-                  const { naturalWidth: w, naturalHeight: h } = event.currentTarget;
-                  setNatSizes((current) => (current[item.id]?.w === w ? current : { ...current, [item.id]: { w, h } }));
+                  const img = event.currentTarget;
+                  shapeFromImage(img, slot);
+                  const { naturalWidth: w, naturalHeight: h } = img;
+                  setNatSizes((current) => (current[item.id]?.w === w && current[item.id]?.h === h ? current : { ...current, [item.id]: { w, h } }));
+                  setShapeTick((n) => n + 1);
                 }}
+                onError={() => setBroken((current) => (current.has(src) ? current : new Set(current).add(src)))}
                 style={{
-                  left: `${s.left + fit.dx}%`,
-                  top: `${s.top + fit.dy}%`,
-                  width: `${s.width}%`,
-                  height: `${s.height}%`,
+                  left: `${(p.x / DOLL.w) * 100}%`,
+                  top: `${(p.y / DOLL.h) * 100}%`,
+                  width: `${(p.w / DOLL.w) * 100}%`,
+                  height: `${(p.h / DOLL.h) * 100}%`,
                   zIndex: isActive ? 900 : Math.round(layerOf(slot, item) * 10),
-                  transform: fit.scale !== 1 || fit.rot ? `rotate(${fit.rot || 0}deg) scale(${fit.scale})` : undefined,
-                  transformOrigin: origin,
+                  transform: p.scale !== 1 || p.rot ? `rotate(${p.rot}deg) scale(${p.scale})` : undefined,
+                  transformOrigin: "50% 50%",
+                  opacity: ready ? undefined : 0,
                 }}
               />
             );
