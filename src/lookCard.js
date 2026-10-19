@@ -6,7 +6,7 @@
 //
 // 顏色與字型直接讀站上的 CSS 變數,卡片跟網站同一個味道(印刷品,不是 AI 生圖)。
 
-import { DOLL, placeGarment, shapeFromImage } from "./dollLayout.js";
+import { DOLL, DOLL_SHAPES, placeGarment, shapeFromImage } from "./dollLayout.js";
 import { fullImageOf } from "./useFullImage.js";
 
 const W = 1080, H = 1350, PAD = 80, CAPTION_H = 200;
@@ -50,19 +50,6 @@ function loadImage(src) {
 function seededTilt(id, range = 3) {
   const hash = [...String(id)].reduce((total, ch) => total + ch.charCodeAt(0), 0);
   return (hash % (range * 2 + 1)) - range;
-}
-
-function roundRect(ctx, x, y, w, h, r) {
-  if (typeof ctx.roundRect === "function") { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill(); return; }
-  const rr = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + rr, y);
-  ctx.arcTo(x + w, y, x + w, y + h, rr);
-  ctx.arcTo(x + w, y + h, x, y + h, rr);
-  ctx.arcTo(x, y + h, x, y, rr);
-  ctx.arcTo(x, y, x + w, y, rr);
-  ctx.closePath();
-  ctx.fill();
 }
 
 /** 把圖以 contain 放進框裡;top=true 時貼齊框頂(和紙娃娃一樣),旋轉/縮放軸心=內容中心。 */
@@ -130,19 +117,14 @@ function drawFlatlay(ctx, area, pieces) {
 
 const DOLL_VIEW = { w: 200, h: 340 };
 
+// 人台輪廓跟搭配頁同一組(src/dollLayout.js 的 DOLL_SHAPES),用 Path2D 畫
 function drawSilhouette(ctx, stage, color) {
   const s = stage.w / DOLL_VIEW.w;
   ctx.save();
   ctx.translate(stage.x, stage.y);
   ctx.scale(s, s);
   ctx.fillStyle = color;
-  ctx.beginPath(); ctx.arc(100, 28, 20, 0, Math.PI * 2); ctx.fill();
-  roundRect(ctx, 92, 46, 16, 14, 5);
-  roundRect(ctx, 72, 58, 56, 120, 18);
-  roundRect(ctx, 52, 66, 18, 95, 9);
-  roundRect(ctx, 130, 66, 18, 95, 9);
-  roundRect(ctx, 78, 170, 19, 160, 9);
-  roundRect(ctx, 103, 170, 19, 160, 9);
+  for (const d of DOLL_SHAPES) ctx.fill(new Path2D(d));
   ctx.restore();
 }
 

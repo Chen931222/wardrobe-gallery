@@ -11,7 +11,7 @@ import { LookCard } from "./LookCard.jsx";
 import { PART_ORDER, PARTS } from "./parts.js";
 import { noteDislike, noteRecommendation, noteWear, readTaste, recoStats, unnoteWear } from "./taste.js";
 import { useFullImages } from "./useFullImage.js";
-import { DOLL, DEFAULT_FIT, FIT_VERSION, MEASURED_SLOTS, SLOT_STYLE, anchorOf, cachedShape, effectiveFit, placeGarment, shapeFromImage } from "./dollLayout.js";
+import { DOLL, DOLL_SHAPES, DEFAULT_FIT, FIT_VERSION, MEASURED_SLOTS, SLOT_STYLE, anchorOf, cachedShape, effectiveFit, placeGarment, shapeFromImage } from "./dollLayout.js";
 
 // 搭配工作室:把去背衣物疊在人形上組穿搭。
 //
@@ -104,17 +104,12 @@ function useMedia(query) {
 const clampScale = (value) => Math.min(SCALE_MAX, Math.max(SCALE_MIN, value));
 const deg = (rad) => (rad * 180) / Math.PI;
 
+// 人台輪廓:形狀在 src/dollLayout.js(DOLL_SHAPES),分享圖、歡迎畫面、Node 工具畫同一組
 export function Silhouette() {
   return (
-    <svg className="studio-doll" viewBox="0 0 200 340" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <svg className="studio-doll" viewBox={`0 0 ${DOLL.w} ${DOLL.h}`} xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <g fill="var(--doll)">
-        <circle cx="100" cy="28" r="20" />
-        <rect x="92" y="46" width="16" height="14" rx="5" />
-        <rect x="72" y="58" width="56" height="120" rx="18" />
-        <rect x="52" y="66" width="18" height="95" rx="9" />
-        <rect x="130" y="66" width="18" height="95" rx="9" />
-        <rect x="78" y="170" width="19" height="160" rx="9" />
-        <rect x="103" y="170" width="19" height="160" rx="9" />
+        {DOLL_SHAPES.map((d) => <path key={d.slice(0, 12)} d={d} />)}
       </g>
     </svg>
   );
@@ -826,7 +821,9 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
         for (const slot of slots) next[slot] = null;
         return next;
       });
-      const reason = !had.length ? `身上本來就沒穿${names(slots)}`
+      // 人台整個空著就說「不要外套」(訪客一進來常這樣試):照實講之外,指一條路,不然這句回完就沒下文(評審:回饋比承諾小)
+      const bare = !Object.values(wearing).some(Boolean);
+      const reason = !had.length ? `身上本來就沒穿${names(slots)}${bare ? ",也還沒穿別的;說個場合(例如「上課,不要外套」)我挑一整套" : ""}`
         : missing.length ? `${names(had)}拿掉了;身上本來就沒穿${names(missing)}` : `${names(had)}拿掉了`;
       setDaily({ understood: `脫掉${names(slots)}`, reasons: [reason] });
       return;

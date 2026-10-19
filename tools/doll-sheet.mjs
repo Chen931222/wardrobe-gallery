@@ -10,7 +10,7 @@ import { readFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { measureShape } from "../src/garmentShape.js";
 import { pathToFileURL } from "node:url";
-import { baseBox, DOLL } from "../src/dollLayout.js";
+import { baseBox, DOLL, dollMarkup } from "../src/dollLayout.js";
 
 const OUT = process.argv[2] || "work/doll-sheet";
 const before = process.argv[3] ? await import(pathToFileURL(process.argv[3]).href) : null;   // 對照版的 dollLayout(有給才用)
@@ -22,11 +22,7 @@ const slotOf = (item) => (item.part === "upperbody" && /襯衫/.test(item.name |
 const Z = { socks: 2, shoes: 3, lowerbody: 4, upperbody: 5, shirt: 6, wholebody_up: 8, bag: 10 };
 
 const DOLL_SVG = (label) => Buffer.from(`<svg width="${W}" height="${H + 40}" viewBox="0 0 ${DOLL.w} ${DOLL.h + 20}" xmlns="http://www.w3.org/2000/svg">
-<rect width="${DOLL.w}" height="${DOLL.h + 20}" fill="#f2ead9"/><g fill="#e3d7bf">
-<circle cx="100" cy="28" r="20"/><rect x="92" y="46" width="16" height="14" rx="5"/>
-<rect x="72" y="58" width="56" height="120" rx="18"/><rect x="52" y="66" width="18" height="95" rx="9"/>
-<rect x="130" y="66" width="18" height="95" rx="9"/><rect x="78" y="170" width="19" height="160" rx="9"/>
-<rect x="103" y="170" width="19" height="160" rx="9"/></g>
+<rect width="${DOLL.w}" height="${DOLL.h + 20}" fill="#f2ead9"/><g fill="#e3d7bf">${dollMarkup()}</g>
 <text x="100" y="${DOLL.h + 14}" font-size="9" text-anchor="middle" fill="#3b322a" font-family="sans-serif">${label}</text></svg>`);
 
 const cache = new Map();
