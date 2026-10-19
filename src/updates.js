@@ -151,8 +151,9 @@ export const UPDATES = [
 
 const SEEN_KEY = "open-wardrobe-updates-seen-v1";
 
-// 看過的標記 = 最新一則的日期＋條數:同一天又加了一條,也會再亮(2026-10-08 當天就加了搜尋和同一款兩條)
-const latestMark = () => `${UPDATES[0].date}#${UPDATES[0].items.length}`;
+// 看過的標記 = 最新一則的日期＋標題:同一天又加一則也會再亮。以前用「日期＋條數」,2026-10-19 一天三則,
+// 第一則和第三則剛好都 4 條,看過第一則、沒看過第二則的人,第三則上線時不會亮(驗收)。舊格式的標記一定對不上,會再亮一次
+const latestMark = () => `${UPDATES[0].date}#${UPDATES[0].title}`;
 
 /** 有沒有還沒看過的公告;讀不到儲存(無痕、被擋)就當看過,不要一直亮點 */
 export function hasUnseenUpdates() {

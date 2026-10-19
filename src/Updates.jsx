@@ -22,7 +22,7 @@ export function UpdatesSheet({ onClose }) {
           <p className="updates-lede">最近改了什麼,新的在上面。{year} 年。</p>
           <ol className="updates-list">
             {UPDATES.map((update) => (
-              <li key={update.date}>
+              <li key={`${update.date}#${update.title}`}>
                 <h3 className="updates-head">
                   <time dateTime={update.date}>{shortDate(update.date)}</time>
                   <span>{update.title}</span>

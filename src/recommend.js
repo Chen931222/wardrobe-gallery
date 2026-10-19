@@ -475,16 +475,22 @@ function shortName(name, max = 14) {
   let cut = text.slice(0, max);
   const open = Math.max(cut.lastIndexOf("("), cut.lastIndexOf("（"));
   if (open > 0 && cut.indexOf(")", open) < 0 && cut.indexOf("）", open) < 0) cut = cut.slice(0, open);
-  return `${cut.replace(/[\s(（【\[]+$/, "")}…`;
+  cut = cut.replace(/[\s(（【\[]+$/, "");
+  // 截掉的只是最後的品牌括號(「黑色真皮厚底休閒鞋(TOD'S)」)就不加「…」:名字是完整的,加了像後面還有字
+  return /^\s*[(（][^()（）]*[)）]\s*$/.test(text.slice(cut.length)) ? cut : `${cut}…`;
 }
 
-/** 一件單品最先命中的風格線索(給理由面板用,讓評分不是黑盒)。 */
-function cueHit(item) {
+/** 一件單品命中的風格線索:正式、運動、休閒各取最先命中的那個字(給理由面板用,讓評分不是黑盒)。 */
+export function cueHits(item) {
   const text = styleText(item);
   const find = (list, kind) => { const w = list.find((k) => text.includes(k.toLowerCase())); return w ? { w, kind } : null; };
   // 短褲再怎麼樣都不算正式:場合評分本來就扣短褲,說法要跟著一致
   const formal = /短褲|shorts/.test(itemText(item)) ? null : find(FORMAL_CUES, "正式");
-  return formal || find(SPORTY_CUES, "運動") || find(CASUAL_CUES, "休閒") || null;
+  return [formal, find(SPORTY_CUES, "運動"), find(CASUAL_CUES, "休閒")].filter(Boolean);
+}
+/** 只要一個的時候:正式優先,再來運動、休閒 */
+function cueHit(item) {
+  return cueHits(item)[0] || null;
 }
 
 /* 線索詞的中文說法:給理由面板看,不影響比對 */
@@ -1490,12 +1496,18 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
   // 會讓人停下來懷疑分類),另外回傳 details,畫面收在「怎麼判斷的」裡,點開才看到
   const details = [];
   if (intent?.formality) {
-    details.push("照名字和標籤裡的字判斷:看到「襯衫」「西裝」「皮鞋」這類算偏正式,「球衣」「運動」「慢跑」算偏運動,「牛仔」「短褲」「T 恤」算偏休閒");
+    details.push("照名字和標籤裡的字判斷:看到「襯衫」「西裝」「皮鞋」這類算偏正式,「球衣」「運動」「慢跑」算偏運動,「牛仔」「短褲」「T 恤」算偏休閒;一件兩種都有,兩邊都算");
     for (const it of [...chosen, outfit.shoes].filter(Boolean)) {
-      const hit = cueHit(it);
+      const hits = cueHits(it);
       const short = shortName(it.name);
       // 線索詞有一半是英文標籤(leather、tee),畫面上換成中文(審查 F50)
-      details.push(hit ? `「${short}」偏${hit.kind}:名字或標籤裡有「${CUE_ZH[hit.w] || hit.w}」` : `「${short}」看不出偏哪一種,照天氣和顏色挑的`);
+      const zh = (hit) => `「${CUE_ZH[hit.w] || hit.w}」`;
+      // 命中兩種以上就把證據都列出來、不下結論:評分本來就兩邊都算(intentItemScore)。以前只講第一個,
+      // 「黑色真皮厚底休閒鞋」標籤有 leather 也有 sneakers,畫面只寫「偏正式:有皮革」,跟名字打架(2026-10-19 驗收)。
+      // 104 件裡有 20 件是兩種都有(白色棉質長袖襯衫:襯衫＋棉),寫「都沾一點」白襯衫會很怪,所以只列哪個字偏哪邊
+      details.push(!hits.length ? `「${short}」看不出偏哪一種,照天氣和顏色挑的`
+        : hits.length === 1 ? `「${short}」偏${hits[0].kind}:名字或標籤裡有${zh(hits[0])}`
+          : `「${short}」${hits.length === 2 ? "兩邊" : "三種"}都有:${hits.map((hit) => `${zh(hit)}偏${hit.kind}`).join("、")}`);
     }
   }
 

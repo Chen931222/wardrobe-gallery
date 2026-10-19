@@ -229,7 +229,13 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   const [broken, setBroken] = useState(() => new Set());   // 載入失敗的圖:不等量身形,照舊版槽位顯示(至少看得到壞圖和 ✕)
   const stageRef = useRef(null);
   const dragRef = useRef(null);                            // { mode, itemId, ... }
-  const alphaCache = useRef(new Map());                    // itemId → ctx(原始解析度) 供命中測試
+  const alphaCache = useRef(new Map());                    // itemId → ctx(長邊最多 256px) 供命中測試、✕ 找空位
+
+  // 脫掉的那件不留像素快取
+  useEffect(() => {
+    const worn = new Set(Object.values(wearing).filter(Boolean).map((item) => item.id));
+    for (const id of alphaCache.current.keys()) if (!worn.has(id)) alphaCache.current.delete(id);
+  }, [wearing]);
 
   // 入口頁按「穿這套」帶進來的推薦穿搭,直接套上人形
   useEffect(() => {
@@ -353,17 +359,20 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     if (ctx === undefined) {
       ctx = null;
       const img = stageRef.current?.querySelector(`img[data-item="${item.id}"]`);
-      if (img && img.complete && img.naturalWidth) {
-        try {
-          const canvas = document.createElement("canvas");
-          canvas.width = img.naturalWidth;
-          canvas.height = img.naturalHeight;
-          const c = canvas.getContext("2d", { willReadFrequently: true });
-          c.drawImage(img, 0, 0);
-          c.getImageData(0, 0, 1, 1);      // 先讀一次,若跨域污染會在這裡丟例外
-          ctx = c;
-        } catch { ctx = null; }
-      }
+      // 還沒載入完先當不透明、不快取:✕ 的位置在畫面一出來就會問,這時快取成 null 會一直讀不到(2026-10-19)
+      if (!img || !img.complete || !img.naturalWidth) return 255;
+      try {
+        // 縮到長邊 256px 就夠判斷有沒有衣服:原圖大小(約 1400×1300)每件 7MB,穿過的全留著,
+        // 隨機 25 套多吃 120MB,手機 Safari 會爆(2026-10-19 驗收)
+        const k = Math.min(1, 256 / Math.max(img.naturalWidth, img.naturalHeight));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.naturalWidth * k));
+        canvas.height = Math.max(1, Math.round(img.naturalHeight * k));
+        const c = canvas.getContext("2d", { willReadFrequently: true });
+        c.drawImage(img, 0, 0, canvas.width, canvas.height);
+        c.getImageData(0, 0, 1, 1);      // 先讀一次,若跨域污染會在這裡丟例外
+        ctx = c;
+      } catch { ctx = null; }
       alphaCache.current.set(item.id, ctx);
     }
     if (!ctx) return 255;                  // 讀不到就當不透明,退化成矩形判定
@@ -1090,28 +1099,69 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
 
           </div>
 
-          {/* 每件右上一個 ✕,點了脫掉(2026-10-09 本人)。正在調整的那件不放(四角是縮放把手),改用下面工具列的「脫掉這件」 */}
-          {Object.entries(wearing).map(([slot, item]) => {
-            if (!item || slot === "socks" || slot === adjusting) return null;
-            const g = contentGeometry(slot, item);
-            if (!g) return null;
-            const x = Math.min(g.rect.width - 14, Math.max(14, g.cx + (g.cw * g.scale) / 2 - 6));
-            const y = Math.min(g.rect.height - 14, Math.max(14, g.cy - (g.ch * g.scale) / 2 + 6));
-            return (
-              <button
-                key={`x-${slot}`}
-                type="button"
-                className="studio-garment-remove"
-                style={{ left: `${x}px`, top: `${y}px` }}
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={() => toggleWear(item)}
-                aria-label={`脫掉${item.name || SLOT_LABEL[slot]}`}
-                title={`脫掉${item.name || SLOT_LABEL[slot]}`}
-              >
-                <X size={12} weight="bold" aria-hidden="true" />
-              </button>
-            );
-          })}
+          {/* 每件一個 ✕,點了脫掉(2026-10-09 本人)。正在調整的那件不放(四角是縮放把手),改用下面工具列的「脫掉這件」。
+              先放右上角;那裡被畫在上面的衣服蓋住、或離別顆 ✕ 太近,就換左上、右下、左下、中線(2026-10-19 驗收:包掛右腰,
+              剛好在長褲右上角,長褲的 ✕ 落在包身上,看起來像包有兩顆)。上層的先挑。框用量到的衣服範圍,不含照片四周的透明邊 */}
+          {(() => {
+            const worn = Object.entries(wearing).flatMap(([slot, item]) => {
+              if (!item || slot === "socks") return [];
+              const g = contentGeometry(slot, item);
+              if (!g) return [];
+              const shape = MEASURED_SLOTS.includes(slot) ? shapeOf(slot, item) : null;
+              const w = g.cw * g.scale, h = g.ch * g.scale;
+              const bx = shape?.bx ?? 0, by = shape?.by ?? 0, bw = shape?.bw ?? 1, bh = shape?.bh ?? 1;
+              return [{
+                slot, item, g, z: layerOf(slot, item),
+                box: { l: g.cx + (bx - 0.5) * w, r: g.cx + (bx + bw - 0.5) * w, t: g.cy + (by - 0.5) * h, b: g.cy + (by + bh - 0.5) * h },
+              }];
+            });
+            // 這一點上那件有沒有衣服:看原圖的像素(✕ 中心和上下左右 12px,按鈕本身約 26–32px)。
+            // 不用量到的框:它會把稀疏的袖口、下擺、包帶修掉(驗收:短褲的 ✕ 壓在 T 恤下擺)。讀不到像素時 alphaAt 回 255,整張圖都當有衣服
+            const opaqueAt = ({ item, g }, px, py) => {
+              const rad = (-g.rot * Math.PI) / 180, dx = px - g.cx, dy = py - g.cy;
+              const nx = (dx * Math.cos(rad) - dy * Math.sin(rad)) / (g.cw * g.scale) + 0.5;
+              const ny = (dx * Math.sin(rad) + dy * Math.cos(rad)) / (g.ch * g.scale) + 0.5;
+              if (nx < 0 || nx > 1 || ny < 0 || ny > 1) return false;
+              return alphaAt(item, nx, ny) > 12;
+            };
+            // 調整中那件的四角把手、旋轉手把也算佔位:別件的 ✕ 不要蓋在上面(驗收:舊版就有 9–31% 的選取會蓋到)
+            const placed = [];
+            if (frame) {
+              const fx = frame.left + frame.width / 2, fy = frame.top + frame.height / 2, rad = (frame.rot * Math.PI) / 180;
+              const spots = [[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]].map(([a, c]) => [a * frame.width, c * frame.height]);
+              for (const [dx, dy] of [...spots, [0, -frame.height / 2 - 22]]) {
+                placed.push([fx + dx * Math.cos(rad) - dy * Math.sin(rad), fy + dx * Math.sin(rad) + dy * Math.cos(rad)]);
+              }
+            }
+            return worn.filter((entry) => entry.slot !== adjusting).sort((a, b) => b.z - a.z).map(({ slot, item, g, z, box }) => {
+              // 四個角都被蓋住(疊了外套、放大)就試中線:敞開的外套中間還看得到裡面那件。
+              // 離框邊至少 18px:手機的 ✕ 是 32px,人台框還有 1px 邊(鞋踩在框底,只夾 14 會超出 1–3px)
+              const mx = (box.l + box.r) / 2, my = (box.t + box.b) / 2;
+              const corners = [[box.r - 6, box.t + 6], [box.l + 6, box.t + 6], [box.r - 6, box.b - 6], [box.l + 6, box.b - 6],
+                [mx, box.b - 10], [mx, my], [mx, box.t + 10], [box.r - 6, my], [box.l + 6, my]]
+                .map(([cx, cy]) => [Math.min(g.rect.width - 18, Math.max(18, cx)), Math.min(g.rect.height - 18, Math.max(18, cy))]);
+              const covered = ([cx, cy]) => worn.some((other) => other.z > z
+                && [[0, 0], [-12, 0], [12, 0], [0, -12], [0, 12]].some(([dx, dy]) => opaqueAt(other, cx + dx, cy + dy)));
+              const crowded = ([cx, cy]) => placed.some(([px, py]) => Math.hypot(px - cx, py - cy) < 36);
+              const cost = (corner) => (covered(corner) ? 1 : 0) + (crowded(corner) ? 2 : 0);
+              const [x, y] = corners.reduce((best, corner) => (cost(corner) < cost(best) ? corner : best));
+              placed.push([x, y]);
+              return (
+                <button
+                  key={`x-${slot}`}
+                  type="button"
+                  className="studio-garment-remove"
+                  style={{ left: `${x}px`, top: `${y}px` }}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => toggleWear(item)}
+                  aria-label={`脫掉${item.name || SLOT_LABEL[slot]}`}
+                  title={`脫掉${item.name || SLOT_LABEL[slot]}`}
+                >
+                  <X size={12} weight="bold" aria-hidden="true" />
+                </button>
+              );
+            });
+          })()}
 
           {frame && (
             <div
