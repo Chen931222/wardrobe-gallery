@@ -656,7 +656,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       if (lockedStudio.shirt && lockedStudio.upperbody) studioOutfit.shirt = lockedStudio.shirt;
       setWearing(studioOutfit);
       setDaily({
-        weather, reasons: result.reasons,
+        weather, reasons: result.reasons, details: result.details || [],
         understood: unknownRaw ? `沒學過「${unknownRaw}」,先照天氣挑` : (intent?.understood || null),
         sticky: Boolean(intent?.understood),   // 這個場合會被「再推薦一套」沿用,所以給一個 ✕ 可以清掉
       });
@@ -1247,10 +1247,12 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
                   </p>
                 )}
                 {(() => {
-                  // 一句一行才讀得下去(舊版全用「·」串成一坨,手機上七行擠在一起);
-                  // 「看到的線索」是透明化細節,獨立成一條較淡的小字,不跟主要理由搶。
-                  const clue = daily.reasons.find((reason) => reason.startsWith("看到的線索"));
-                  const main = daily.reasons.filter((reason) => reason !== clue);
+                  // 一句一行才讀得下去(舊版全用「·」串成一坨,手機上七行擠在一起)。
+                  // 每件偏正式還是休閒的判斷(details)收在「怎麼判斷的」裡,點開才看到(2026-10-19 評論:主畫面讀起來像內部規則)。
+                  // 舊的「看到的線索」(存著的那套帶進來的)也一起收進去
+                  const legacyClue = (daily.reasons || []).find((reason) => reason.startsWith("看到的線索"));
+                  const main = (daily.reasons || []).filter((reason) => reason !== legacyClue);
+                  const details = daily.details?.length ? daily.details : legacyClue ? [legacyClue.replace(/^看到的線索:/, "")] : [];
                   return (
                     <>
                       {!!main.length && (
@@ -1258,7 +1260,14 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
                           {main.map((reason, index) => <li key={index}>{reason}</li>)}
                         </ul>
                       )}
-                      {clue && <p className="studio-daily-clue">{clue}</p>}
+                      {!!details.length && (
+                        <details className="studio-daily-details">
+                          <summary>怎麼判斷的</summary>
+                          <ul>
+                            {details.map((line, index) => <li key={index}>{line}</li>)}
+                          </ul>
+                        </details>
+                      )}
                     </>
                   );
                 })()}

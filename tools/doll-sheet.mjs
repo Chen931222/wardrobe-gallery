@@ -22,7 +22,7 @@ const slotOf = (item) => (item.part === "upperbody" && /襯衫/.test(item.name |
 const Z = { socks: 2, shoes: 3, lowerbody: 4, upperbody: 5, shirt: 6, wholebody_up: 8, bag: 10 };
 
 const DOLL_SVG = (label) => Buffer.from(`<svg width="${W}" height="${H + 40}" viewBox="0 0 ${DOLL.w} ${DOLL.h + 20}" xmlns="http://www.w3.org/2000/svg">
-<rect width="${DOLL.w}" height="${DOLL.h + 20}" fill="#f2ead9"/><g fill="#d6c8ab">
+<rect width="${DOLL.w}" height="${DOLL.h + 20}" fill="#f2ead9"/><g fill="#e3d7bf">
 <circle cx="100" cy="28" r="20"/><rect x="92" y="46" width="16" height="14" rx="5"/>
 <rect x="72" y="58" width="56" height="120" rx="18"/><rect x="52" y="66" width="18" height="95" rx="9"/>
 <rect x="130" y="66" width="18" height="95" rx="9"/><rect x="78" y="170" width="19" height="160" rx="9"/>

@@ -21,7 +21,7 @@ function readTheme() {
     muted: get("--muted", "#9b8c73"),
     accent: get("--accent", "#cdaf7f"),
     line: get("--line", "#392f22"),
-    doll: get("--doll", "#4a4030"),
+    doll: get("--doll", "#372f23"),
   };
 }
 

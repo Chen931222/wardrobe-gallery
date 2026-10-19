@@ -198,10 +198,14 @@ export function colorRole(item) {
 
 export function colorScore(items) {
   const accents = [];
+  const accentItems = [];
   for (const item of items) {
-    if (!isBaseColor(item)) accents.push(hexToHsl(item.color));
+    if (!isBaseColor(item)) { accents.push(hexToHsl(item.color)); accentItems.push(item); }
   }
-  if (accents.length <= 1) return { score: 2, label: accents.length ? "中性色打底一個主色" : "全中性色" };
+  // 理由用穿搭的話講(2026-10-19 評論:「全中性色」「中性色打底一個主色」是規則的說法)。分數照舊
+  if (accents.length <= 1) {
+    return { score: 2, label: accents.length ? `只有「${shortName(accentItems[0]?.name, 12)}」有顏色,其他低調色襯著它` : "整套都是百搭的低調色,顏色不會打架" };
+  }
   // 兩個以上主色:色相接近(同家族/鄰近 60°)可接受,差太遠扣分;其中一個顏色不飽和(霧霧的)就沒那麼衝
   let worst = 0, vivid = true;
   for (let i = 0; i < accents.length; i++) {
@@ -211,7 +215,7 @@ export function colorScore(items) {
       if (diff > worst) { worst = diff; vivid = accents[i].s >= 0.4 && accents[j].s >= 0.4; }
     }
   }
-  if (worst < 60) return { score: 1, label: "同色系搭配" };
+  if (worst < 60) return { score: 1, label: "幾個顏色是同一家族,看起來成套" };
   return vivid ? { score: -3, label: "顏色可能打架" } : { score: -1.5, label: "顏色有點跳" };
 }
 
@@ -332,7 +336,7 @@ const isStrictPalette = (palette) => Boolean(palette && (palette.key === "black"
 
 const FORMAL_CUES = ["襯衫", "shirt", "西裝", "suit", "blazer", "西裝褲", "slacks", "chino", "卡其", "皮鞋", "皮革", "leather", "loafer", "oxford", "derby", "大衣", "coat", "羊毛", "wool", "tailored", "條紋襯衫", "polo"];
 const SPORTY_CUES = ["運動", "sport", "球衣", "jersey", "sweat", "帽t", "hoodie", "連帽", "track", "jogger", "棉褲", "機能", "mesh", "網布", "running", "慢跑", "排汗", "athletic", "sneaker", "gym", "拖鞋", "slides"];
-const CASUAL_CUES = ["denim", "丹寧", "jeans", "牛仔", "distressed", "破損", "baggy", "寬版", "oversize", "tee", "t-shirt", "短褲", "shorts", "canvas", "帆布", "casual", "cotton", "棉"];
+const CASUAL_CUES = ["denim", "丹寧", "jeans", "牛仔", "distressed", "破損", "baggy", "寬版", "oversize", "tee", "t恤", "t-shirt", "短褲", "shorts", "canvas", "帆布", "casual", "cotton", "棉"];
 
 // 意圖規則:由「最正式」往「最休閒」排,取第一個命中的當 formality。
 // 詞彙表(2026-09-21 補齊:站主打「工作」被回沒聽懂)。長詞先於短詞、正式先於休閒。
@@ -420,10 +424,21 @@ function describeIntent(intent) {
   return bits.length ? bits.join(" · ") : null;
 }
 
-const itemText = (item) => `${item.name || ""} ${(item.tags || []).join(" ")}`.toLowerCase();
+// 標籤「shortsleeve」(短袖)裡剛好有「shorts」這幾個字母:不換掉的話,三件短袖襯衫會被當成短褲,
+// 正式場合被扣分、判斷說明寫「有短褲」(2026-10-19 查到)。換成「short-sleeve」就不會撞到
+const itemText = (item) => `${item.name || ""} ${(item.tags || []).join(" ")}`.toLowerCase().replace(/shortsleeve/g, "short-sleeve");
 // 判正式/運動/休閒用的字:品牌名裡的字不算。「白色V領合身短袖(Polo Ralph Lauren)」是 T 恤、
 // 「深藍連帽防風外套(Polo Ralph Lauren)」是防風外套,都不是 Polo 衫(審查 F15)。
-const styleText = (item) => itemText(item).replace(/polo\s*ralph\s*lauren|polo-rl/g, " ");
+// 「卡其」是顏色也是褲型(chino):只有長褲的卡其算正式線索,卡其色 T 恤、卡其短褲不算
+// (2026-10-19 評論:畫面寫「深藍斜紋棉休閒短褲」有「卡其褲」,算正式,讓人懷疑分類)
+const isLongPants = (item) => item?.part === "lowerbody" && !/短褲|shorts/.test(itemText(item));
+// 英文標籤拼字撞到線索(驗收 2026-10-19):sweatshirt 含 shirt → 大學T、衛衣被當正式;sweater 含 sweat → 毛衣被當運動;
+// t-shirt 含 shirt → T 恤被當正式。比對前先換成不會撞到的說法
+const styleText = (item) => {
+  const text = itemText(item).replace(/polo\s*ralph\s*lauren|polo-rl/g, " ")
+    .replace(/sweatshirt/g, " sweat-crew ").replace(/sweater/g, " knit ").replace(/t-shirt/g, " tee ");
+  return isLongPants(item) ? text : text.replace(/卡其|chino/g, " ");
+};
 const isShorts = (item) => /短褲|shorts/.test(itemText(item));
 
 /** 單品對某 formality 的貼合度。權重刻意 ≥1.2 —— 主迴圈每組帶 ±1.6 抖動,太小的偏好會被抖動吃掉
@@ -441,9 +456,11 @@ function intentItemScore(item, intent) {
   // 正式/得體場合:拖鞋、涼鞋再怎麼熱也不該出現,額外重扣蓋過熱天的 +0.8 加分
   if ((intent.formality === "formal" || intent.formality === "smart")
     && (item.tags?.includes("slides") || /拖鞋|涼鞋/.test(item.name || ""))) s -= 2.5;
-  // 正式場合不穿短褲,再熱也一樣。卡其、chino 會被當正式線索,不重扣的話熱天面試 5 次有 5 次是短褲(審查 F15)。
-  // 只套 formal:約會(smart)熱天穿短褲是合理的
+  // 正式場合不穿短褲,再熱也一樣(審查 F15)。只套 formal:約會(smart)熱天穿短褲是合理的
   if (intent.formality === "formal" && isShorts(item)) s -= 4;
+  // 卡其、斜紋這種剪裁的短褲,得體場合加分:2026-10-19 起卡其短褲不再算「正式」線索(說明會寫「偏休閒」,那才是實話),
+  // 但約會熱天少了這 1.4 分,36° 短褲從 100% 掉到 1%、下身八成擠到同一件西裝褲(驗收實跑)。分數補回來,說法維持
+  if (intent.formality === "smart" && isShorts(item) && /卡其|chino|斜紋|twill/.test(itemText(item))) s += 1.4;
   const pref = intent.activity === "sport" ? "sport" : intent.occasionPref;
   if (pref && item.occasions?.includes(pref)) s += 0.6;
   // 這個場合特別想看到的(看球賽 → 球衣、去海邊 → 短褲拖鞋)
@@ -451,11 +468,23 @@ function intentItemScore(item, intent) {
   return s;
 }
 
+/** 品名太長截短給理由用;截到括號裡面就整個括號拿掉(不留「(TOD'…」這種半截)。 */
+function shortName(name, max = 14) {
+  const text = String(name || "");
+  if (text.length <= max) return text;
+  let cut = text.slice(0, max);
+  const open = Math.max(cut.lastIndexOf("("), cut.lastIndexOf("（"));
+  if (open > 0 && cut.indexOf(")", open) < 0 && cut.indexOf("）", open) < 0) cut = cut.slice(0, open);
+  return `${cut.replace(/[\s(（【\[]+$/, "")}…`;
+}
+
 /** 一件單品最先命中的風格線索(給理由面板用,讓評分不是黑盒)。 */
 function cueHit(item) {
   const text = styleText(item);
   const find = (list, kind) => { const w = list.find((k) => text.includes(k.toLowerCase())); return w ? { w, kind } : null; };
-  return find(FORMAL_CUES, "正式") || find(SPORTY_CUES, "運動") || find(CASUAL_CUES, "休閒") || null;
+  // 短褲再怎麼樣都不算正式:場合評分本來就扣短褲,說法要跟著一致
+  const formal = /短褲|shorts/.test(itemText(item)) ? null : find(FORMAL_CUES, "正式");
+  return formal || find(SPORTY_CUES, "運動") || find(CASUAL_CUES, "休閒") || null;
 }
 
 /* 線索詞的中文說法:給理由面板看,不影響比對 */
@@ -464,7 +493,7 @@ const CUE_ZH = {
   oxford: "牛津布", derby: "德比鞋", coat: "大衣", wool: "羊毛", tailored: "剪裁", polo: "Polo 衫",
   sport: "運動", jersey: "球衣", sweat: "棉質運動", "帽t": "帽T", hoodie: "帽T", track: "運動", jogger: "束口褲", mesh: "網布",
   running: "慢跑", athletic: "運動", sneaker: "球鞋", gym: "運動", slides: "拖鞋",
-  denim: "丹寧", jeans: "牛仔褲", distressed: "破損", baggy: "寬版", oversize: "寬版", tee: "T 恤", "t-shirt": "T 恤",
+  denim: "丹寧", jeans: "牛仔褲", "t恤": "T 恤", distressed: "破損", baggy: "寬版", oversize: "寬版", tee: "T 恤", "t-shirt": "T 恤",
   shorts: "短褲", canvas: "帆布", casual: "休閒", cotton: "棉",
 };
 
@@ -1444,31 +1473,31 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
   // 誠實:說了要正式/得體,但櫃裡湊不出來時講清楚,別假裝挑到了
   if (intent?.formality === "formal" || intent?.formality === "smart") {
     if (!chosen.some((it) => cueHit(it)?.kind === "正式")) {
-      reasons.push("櫃裡正式單品不多,先挑了最不休閒的");
+      reasons.push("櫃裡正式的衣服不多,先挑了最接近的");
     }
     // 跟下面「看到的線索」用同一把尺(cueHit),免得一邊說 leather 正式、一邊說沒正式鞋。
     // 原因要分清楚:被雨剔掉的不能講成「櫃裡沒有」(審查 F16);鞋是自己鎖的就不用解釋
     if (outfit.shoes && !locked.shoes && cueHit(outfit.shoes)?.kind !== "正式") {
       const rainedOut = skippedShoes.find((shoe) => cueHit(shoe)?.kind === "正式");
       const passedOver = allShoes.find((shoe) => cueHit(shoe)?.kind === "正式");
-      if (rainedOut) reasons.push(`正式的「${rainedOut.name}」怕雨,這次配偏休閒的`);
-      else if (passedOver) reasons.push(`正式的「${passedOver.name}」這次沒選上,配了偏休閒的`);
-      else reasons.push("櫃裡沒有正式一點的鞋,配了偏休閒的");
+      if (rainedOut) reasons.push(`「${shortName(rainedOut.name)}」怕雨先收著,鞋換一雙不怕淋的`);
+      else if (passedOver) reasons.push(`「${shortName(passedOver.name)}」這次沒選上,鞋配了輕鬆一點的`);
+      else reasons.push("櫃裡沒有皮鞋這類正式的鞋,先配這雙");
     }
   }
 
-  // 透明化:列出每件核心單品「命中了哪個線索」,讓場合評分不是黑盒
+  // 透明化:每件核心單品偏正式、休閒還是運動,看的是名字裡哪個字。不放進主要理由(2026-10-19 評論:主畫面讀起來像內部規則,
+  // 會讓人停下來懷疑分類),另外回傳 details,畫面收在「怎麼判斷的」裡,點開才看到
+  const details = [];
   if (intent?.formality) {
-    const shown = [...chosen, outfit.shoes].filter(Boolean).map((it) => {
+    details.push("照名字和標籤裡的字判斷:看到「襯衫」「西裝」「皮鞋」這類算偏正式,「球衣」「運動」「慢跑」算偏運動,「牛仔」「短褲」「T 恤」算偏休閒");
+    for (const it of [...chosen, outfit.shoes].filter(Boolean)) {
       const hit = cueHit(it);
-      const name = it.name || "";
-      // 讀法:單品 → 命中的線索(類別);截斷時去掉尾巴半個括號,箭頭順著讀不逆向
-      const short = name.length > 12 ? `${name.slice(0, 12).replace(/[（(【\[]+$/, "")}…` : name;
-      // 線索詞有一半是英文標籤(leather、tee),畫面上換成中文(審查 F50);這段是刻意做的透明化,不拿掉
-      return hit ? `「${short}」有${CUE_ZH[hit.w] || hit.w},算${hit.kind}` : `「${short}」看不出來`;
-    });
-    reasons.push(`看到的線索:${shown.join(";")}`);
+      const short = shortName(it.name);
+      // 線索詞有一半是英文標籤(leather、tee),畫面上換成中文(審查 F50)
+      details.push(hit ? `「${short}」偏${hit.kind}:名字或標籤裡有「${CUE_ZH[hit.w] || hit.w}」` : `「${short}」看不出偏哪一種,照天氣和顏色挑的`);
+    }
   }
 
-  return { outfit, reasons, recalled, unlocked: exclusion.unlocked };
+  return { outfit, reasons, details, recalled, unlocked: exclusion.unlocked };
 }

@@ -352,7 +352,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
 
   // 「穿上看看」:理由和天氣一起帶進搭配頁,進去看得到為什麼是這套,主按鈕也接著是「再推薦一套」(審查 F25)。
   // 名字不叫「穿這套」:搭配頁有一顆「今天穿這套」會記穿著紀錄,這顆不會(F56)
-  const wearDaily = () => onWearOutfit(dailyOutfit, { weather: daily.weather, reasons: daily.reasons || [] });
+  const wearDaily = () => onWearOutfit(dailyOutfit, { weather: daily.weather, reasons: daily.reasons || [], details: daily.details || [] });
 
   const onCardClick = (index, item) => {
     if (focusIdx === index) onOpen(item.id);       // 已聚焦 → 開詳情
