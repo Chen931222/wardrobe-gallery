@@ -164,12 +164,20 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   const [rackQuery, setRackQuery] = useState("");
   const rackSearching = Boolean(itemMatches) && rackQuery.trim().length > 0;
   const chooseStrip = (slot) => { setStripType(slot); setRackQuery(""); };
-  // 人台到按鈕這一段跟著畫面走(桌機):比畫面高時先捲到按鈕露出來才停,按鈕不會被擋在畫面外
+  // 人台到按鈕這一段跟著畫面走(桌機)。
+  // 2026-10-20 改:舊版這段比畫面高時用負的 top 捲到按鈕露出來才停,往下捲去挑衣服時人台頂端有 190–350px 在畫面外
+  // (900 高的螢幕:人台 570、下面的東西 530,理由展開再多 135)。現在 ① 理由搬到右欄(見 dailyExplain)
+  // ② 人台大小照「人台以外實際還有多高」算(CSS 的 --studio-rest,舊版寫死 330px,實際要 400 多)
+  // ③ top 最低 12px:真的塞不下(很矮的螢幕)寧可最下面的按鈕先被切,人台頂端不出畫面
   const stickyRef = useRef(null);
   useEffect(() => {
     const el = stickyRef.current;
     if (!el || typeof ResizeObserver === "undefined") return undefined;
-    const place = () => { el.style.top = `${Math.min(24, window.innerHeight - el.offsetHeight - 16)}px`; };
+    const place = () => {
+      const stage = el.querySelector(".studio-stage");
+      if (stage && el.offsetHeight) el.closest(".studio")?.style.setProperty("--studio-rest", `${Math.ceil(el.offsetHeight - stage.offsetHeight + 24 + 16)}px`);
+      el.style.top = `${Math.max(12, Math.min(24, window.innerHeight - el.offsetHeight - 16))}px`;
+    };
     const observer = new ResizeObserver(place);
     observer.observe(el);
     window.addEventListener("resize", place);
@@ -333,7 +341,9 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   };
   const contentGeometry = (slot, item) => {
     const stage = stageRef.current;
-    if (!stage || !natSizes[item.id]) return null;
+    // 圖載入失敗的拿不到原始尺寸:照舊版槽位的框(placeGarment 量不到時就是這個框),✕ 和點選才找得到它。
+    // 舊版直接回 null,壞圖穿在身上卻沒有 ✕、也點不到,脫不掉(2026-10-20 實測)
+    if (!stage || (!natSizes[item.id] && !broken.has(fullImage(item)))) return null;
     const rect = stage.getBoundingClientRect();
     const p = placementOf(slot, item);
     const kx = rect.width / DOLL.w, ky = rect.height / DOLL.h;
@@ -473,6 +483,17 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     event.preventDefault();
     writeFit(item.id, (base) => ({ scale: clampScale(base.scale + (event.deltaY < 0 ? 0.05 : -0.05)) }));
   };
+  // React 的 onWheel 一律是 passive:preventDefault 擋不住,調整時滾一下衣服縮放、整頁也跟著捲,console 還會報錯
+  // (2026-10-20 實測:滾 3 下頁面捲了 360px)。改掛原生、非 passive 的監聽;沒在調整時不擋,滾輪照常捲頁面
+  const wheelRef = useRef(onStageWheel);
+  wheelRef.current = onStageWheel;
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return undefined;
+    const onWheel = (event) => wheelRef.current(event);
+    stage.addEventListener("wheel", onWheel, { passive: false });
+    return () => stage.removeEventListener("wheel", onWheel);
+  }, []);
 
   const resetFit = (item) => {
     if (!item) return;
@@ -1037,6 +1058,46 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     </button>
   );
 
+  // 推薦的回覆拆兩塊:「聽你說的」(或錯誤)跟著指令框;天氣、理由、「怎麼判斷的」是這套的說明。
+  // 手機、平板照舊放同一個框;桌機說明搬到右欄衣架上面(2026-10-20,見上面 stickyRef 的註解)
+  const dailyHead = daily && (daily.error ? <p className="studio-daily-error">{daily.error}</p> : daily.understood ? (
+    <p className="studio-daily-understood">
+      {(daily.sticky || !daily.weather) && <span className="studio-daily-label">聽你說的</span>}{daily.understood}
+      {daily.sticky && clearIntentButton}
+    </p>
+  ) : null);
+  const dailyExplain = daily && !daily.error ? (() => {
+    // 一句一行才讀得下去(舊版全用「·」串成一坨,手機上七行擠在一起)。
+    // 每件偏正式還是休閒的判斷(details)收在「怎麼判斷的」裡,點開才看到(2026-10-19 評論:主畫面讀起來像內部規則)。
+    // 舊的「看到的線索」(存著的那套帶進來的)也一起收進去
+    const legacyClue = (daily.reasons || []).find((reason) => reason.startsWith("看到的線索"));
+    const main = (daily.reasons || []).filter((reason) => reason !== legacyClue);
+    const details = daily.details?.length ? daily.details : legacyClue ? [legacyClue.replace(/^看到的線索:/, "")] : [];
+    if (!daily.weather && !main.length && !details.length) return null;
+    return (
+      <>
+        {daily.weather && (
+          <p className="studio-daily-weather">
+            <CitySelect /> {daily.weather.temp}°(體感 {daily.weather.feelsLike}°)· {daily.weather.desc} · 降雨 {daily.weather.rainProb}%
+          </p>
+        )}
+        {!!main.length && (
+          <ul className="studio-daily-reasons">
+            {main.map((reason, index) => <li key={index}>{reason}</li>)}
+          </ul>
+        )}
+        {!!details.length && (
+          <details className="studio-daily-details">
+            <summary>怎麼判斷的</summary>
+            <ul>
+              {details.map((line, index) => <li key={index}>{line}</li>)}
+            </ul>
+          </details>
+        )}
+      </>
+    );
+  })() : null;
+
   return (
     <div className="studio">
       <div className="studio-stage-column">
@@ -1050,7 +1111,6 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
           onPointerMove={onStagePointerMove}
           onPointerUp={endDrag}
           onPointerCancel={endDrag}
-          onWheel={onStageWheel}
         >
           <Silhouette />
           {/* 衣服只畫在框裡(2026-10-09 本人:「不然會移到畫面別的地方去」):這一層裁掉框外的部分;選取框、提示在這層外面,不會被裁 */}
@@ -1276,52 +1336,12 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
           <p className="studio-mic-note" role="status">聆聽中… 語音會傳到瀏覽器的辨識服務(Chrome→Google、Safari→Apple)轉成文字</p>
         )}
 
-        {daily && (
-          <div className="studio-daily" role="status">
-            {daily.error ? (
-              <p className="studio-daily-error">{daily.error}</p>
-            ) : (
-              <>
-                {daily.understood && (
-                  <p className="studio-daily-understood">
-                    {(daily.sticky || !daily.weather) && <span className="studio-daily-label">聽你說的</span>}{daily.understood}
-                    {daily.sticky && clearIntentButton}
-                  </p>
-                )}
-                {daily.weather && (
-                  <p className="studio-daily-weather">
-                    <CitySelect /> {daily.weather.temp}°(體感 {daily.weather.feelsLike}°)· {daily.weather.desc} · 降雨 {daily.weather.rainProb}%
-                  </p>
-                )}
-                {(() => {
-                  // 一句一行才讀得下去(舊版全用「·」串成一坨,手機上七行擠在一起)。
-                  // 每件偏正式還是休閒的判斷(details)收在「怎麼判斷的」裡,點開才看到(2026-10-19 評論:主畫面讀起來像內部規則)。
-                  // 舊的「看到的線索」(存著的那套帶進來的)也一起收進去
-                  const legacyClue = (daily.reasons || []).find((reason) => reason.startsWith("看到的線索"));
-                  const main = (daily.reasons || []).filter((reason) => reason !== legacyClue);
-                  const details = daily.details?.length ? daily.details : legacyClue ? [legacyClue.replace(/^看到的線索:/, "")] : [];
-                  return (
-                    <>
-                      {!!main.length && (
-                        <ul className="studio-daily-reasons">
-                          {main.map((reason, index) => <li key={index}>{reason}</li>)}
-                        </ul>
-                      )}
-                      {!!details.length && (
-                        <details className="studio-daily-details">
-                          <summary>怎麼判斷的</summary>
-                          <ul>
-                            {details.map((line, index) => <li key={index}>{line}</li>)}
-                          </ul>
-                        </details>
-                      )}
-                    </>
-                  );
-                })()}
-              </>
-            )}
-          </div>
-        )}
+        {/* 手機、平板:回覆和說明同一個框。桌機:這裡只留「聽你說的」或錯誤,說明在右欄(dailyExplain) */}
+        {daily && (stacked ? (dailyHead || dailyExplain) && (
+          <div className="studio-daily" role="status">{dailyHead}{dailyExplain}</div>
+        ) : dailyHead && (
+          <div className="studio-daily" role="status">{dailyHead}</div>
+        ))}
 
         {/* 動作分三層,只有「今日推薦」是 accent 實心:一眼看到主要下一步。
             手機上第一層和「今天穿這套」不在這裡,在最下面的貼底列。 */}
@@ -1431,6 +1451,10 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       </div>
 
       <aside className="studio-rack">
+        {/* 桌機:這套的天氣、理由、「怎麼判斷的」放在衣架上面,跟人台同一高度(2026-10-20,原本在人台下面,把人台頂出畫面) */}
+        {!stacked && dailyExplain && (
+          <div className="studio-daily studio-daily-explain" role="status" aria-label="這套的理由">{dailyExplain}</div>
+        )}
         {itemMatches && (
           <div className="closet-search-wrap rack-search">
             <div className="closet-search" role="search">

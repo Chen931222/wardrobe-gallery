@@ -336,7 +336,9 @@ const isStrictPalette = (palette) => Boolean(palette && (palette.key === "black"
 
 const FORMAL_CUES = ["襯衫", "shirt", "西裝", "suit", "blazer", "西裝褲", "slacks", "chino", "卡其", "皮鞋", "皮革", "leather", "loafer", "oxford", "derby", "大衣", "coat", "羊毛", "wool", "tailored", "條紋襯衫", "polo"];
 const SPORTY_CUES = ["運動", "sport", "球衣", "jersey", "sweat", "帽t", "hoodie", "連帽", "track", "jogger", "棉褲", "機能", "mesh", "網布", "running", "慢跑", "排汗", "athletic", "sneaker", "gym", "拖鞋", "slides"];
-const CASUAL_CUES = ["denim", "丹寧", "jeans", "牛仔", "distressed", "破損", "baggy", "寬版", "oversize", "tee", "t恤", "t-shirt", "短褲", "shorts", "canvas", "帆布", "casual", "cotton", "棉"];
+// 「休閒」(2026-10-20):名字寫「休閒鞋」的兩雙(酒紅麂皮三線、黑色真皮厚底),標籤只有 sneakers/leather,
+// 舊版「怎麼判斷的」說酒紅那雙只偏運動,跟名字對不上。評分照常兩邊都算(intentItemScore)
+const CASUAL_CUES = ["denim", "丹寧", "jeans", "牛仔", "distressed", "破損", "baggy", "寬版", "oversize", "tee", "t恤", "t-shirt", "短褲", "shorts", "canvas", "帆布", "休閒", "casual", "cotton", "棉"];
 
 // 意圖規則:由「最正式」往「最休閒」排,取第一個命中的當 formality。
 // 詞彙表(2026-09-21 補齊:站主打「工作」被回沒聽懂)。長詞先於短詞、正式先於休閒。

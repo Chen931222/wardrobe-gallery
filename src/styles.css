@@ -3432,11 +3432,16 @@ h1, h2, h3 {
   .studio-garment-remove { width: 32px; height: 32px; margin: -16px 0 0 -16px; opacity: 1; }
 }
 @media (min-width: 861px) {
+  /* --studio-rest:人台以外(指令框、例句、聽你說的、按鈕、上下留白)實際多高,OutfitStudio 量了寫在 .studio 上(2026-10-20)。
+     舊版寫死 330px,實際要 400 多,整段比畫面高,往下捲時人台頂端被推出畫面 */
   .studio-stage {
     max-width: 500px;
-    width: min(100%, 500px, calc((100vh - 330px) * 200 / 340));
-    width: min(100%, 500px, calc((100svh - 330px) * 200 / 340));
+    width: min(100%, 500px, calc((100vh - var(--studio-rest, 330px)) * 200 / 340));
+    width: min(100%, 500px, calc((100svh - var(--studio-rest, 330px)) * 200 / 340));
   }
+  /* 這套的說明在右欄衣架上面 */
+  .studio-daily-explain { margin: 0 0 20px; }
+  .studio-daily-explain .studio-daily-weather + .studio-daily-reasons { margin-top: 8px; }
 }
 @media (max-width: 640px) {
   .studio-stage {
