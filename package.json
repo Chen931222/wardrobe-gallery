@@ -20,14 +20,20 @@
     "@unpic/react": "^1.0.2",
     "@vercel/blob": "^2.8.0",
     "@vitejs/plugin-react": "5.0.4",
-    "ipx": "^3.1.1",
+    "ipx": "^4.0.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.5",
     "vite": "6.4.3"
   },
   "allowScripts": {
-    "sharp@0.34.5": true,
     "onnxruntime-node@1.17.3": true
+  },
+  "overrides": {
+    "@imgly/background-removal-node": {
+      "sharp": "$sharp",
+      "lodash": "^4.18.1",
+      "zod": "^3.25.76"
+    }
   }
 }

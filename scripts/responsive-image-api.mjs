@@ -1,5 +1,5 @@
 import path from "node:path";
-import { createIPX, createIPXNodeServer, ipxFSStorage } from "ipx";
+import { createIPX, createIPXNodeHandler, ipxFSStorage } from "ipx";
 
 const DEFAULT_MAX_AGE = 24 * 60 * 60;
 
@@ -26,7 +26,8 @@ export function responsiveImageApi(options = {}) {
       const ipx = createIPX({
         storage,
       });
-      handler = createIPXNodeServer(ipx);
+      // ipx 4(2026-10-20 依賴更新):createIPXNodeServer 改名成 createIPXNodeHandler,用法一樣
+      handler = createIPXNodeHandler(ipx);
     },
     configureServer: attach,
     configurePreviewServer: attach,
