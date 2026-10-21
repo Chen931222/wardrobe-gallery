@@ -1711,6 +1711,12 @@ h1, h2, h3 {
   background: var(--paper); color: var(--ink);
   font: inherit; font-size: 16px; /* iPad 也會對 <16px 的輸入框聚焦放大 */
 }
+.add-field textarea {
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 0;
+  background: var(--paper); color: var(--ink);
+  font: inherit; font-size: 16px; line-height: 1.5; resize: vertical;
+}
+.add-field textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .add-field input:focus-visible, .add-field select:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 1px;
 }
@@ -3496,3 +3502,24 @@ h1, h2, h3 {
   .header-tools > .add-garment-button:not(.add-store-button) { padding-left: 12px; padding-right: 12px; }
   .view-nav button { padding-left: 11px; padding-right: 11px; }
 }
+
+/* 回報問題(2026-10-21):文字鈕,跟 welcome-note 裡的按鈕同一個調;視窗沿用新增的 overlay/panel */
+.feedback-button {
+  border: 0; background: transparent; padding: 0;
+  font: inherit; font-size: 13px; color: var(--muted);
+  text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line);
+  cursor: pointer;
+}
+.feedback-button:hover, .feedback-button:focus-visible { color: var(--ink); text-decoration-color: var(--ink); }
+.feedback-button.in-nav { margin-left: 12px; white-space: nowrap; }
+@media (max-width: 640px) { .feedback-button.in-nav { margin-left: 0; } }
+.feedback-panel { align-items: stretch; text-align: left; gap: 14px; max-width: 440px; }
+.feedback-done { margin: 0; padding: 12px; border: 1px solid var(--line); font-size: 14px; }
+/* 分類是猜的(2026-10-21,分類改選填):小字標在格子左下(右上是垃圾桶鈕;想買的標記也在左下,但猜的只標已經有的,不會撞),點開那件改分類就消失 */
+.guess-badge {
+  position: absolute; left: 4px; bottom: 4px;
+  padding: 2px 6px; font-size: 11px; letter-spacing: .06em; line-height: 1.4;
+  color: var(--muted); background: var(--paper); border: 1px solid var(--line);
+  pointer-events: none;
+}
+

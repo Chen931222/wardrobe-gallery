@@ -562,6 +562,8 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       const next = {};
       for (const [slot, item] of Object.entries(outfit || {})) {
         if (!item) continue;
+        // 第一件加完配示範衣櫃那套(App firstLook,2026-10-21):借來的幾件不在這個衣櫃裡,但要留在人台上
+        if (item.borrowed) { next[slot] = item; continue; }
         const fresh = byId.get(item.id);
         if (!fresh || slotOf(fresh) !== slot) { changed = true; continue; }
         if (fresh !== item) changed = true;
@@ -648,6 +650,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       const result = recommendOutfit(items, weather, wearLog, intent, locked, avoid, readTaste());
       if (result.error) { setDaily({ error: result.error }); return; }
       noteRecommendation(result.outfit, result.recalled);
+      track("用過推薦", { 來源: intent ? "指令" : "今日推薦" });   // 漏斗(2026-10-21)
       shownRef.current = [Object.values(result.outfit).filter(Boolean).map((item) => item.id), ...shownRef.current].slice(0, 3);
       // 眼鏡、手錶、配件現在引擎也會挑(2026-10-06);這次沒挑到的那格,身上有就留著,別每次推薦都被脫掉。
       // 但這句話講了不要的那格(「不要戴眼鏡」)就不放回去

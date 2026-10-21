@@ -75,6 +75,8 @@ await copyFile(join(ROOT, "functions", "_closet-core.mjs"), join(OUT, "api", "_c
 await copyFile(join(ROOT, "functions", "_product-page-core.mjs"), join(OUT, "api", "_product-page-core.mjs"));
 await copyFile(join(ROOT, "functions", "product-page.mjs"), join(OUT, "api", "product-page.mjs"));
 await copyFile(join(ROOT, "functions", "product-image.mjs"), join(OUT, "api", "product-image.mjs"));
+await copyFile(join(ROOT, "functions", "feedback.mjs"), join(OUT, "api", "feedback.mjs"));             // 回報問題(2026-10-21)
+await copyFile(join(ROOT, "functions", "_feedback-core.mjs"), join(OUT, "api", "_feedback-core.mjs"));
 await writeFile(join(OUT, "api", "_proxy-secret.mjs"), `export const SECRET = ${JSON.stringify(randomBytes(32).toString("hex"))};\n`);
 const blobVersion = JSON.parse(await readFile(join(ROOT, "node_modules", "@vercel", "blob", "package.json"), "utf8")).version;
 await writeFile(join(OUT, "package.json"), JSON.stringify({ private: true, type: "module", dependencies: { "@vercel/blob": blobVersion } }, null, 2) + "\n");

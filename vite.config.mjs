@@ -9,6 +9,7 @@ import { wardrobeDataApi } from "./scripts/wardrobe-data-api.mjs";
 import { brandProductApi } from "./scripts/brand-product-api.mjs";
 import { syncApi } from "./scripts/sync-api.mjs";
 import { productPageApi } from "./scripts/product-page-api.mjs";
+import { feedbackApi } from "./scripts/feedback-api.mjs";
 
 export default defineConfig(() => {
   return {
@@ -29,6 +30,6 @@ export default defineConfig(() => {
       port: 4173,
       allowedHosts: ["localhost"],
     },
-    plugins: [react(), responsiveImageApi(), wardrobeDataApi(), brandProductApi(), syncApi(), productPageApi()],
+    plugins: [react(), responsiveImageApi(), wardrobeDataApi(), brandProductApi(), syncApi(), productPageApi(), feedbackApi()],
   };
 });

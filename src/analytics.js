@@ -36,7 +36,23 @@ export function loadAnalytics() {
   script.dataset.doNotTrack = "true";
   script.dataset.excludeSearch = "true";
   script.dataset.excludeHash = "true";
+  script.onload = noteReturn;   // 事件要等腳本載好才送得出去(window.umami 那時才有)
   document.head.appendChild(script);
+}
+
+/* 「回來」(2026-10-21 行銷企劃第 0 週):上次打開是 1–7 天前就記一次,帶隔了幾天。同一天開幾次只算一次。
+   上次的日期記在這台瀏覽器(open-wardrobe-last-visit),只有日期、沒有時間。 */
+const VISIT_KEY = "open-wardrobe-last-visit";
+export function noteReturn() {   // export 只為了本機測
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const last = localStorage.getItem(VISIT_KEY);
+    if (last && last !== today) {
+      const days = Math.round((Date.parse(today) - Date.parse(last)) / 864e5);
+      if (days >= 1 && days <= 7) track("回來", { 隔了幾天: days });
+    }
+    localStorage.setItem(VISIT_KEY, today);
+  } catch { /* 私密瀏覽 */ }
 }
 
 /** 記一個事件(沒載入就什麼都不做)。data 只放類別,不放衣服名稱這類內容 */

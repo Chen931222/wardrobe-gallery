@@ -9,6 +9,7 @@ import { DOLL, MEASURED_SLOTS, SLOT_STYLE, cachedShape, placeGarment, shapeFromI
 import { fetchWeather, recommendOutfit } from "./recommend.js";
 import { CitySelect, useCity } from "./CitySelect.jsx";
 import { inAppBrowser, isIos, isStandalone } from "./keepSafe.js";
+import { Feedback } from "./Feedback.jsx";
 
 const FALLBACK_WEATHER = { temp: null, feelsLike: 25, desc: "", rainProb: 0, tMax: 27, tMin: 22 };
 
@@ -132,6 +133,8 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
           )}
           <span aria-hidden="true"> · </span>
           <a href="/privacy.html">隱私與使用說明</a>
+          <span aria-hidden="true"> · </span>
+          <Feedback where="歡迎" />
           <input
             ref={fileRef}
             type="file"

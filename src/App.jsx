@@ -10,7 +10,9 @@ import { deleteLocalItem, findUrl, loadLocalItems, productUrlProblem, putLocalRe
 import { CAN_ADD, CAN_EDIT, canEditItem } from "./ownerMode.js";
 import { hasLocalChanges, lastSyncError, noteDeliberateDelete, scheduleSync, syncCode, syncNotice, syncNow } from "./sync.js";
 import { findSameStyle, findSimilar, fitOf, guessWarmth, kindLabel, wishOutfits } from "./wishCheck.js";
-import { colorLabel, colorName, colorRole, colorScore, isNeutral } from "./recommend.js";
+import { colorLabel, colorName, colorRole, colorScore, fetchWeather, isNeutral, recommendOutfit } from "./recommend.js";
+import { Feedback } from "./Feedback.jsx";
+import { track } from "./analytics.js";
 import { useDialog } from "./useDialog.js";
 import { ScrollRail } from "./ScrollRail.jsx";
 import { fetchPriceForUrl, sameProduct } from "./brandLink.js";
@@ -368,6 +370,7 @@ function GalleryItem({ item, selected, onOpen, onDelete, favorite = false, picki
         {favorite && <span className="fav-mark" aria-hidden="true"><Star size={13} weight="fill" /></span>}
         {pickable && <span className="pick-mark" aria-hidden="true">{picked && <Check size={14} weight="bold" />}</span>}
         {qtyOf(item.quantity) > 1 && <span className="qty-badge" aria-hidden="true">×{qtyOf(item.quantity)}</span>}
+        {item.partGuessed && !item.wishlist && <span className="guess-badge" aria-hidden="true">分類是猜的</span>}
       </button>
       {/* 品名一行:只靠圖分不出「灰褐運動長褲」和「灰色打褶西裝褲」(2026-07 本人回報)。按鈕的 aria-label 已經念過品名 */}
       <span className="gallery-name" aria-hidden="true" title={label}>{label}</span>
@@ -1676,9 +1679,38 @@ export function App() {
   // 帶一套進搭配頁:先記成「身上這套」,進去後手動重新整理也穿得回來。daily = 入口今日推薦的天氣和理由
   const wearOutfit = (outfit, daily = null) => {
     if (daily) noteRecommendation(outfit);   // 入口的今日推薦按「穿上看看」:算看過一套推薦(taste.js)
+    if (daily) track("用過推薦", { 來源: daily.first ? "第一件" : "入口" });
     rememberWearing(outfit, closet);
     setPendingOutfit(outfit);
     setPendingDaily(daily);
+  };
+
+  /* 第一件加完立刻給推薦(2026-10-21):這件鎖在自己的格子,其他格子從示範衣櫃挑,照現在的天氣配一套帶進搭配頁。
+     示範衣櫃沒載到、天氣抓不到、引擎配不出來,就回 false,照舊只說「加進衣櫃了」。 */
+  const firstLook = async (id, name) => {
+    try {
+      const mine = (await loadLocalItems())?.find((item) => item.id === id);
+      const demo = itemsRef.current.filter((item) => !item.isLocal && !item.wishlist);
+      if (!mine || !demo.length) return false;
+      const weather = await fetchWeather();
+      const pool = [...demo.filter((item) => item.part !== mine.part), mine]
+        .map((item) => (item.warmth === undefined ? { ...item, warmth: guessWarmth(item) } : item));
+      const result = recommendOutfit(pool, weather, {}, null, { [mine.part]: mine });
+      if (result.error || result.outfit?.[mine.part]?.id !== mine.id) return false;
+      // 借來的標 borrowed:搭配頁重讀衣櫃時會把不在櫃裡的脫掉,這幾件要留著(OutfitStudio remap)
+      for (const [slot, item] of Object.entries(result.outfit)) if (item && item.id !== mine.id) result.outfit[slot] = { ...item, borrowed: true };
+      const borrowed = Object.values(result.outfit).filter((item) => item && item.id !== mine.id).length;
+      const reasons = [
+        `第一件進櫃了。這套是你的「${mine.name || name}」配示範衣櫃的 ${borrowed} 件挑的;再加幾件自己的,就能整套都用自己的。`,
+        ...(result.reasons || []),
+      ];
+      wearOutfit(result.outfit, { weather, reasons, details: result.details || [], first: true });
+      setView("styling");
+      say(`「${mine.name || name}」加進衣櫃了,先配示範衣櫃給你一套。`);
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   // 訪客的衣服沒有同步(同步只給站主),全靠這個瀏覽器存著:加了衣服沒備份就提醒,之後每多 3 件再提醒一次
@@ -1775,6 +1807,11 @@ export function App() {
   );
 
   const saveItem = (updatedItem, { quiet = false } = {}) => {
+    // 分類是猜的那件,人改過分類(或存檔時確認過)就不再標(2026-10-21)
+    if (updatedItem.partGuessed && updatedItem.isLocal) {
+      updatedItem = { ...updatedItem, partGuessed: false };
+      updateLocalItem(updatedItem.id, { partGuessed: false }).catch(() => {});
+    }
     setItems((current) => current.map((item) => item.id === updatedItem.id ? updatedItem : item));
     if (!quiet) say(`「${updatedItem.name || "這件"}」存好了。`);   // 單品頁存完就關掉,「存好了」改在上方講
     // 原本的樣子 = 還沒套任何編輯的那份(站主的從 wardrobe.json、自己加的從 IndexedDB)
@@ -2041,10 +2078,13 @@ export function App() {
                   }}
                   openRequest={addRequest}
                   onOpenHandled={() => setAddRequest(0)}
-                  onAdded={async (wishlist, name, dream = false) => {
+                  onAdded={async (wishlist, name, dream = false, id = null) => {
+                    // 第一件(2026-10-21,行銷企劃第 0 週):加完不只說「加進衣櫃了」,拿這件配示範衣櫃立刻給一套,先看到這東西能幹嘛
+                    const firstOwned = !wishlist && !CAN_EDIT && id && !itemsRef.current.some((item) => item.isLocal && !item.wishlist && !item.trashedAt);
                     if (!CAN_EDIT) { setClosetChoice("mine"); setPendingOutfit(null); }   // 換到我的衣櫃:示範衣櫃帶進來的那套不要跟過去
                     await refresh();
                     if (wishlist) showWishlist(dream ? "dream" : "wishlist");
+                    if (firstOwned && await firstLook(id, name)) return;
                     say(wishlist ? `「${name}」放進${dream ? "夢幻逸品" : "想買的"}了。` : `「${name}」加進衣櫃了。`);
                   }}
                 />
@@ -2054,6 +2094,7 @@ export function App() {
                 <button type="button" className={view === "closet" ? "active" : ""} aria-current={view === "closet" ? "page" : undefined} onClick={() => setView("closet")}>衣櫃</button>
                 <button type="button" className={view === "styling" ? "active" : ""} aria-current={view === "styling" ? "page" : undefined} onClick={() => setView("styling")}>搭配</button>
               </nav>
+              {!showWelcome && !CAN_EDIT && <Feedback where={view === "closet" ? "衣櫃" : view === "styling" ? "搭配" : "入口"} className="in-nav" />}
             </div>
           </div>
           {!showWelcome && closetSwitch}

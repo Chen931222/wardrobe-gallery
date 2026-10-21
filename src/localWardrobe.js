@@ -266,7 +266,7 @@ export function localFullImage(id) {
   return fullPending.get(id);
 }
 
-export async function saveLocalItem({ id, name, part, color, secondaryColor, tags, blob, wishlist, dream, sourceUrl, price, priceCurrency, brand }) {
+export async function saveLocalItem({ id, name, part, color, secondaryColor, tags, blob, wishlist, dream, sourceUrl, price, priceCurrency, brand, partGuessed = false }) {
   await putRecord({
     id, name, part, color, secondaryColor: secondaryColor || null,
     tags: tags || [], blob, createdAt: new Date().toISOString(),
@@ -276,6 +276,8 @@ export async function saveLocalItem({ id, name, part, color, secondaryColor, tag
     price: price ?? null, priceCurrency: price ? priceCurrency || "TWD" : null,
     // 品牌:新增時填的或商品連結讀到的;沒填就不存這個欄位,之後看品名、網址猜(brands.js)
     ...(brand ? { brand } : {}),
+    // 分類是猜的(2026-10-21,分類改選填):衣櫃格子標一下,點開那件改分類就清掉
+    ...(partGuessed ? { partGuessed: true } : {}),
   });
 }
 

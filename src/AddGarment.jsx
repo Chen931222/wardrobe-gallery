@@ -1,7 +1,7 @@
 // [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, SpinnerGap, Storefront, X } from "@phosphor-icons/react";
-import { cropBlob, deleteLocalItem, findUrl, garmentColors, productUrlProblem, refillGaps, saveLocalItem, shrinkImage, trimTransparent } from "./localWardrobe.js";
+import { cropBlob, deleteLocalItem, findUrl, garmentColors, guessPart, productUrlProblem, refillGaps, saveLocalItem, shrinkImage, trimTransparent } from "./localWardrobe.js";
 import { PART_GROUPS, PART_ORDER, PARTS } from "./parts.js";
 import { fetchBrandProduct, fetchProductPage, parseBrandLink, partFromName, partFromProduct, sameProduct } from "./brandLink.js";
 import { findSameStyle, findSimilar, fitChoices, kindChoices, kindLabel } from "./wishCheck.js";
@@ -595,6 +595,17 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     const draft = { ...draftState, ...over };
     const name = draft.name.trim() || (draft.wishlist ? "想買的單品" : "新單品");
     setError("");
+    // 分類改選填(2026-10-21,行銷企劃第 0 週:MYMIKA 加一件零欄位,我們要人選分類才能存)。
+    // 沒選就猜:先看品名(「襯衫」「牛仔褲」),再看去背後的長寬比;猜的標 partGuessed,衣櫃格子會提醒點一下改
+    let partGuessed = false;
+    if (!draft.part) {
+      let guessed = partFromName(name);
+      if (!guessed && draft.blob) {
+        try { const bitmap = await createImageBitmap(draft.blob); guessed = guessPart(bitmap.width, bitmap.height); bitmap.close?.(); } catch { /* 讀不到就當上衣 */ }
+      }
+      draft.part = guessed || "upperbody";
+      partGuessed = true;
+    }
     // 存不進去要講(2026-10-21 iPad 無痕實測:舊版沒接這個錯,按了「加入衣櫃」什麼都沒發生,表單也不關)
     try {
       await saveLocalItem({
@@ -612,6 +623,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
         priceCurrency: draft.priceCurrency || "TWD",
         // 填了才存;沒填之後看品名、網址猜。已經有的不存網址,所以商品連結的網域讀到的品牌要現在存
         brand: canonicalBrand(draft.brand) || brandInUrl(link?.url) || undefined,
+        partGuessed,
       });
     } catch (cause) {
       console.error(cause);
@@ -622,7 +634,13 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     }
     try { navigator.storage?.persist?.(); } catch { /* 不支援就算了 */ }
     track("加衣服", { 種類: draft.wishlist ? (draft.dream ? "夢幻逸品" : "想買") : "已經有" });
-    onAdded(draft.wishlist, name, draft.wishlist && Boolean(draft.dream));
+    // 漏斗(2026-10-21):自己加的、已經有的,加到第 1 件和第 5 件各記一次(existing 是存之前的清單)
+    if (!draft.wishlist) {
+      const owned = existing.filter((item) => item.isLocal && !item.wishlist && !item.trashedAt).length + 1;
+      if (owned === 1) track("第 1 件");
+      if (owned === 5) track("第 5 件");
+    }
+    onAdded(draft.wishlist, name, draft.wishlist && Boolean(draft.dream), draft.id);
     reset();
   };
 
@@ -696,6 +714,8 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
             {closeButton()}
             <p className="add-step">{replacing ? `換一張圖:${replacing.name || "這件"}` : "新增一件"}</p>
             {replacing && <small className="add-hint">選一張照片或貼商品連結,框出衣服、去背之後換上。名稱、分類、顏色都不會變。</small>}
+            {/* 貼連結放大門(2026-10-21):網購過的不用拍、不用去背,10 秒一件;拍照是沒連結時的第二條路 */}
+            {!replacing && <small className="add-hint add-lead">網購過的衣服最快:到商品頁按「分享」拷貝連結,貼在下面,不用拍照、不用去背。沒有連結的再拍照。</small>}
             <label className="add-field">
               <span>貼商品連結</span>
               {/* type="text" 不是 "url":App「分享」拷出來的是「快來看看【品名】… https://…」整段,
@@ -733,7 +753,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
             )}
             <div className="add-actions">
               <button type="button" className="secondary-button" onClick={() => { setLink(parsedLink?.notProduct ? null : effectiveLink ? { ...effectiveLink, images: [] } : null); inputRef.current?.click(); }}>
-                {parsedLink ? "改用照片" : "從相簿選照片"}
+                {parsedLink ? "改用照片" : "沒有連結,拍照或選照片"}
               </button>
               <button type="submit" className="primary-button" disabled={!parsedLink || parsedLink.notProduct || pageLoading}>
                 {pageLoading ? "讀取中…" : effectiveLink?.images.length ? "列出商品圖" : "選截圖"}
@@ -1036,9 +1056,8 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
               <select
                 value={draft.part}
                 onChange={(event) => setDraft((current) => ({ ...current, part: event.target.value }))}
-                aria-invalid={!draft.part}
               >
-                <option value="" disabled>選一個</option>
+                <option value="">不選,幫我猜</option>
                 {PART_GROUPS.map((group) => (
                   <optgroup key={group.id} label={group.label}>
                     {group.parts.map((part) => (
@@ -1047,7 +1066,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
                   </optgroup>
                 ))}
               </select>
-              {!draft.part && <small className="add-hint">選好分類才能存。</small>}
+              {!draft.part && <small className="add-hint">不選也能存:會照品名和形狀猜一個,猜錯在衣櫃裡點那件改。</small>}
             </label>
 
             {draft.wishlist && (
@@ -1097,7 +1116,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
 
             <div className="add-actions">
               <button type="button" className="secondary-button" onClick={requestClose}>取消</button>
-              <button type="button" className="primary-button" onClick={() => save()} disabled={urlInvalid || !draft.part || !draft.blob}>
+              <button type="button" className="primary-button" onClick={() => save()} disabled={urlInvalid || !draft.blob}>
                 {!draft.blob ? "去背好就能存" : dupes.length ? "還是要存" : draft.wishlist ? (draft.dream ? "放進夢幻逸品" : "放進想買的") : "加入衣櫃"}
               </button>
             </div>
