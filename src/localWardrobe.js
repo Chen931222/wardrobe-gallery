@@ -51,6 +51,28 @@ async function freshCopy(blob) {
   return new Blob([await blob.arrayBuffer()], { type: blob.type });
 }
 
+/* Safari 無痕的地雷(2026-10-21 本人 iPad 無痕實測「存不進去」,按「加入衣櫃」沒反應):
+   無痕分頁的 IndexedDB 常常收不下 Blob(WebKit bug 268037、188438:「Error preparing Blob/File data to be
+   stored in object store」,Safari 一打開就直接進無痕分頁時最常見,好了又壞了好幾次)。
+   存 Blob 失敗就改存原始位元組(ArrayBuffer)＋格式,讀出來再拼回 Blob。所有讀的地方都過 decode,
+   呼叫端永遠只看到 record.blob,同步、備份、縮圖都不用改。一般分頁第一次就存成功,格式跟舊版一樣。 */
+function decode(record) {
+  if (!record || record.blob || !record.bytes) return record;
+  const { bytes, blobType, ...rest } = record;
+  return { ...rest, blob: new Blob([bytes], { type: blobType || "image/png" }) };
+}
+
+async function putRecord(record, options) {
+  try {
+    await tx("readwrite", (store) => store.put(record), options);
+  } catch (error) {
+    if (!(record.blob instanceof Blob)) throw error;
+    const { blob, ...rest } = record;
+    const bytes = await blob.arrayBuffer();
+    await tx("readwrite", (store) => store.put({ ...rest, bytes, blobType: blob.type }), options);
+  }
+}
+
 /* 讀不到的圖用這張代替(不是「?」),點開那件可以「換圖」;開了同步的會從雲端拿回原本那張 */
 export const BROKEN_IMAGE = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 240"><rect x="1" y="1" width="198" height="238" fill="none" stroke="#5a4c3a" stroke-dasharray="6 6"/>'
@@ -198,7 +220,7 @@ function scheduleThumbs(records) {
 export async function loadLocalItems() {
   if (typeof indexedDB === "undefined") return [];
   try {
-    const [records, thumbs] = await Promise.all([tx("readonly", (store) => store.getAll()).then((list) => list || []), readThumbs()]);
+    const [records, thumbs] = await Promise.all([tx("readonly", (store) => store.getAll()).then((list) => (list || []).map(decode)), readThumbs()]);
     const ids = new Set(records.map((record) => record.id));
     for (const cache of [urlCache, thumbCache]) {
       for (const [id, hit] of cache) {
@@ -245,7 +267,7 @@ export function localFullImage(id) {
 }
 
 export async function saveLocalItem({ id, name, part, color, secondaryColor, tags, blob, wishlist, dream, sourceUrl, price, priceCurrency, brand }) {
-  await tx("readwrite", (store) => store.put({
+  await putRecord({
     id, name, part, color, secondaryColor: secondaryColor || null,
     tags: tags || [], blob, createdAt: new Date().toISOString(),
     wishlist: Boolean(wishlist), sourceUrl: sourceUrl || null,
@@ -254,7 +276,7 @@ export async function saveLocalItem({ id, name, part, color, secondaryColor, tag
     price: price ?? null, priceCurrency: price ? priceCurrency || "TWD" : null,
     // 品牌:新增時填的或商品連結讀到的;沒填就不存這個欄位,之後看品名、網址猜(brands.js)
     ...(brand ? { brand } : {}),
-  }));
+  });
 }
 
 /** 只留 http(s) 網址,其他(javascript: 之類)一律丟掉,因為之後會被放進 <a href>。 */
@@ -307,7 +329,7 @@ export async function cropBlob(file, box) {
 }
 
 export async function updateLocalItem(id, patch) {
-  const record = await tx("readonly", (store) => store.get(id));
+  const record = decode(await tx("readonly", (store) => store.get(id)));
   if (!record) return;
   const next = { ...record, ...patch };
   // 圖沒換的話,先讀進記憶體做一份新的再存(WebKit bug 235687:讀出來的 Blob 原封不動存回去,之後就讀不到)。
@@ -315,7 +337,7 @@ export async function updateLocalItem(id, patch) {
   if (!("blob" in patch) && record.blob) {
     try { next.blob = await freshCopy(record.blob); } catch { /* 已經壞了 */ }
   }
-  await tx("readwrite", (store) => store.put(next));
+  await putRecord(next);
 }
 
 export async function deleteLocalItem(id, options) {
@@ -324,13 +346,13 @@ export async function deleteLocalItem(id, options) {
 
 /** 讀一件的原始 record(含 blob);沒有就 undefined。同步寫回前用來確認這件在同步途中有沒有被改過。 */
 export async function readLocalRecord(id) {
-  return tx("readonly", (store) => store.get(id));
+  return decode(await tx("readonly", (store) => store.get(id)));
 }
 
 /** 備份匯出用:讀原始 record(含 blob),不像 loadLocalItems 轉成 objectURL。 */
 export async function dumpLocalRecords() {
   if (typeof indexedDB === "undefined") return [];
-  try { return (await tx("readonly", (store) => store.getAll())) || []; }
+  try { return ((await tx("readonly", (store) => store.getAll())) || []).map(decode); }
   catch { return []; }
 }
 
@@ -339,7 +361,7 @@ export async function dumpLocalRecords() {
 export async function readLocalRecords() {
   if (typeof indexedDB === "undefined") throw new Error("這個瀏覽器不能存衣服,先不同步");
   try {
-    return (await tx("readonly", (store) => store.getAll())) || [];
+    return ((await tx("readonly", (store) => store.getAll())) || []).map(decode);
   } catch {
     throw new Error("讀不到這台存的衣服,先不同步(免得把雲端當成全刪了)");
   }
@@ -347,7 +369,7 @@ export async function readLocalRecords() {
 
 /** 備份匯入用:把原始 record(含 blob)寫回 IndexedDB。 */
 export async function putLocalRecord(record, options) {
-  await tx("readwrite", (store) => store.put(record), options);
+  await putRecord(record, options);
 }
 
 /* ---------- 影像處理:去背後的收尾 ---------- */

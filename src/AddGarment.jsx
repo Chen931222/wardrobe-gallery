@@ -594,22 +594,32 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
   const save = async (over = {}) => {
     const draft = { ...draftState, ...over };
     const name = draft.name.trim() || (draft.wishlist ? "想買的單品" : "新單品");
-    await saveLocalItem({
-      id: draft.id,
-      name,
-      part: draft.part,
-      color: draft.color,
-      secondaryColor: draft.secondaryColor,
-      tags: [],
-      blob: draft.blob,
-      wishlist: draft.wishlist,
-      dream: draft.wishlist && Boolean(draft.dream),
-      sourceUrl: draft.wishlist ? findUrl(draft.sourceUrl) : null,
-      price: parsePrice(draft.price),
-      priceCurrency: draft.priceCurrency || "TWD",
-      // 填了才存;沒填之後看品名、網址猜。已經有的不存網址,所以商品連結的網域讀到的品牌要現在存
-      brand: canonicalBrand(draft.brand) || brandInUrl(link?.url) || undefined,
-    });
+    setError("");
+    // 存不進去要講(2026-10-21 iPad 無痕實測:舊版沒接這個錯,按了「加入衣櫃」什麼都沒發生,表單也不關)
+    try {
+      await saveLocalItem({
+        id: draft.id,
+        name,
+        part: draft.part,
+        color: draft.color,
+        secondaryColor: draft.secondaryColor,
+        tags: [],
+        blob: draft.blob,
+        wishlist: draft.wishlist,
+        dream: draft.wishlist && Boolean(draft.dream),
+        sourceUrl: draft.wishlist ? findUrl(draft.sourceUrl) : null,
+        price: parsePrice(draft.price),
+        priceCurrency: draft.priceCurrency || "TWD",
+        // 填了才存;沒填之後看品名、網址猜。已經有的不存網址,所以商品連結的網域讀到的品牌要現在存
+        brand: canonicalBrand(draft.brand) || brandInUrl(link?.url) || undefined,
+      });
+    } catch (cause) {
+      console.error(cause);
+      setError(/quota/i.test(`${cause?.name} ${cause?.message}`)
+        ? "這台裝置的空間不夠,存不下這張圖。清一點空間再按一次。"
+        : "這個瀏覽器不讓網站存衣服,無痕/私密分頁最常見。換一般分頁打開再加一次。");
+      return;
+    }
     try { navigator.storage?.persist?.(); } catch { /* 不支援就算了 */ }
     track("加衣服", { 種類: draft.wishlist ? (draft.dream ? "夢幻逸品" : "想買") : "已經有" });
     onAdded(draft.wishlist, name, draft.wishlist && Boolean(draft.dream));
