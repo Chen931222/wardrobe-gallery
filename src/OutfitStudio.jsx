@@ -1264,6 +1264,8 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
                   <button type="button" className="studio-fit-reset" onClick={() => move(Math.min(...above) + 0.5)} disabled={!above.length}>往前一層</button>
                   <button type="button" className="studio-fit-reset" onClick={() => move(Math.max(...below) - 0.5)} disabled={!below.length}>往後一層</button>
                   <button type="button" className="studio-fit-reset" onClick={() => toggleWear(item)}>脫掉這件</button>
+                  {/* 看這件(2026-10-22 本人:「點圖片上的衣服沒跳出細節」):人台上點一下是選中拖曳,沒有手勢能開單品頁,補在工具列 */}
+                  {onOpenItem && <button type="button" className="studio-fit-reset" onClick={() => onOpenItem(item.id)}>看這件</button>}
                 </>
               );
             })()}
@@ -1529,7 +1531,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
             </Fragment>
           ))}
           {!rackItems.length && (
-            <p className="studio-rack-empty">{rackSearching ? `衣架上找不到「${rackQuery.trim()}」。試試品牌、顏色或分類` : "這一類還沒有單品"}</p>
+            <p className="studio-rack-empty">{rackSearching ? `衣架上找不到「${rackQuery.trim()}」。試試品牌、分類,或品名裡寫的顏色(顏色只比品名寫的字)` : "這一類還沒有單品"}</p>
           )}
         </div>
       </aside>

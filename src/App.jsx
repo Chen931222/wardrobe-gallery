@@ -92,7 +92,10 @@ function searchTextOf(item) {
     item.wishlist ? (item.dream ? "夢幻逸品 夢幻 逸品 夢想 還沒買" : "想買 還沒買") : "", item.note,
   ].filter(Boolean).join(" ").toLowerCase();
 }
-const searchTermsOf = (query) => query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+// 中文的顏色詞先去掉「全／純」和「色／的／系」再比(2026-10-22 本人搜「全黑」沒結果):「全黑」「黑色」「黑的」都比「黑」。
+// 只動中文詞;「深藍」「淺灰」的深淺是意思的一部分,留著
+const trimColorWord = (term) => (/^[a-z0-9]/.test(term) ? term : term.replace(/^[全純](?=.)/, "").replace(/(?<=.)[色的系]$/, ""));
+const searchTermsOf = (query) => query.trim().toLowerCase().split(/\s+/).filter(Boolean).map(trimColorWord).filter(Boolean);
 // 英文、數字從單字開頭比(「gu」不會比到 burgundy、「nike」比得到「nike」),中文照字串比
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** 一件衣服對不對得上這段搜尋字(空的算對得上)。衣櫃搜尋和搭配頁衣架的搜尋共用 */
