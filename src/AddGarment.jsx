@@ -211,6 +211,7 @@ function expandBox(region) {
  */
 export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHandled = null, replaceRequest = null, onReplaced = null, hideButton = false, onAddOne = null, renderCheck = null }) {
   const inputRef = useRef(null);
+  const retakeRef = useRef(false);   // 這次選照片是「重拍一張」:填好的留著
   const cameraRef = useRef(null);          // 店裡比一下:直接開相機的那一個
   const [store, setStore] = useState(false);
   const dialogRef = useRef(null);
@@ -253,6 +254,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     setLink(null);
     setReplacing(null);
     setStore(false);
+    retakeRef.current = false;
   };
   const reset = () => {
     clear();
@@ -392,7 +394,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const blob = await response.blob();
       if (run !== runRef.current) return;
-      pick(new File([blob], "brand.jpg", { type: blob.type || "image/jpeg" }));
+      pick(new File([blob], "brand.jpg", { type: blob.type || "image/jpeg" }), { fromBrand: true });
     } catch (cause) {
       if (run !== runRef.current) return;
       console.error(cause);
@@ -401,12 +403,15 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     }
   };
 
-  const pick = async (file) => {
+  /* keepDraft:「重拍一張」(2026-10-22)換的是同一件,已經填的名稱、分類留著;預覽網址交給 cutout 收。
+     fromBrand:商品圖,不是自己拍的,不用提醒拉平皺摺 */
+  const pick = async (file, { keepDraft = false, fromBrand = false } = {}) => {
     if (!file) return;
     setError("");
     const usable = await toCutoutFormat(file);
-    setDraft((current) => { if (current?.preview) URL.revokeObjectURL(current.preview); return null; });
-    setSource({ file: usable, url: URL.createObjectURL(usable) });
+    if (keepDraft) setDraft((current) => current && { ...current, pending: false });
+    else setDraft((current) => { if (current?.preview) URL.revokeObjectURL(current.preview); return null; });
+    setSource({ file: usable, url: URL.createObjectURL(usable), fromBrand });
     setBox(FULL);
     setStage("crop");
     preloadModel();
@@ -553,6 +558,12 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     setStage("crop");
   };
 
+  /* 皺摺提醒(2026-10-22,本人看示範衣櫃截圖:皺的衣服去背後還是皺,掛上人台很難看)。
+     不做偵測:瀏覽器裡沒有皺摺模型,土法會把針織紋路、印花當成皺,誤判一次就把人擋在最煩的那一步。
+     只在自己拍的照片上提醒;商品圖、商品頁截圖、店裡比一下不提 */
+  const ownPhoto = !store && !source?.fromBrand && !link?.url;
+  const retake = () => { retakeRef.current = true; inputRef.current?.click(); };
+
   const tooSmall = box.w < 0.05 || box.h < 0.05;
   const urlError = draft ? productUrlProblem(draft.sourceUrl) : "";
   const urlInvalid = Boolean(urlError);
@@ -657,7 +668,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
         type="file"
         accept="image/*"
         hidden
-        onChange={(event) => { pick(event.target.files?.[0]); event.target.value = ""; }}
+        onChange={(event) => { const keepDraft = retakeRef.current; retakeRef.current = false; pick(event.target.files?.[0], { keepDraft }); event.target.value = ""; }}
       />
       <input
         ref={cameraRef}
@@ -751,6 +762,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
                 這件加過了:「{linkDupe.name}」{linkDupe.wishlist ? ",在想買的裡" : ",已經在衣櫃裡"}。還是可以再加一次。
               </small>
             )}
+            {!parsedLink && <small className="add-hint">要拍的話:掛起來拍,或攤平、把皺摺拉開。揉成一團拍,去背出來也是一團。</small>}
             <div className="add-actions">
               <button type="button" className="secondary-button" onClick={() => { setLink(parsedLink?.notProduct ? null : effectiveLink ? { ...effectiveLink, images: [] } : null); inputRef.current?.click(); }}>
                 {parsedLink ? "改用照片" : "沒有連結,拍照或選照片"}
@@ -788,7 +800,10 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
             <small className="add-hint">
               {store
                 ? "衣架、旁邊的衣服、你的手框在外面,比出來的顏色才準。"
-                : "截圖的話,把狀態列、價格、按鈕框在外面。模特兒穿著的圖去背後人也會留下,盡量挑平拍那張。"}
+                : ownPhoto
+                  ? "皺成一團的話,先拉平或掛起來重拍,去背出來差很多。截圖的話,把狀態列、價格框在外面。"
+                  : "截圖的話,把狀態列、價格、按鈕框在外面。模特兒穿著的圖去背後人也會留下,盡量挑平拍那張。"}
+              {ownPhoto && <> <button type="button" className="add-text-button" onClick={retake}>重拍一張</button></>}
             </small>
             <CropBox src={source.url} box={box} onChange={setBox} />
             {box !== FULL && tooSmall && <small className="add-field-error" role="status">框太小了,重新拖一個。</small>}
@@ -976,6 +991,12 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
               )}
             </div>
             {fillToggle()}
+            {ownPhoto && draft.blob && (
+              <small className="add-hint add-retake">
+                看起來皺皺的?掛起來或拉平再拍一張,名稱和分類會留著。{" "}
+                <button type="button" className="add-text-button" onClick={retake}>重拍一張</button>
+              </small>
+            )}
             {draft.pending && (
               <small className="add-hint">
                 {modelReady() ? "去背中,趁這段時間先填名稱和分類。" : "第一次要下載約 80MB 的去背模型,趁這段時間先填名稱和分類。"}

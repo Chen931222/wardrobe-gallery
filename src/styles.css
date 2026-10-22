@@ -3504,13 +3504,17 @@ h1, h2, h3 {
 }
 
 /* 回報問題(2026-10-21):文字鈕,跟 welcome-note 裡的按鈕同一個調;視窗沿用新增的 overlay/panel */
-.feedback-button {
+.feedback-button, .add-text-button {
   border: 0; background: transparent; padding: 0;
   font: inherit; font-size: 13px; color: var(--muted);
   text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line);
   cursor: pointer;
 }
-.feedback-button:hover, .feedback-button:focus-visible { color: var(--ink); text-decoration-color: var(--ink); }
+.feedback-button:hover, .feedback-button:focus-visible,
+.add-text-button:hover, .add-text-button:focus-visible { color: var(--ink); text-decoration-color: var(--ink); }
+/* 重拍一張(2026-10-22):跟回報鈕同一種底線字,夾在提示句尾 */
+.add-text-button { font-size: inherit; min-height: 24px; }
+.add-retake { margin-top: 8px; }
 .feedback-button.in-nav { margin-left: 12px; white-space: nowrap; }
 @media (max-width: 640px) { .feedback-button.in-nav { margin-left: 0; } }
 .feedback-panel { align-items: stretch; text-align: left; gap: 14px; max-width: 440px; }
