@@ -714,8 +714,8 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
             {closeButton()}
             <p className="add-step">{replacing ? `換一張圖:${replacing.name || "這件"}` : "新增一件"}</p>
             {replacing && <small className="add-hint">選一張照片或貼商品連結,框出衣服、去背之後換上。名稱、分類、顏色都不會變。</small>}
-            {/* 貼連結放大門(2026-10-21):網購過的不用拍、不用去背,10 秒一件;拍照是沒連結時的第二條路 */}
-            {!replacing && <small className="add-hint add-lead">網購過的衣服最快:到商品頁按「分享」拷貝連結,貼在下面,不用拍照、不用去背。沒有連結的再拍照。</small>}
+            {/* 貼連結放大門(2026-10-21):網購過的不用拍(商品圖照樣去背,只是省掉拍和框);拍照是沒連結時的第二條路 */}
+            {!replacing && <small className="add-hint add-lead">網購過的衣服最快:到商品頁按「分享」拷貝連結,貼在下面,不用拍照。沒有連結的再拍照。</small>}
             <label className="add-field">
               <span>貼商品連結</span>
               {/* type="text" 不是 "url":App「分享」拷出來的是「快來看看【品名】… https://…」整段,
