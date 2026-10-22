@@ -2026,7 +2026,7 @@ export function App() {
             title={closet === "demo" && CAN_ADD ? "示範衣櫃" : "我的衣櫃"}
             note={closet === "demo" && CAN_ADD ? (
               <>
-                <span className="landing-pitch">把自己的衣服<span className="landing-pitch-more">拍照、或貼 GU、UNIQLO 的連結</span>放進來,每天照台中的天氣配一套。<span className="landing-pitch-more">下面是從站主衣櫃挑出來的幾件,先拿來示範。</span></span>
+                <span className="landing-pitch">把自己的衣服<span className="landing-pitch-more">拍照、或貼 GU、UNIQLO 的連結</span>放進來,每天照台中的天氣配一套。衣服不上傳,只存在你這台。<span className="landing-pitch-more">下面是從站主衣櫃挑出來的幾件,先拿來示範。</span></span>
                 <button type="button" className="landing-make" onClick={() => { chooseCloset("mine"); if (mineCount) setView("closet"); else requestAdd(); }}>
                   {mineCount ? "回我的衣櫃" : "建立我的衣櫃"}
                 </button>

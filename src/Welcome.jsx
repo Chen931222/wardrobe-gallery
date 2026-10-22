@@ -92,8 +92,15 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
     <section className="welcome" aria-labelledby="welcome-title">
       <div className="welcome-copy">
         <h2 id="welcome-title">我的衣櫃</h2>
-        <p>把自己的衣服拍照、或貼品牌的商品連結放進來,每天照你那邊的天氣配一套。</p>
-        <p className="welcome-steps">先加<b>一件上衣</b>和<b>一件下身</b>,就能配出第一套。衣服只存在你這台裝置裡,別人看不到。</p>
+        <p>把自己的衣服放進來,每天照你那邊的天氣配一套,再說為什麼。</p>
+        {/* 優點寫在入口(2026-10-22 本人):每一句都是實測過的事實,限制照寫。不放圖示、不放卡片 */}
+        <ul className="welcome-why">
+          <li><b>不上傳。</b>去背在你的手機裡算,沒有帳號,衣櫃存在這台瀏覽器裡,別人看不到。</li>
+          <li><b>一句話。</b>打「上課,不要外套」,它挑一整套掛上人台。</li>
+          <li><b>貼連結。</b>網購過的衣服貼商品連結就能加,不用拍照。</li>
+          <li><b>限制。</b>衣服是平拍照,袖子不會垂;猜的分類會錯,點一下改。</li>
+        </ul>
+        <p className="welcome-steps">先加<b>一件上衣</b>和<b>一件下身</b>,就能配出第一套。</p>
         {app && (
           <p className="welcome-tip is-warning" role="note">
             你現在是在 {app} 裡面開的。在這裡加的衣服只存在 {app} 裡,之後用 Safari 或 Chrome 打開會是空的。
@@ -115,6 +122,8 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
             用 iPhone 建議先按分享鈕 →「加入主畫面」,之後從主畫面打開再加衣服。只放在 Safari 裡久沒開,資料可能被系統清掉。
           </p>
         )}
+        {/* 回報鈕獨立一行(2026-10-22 本人「放個訪客問題回報」):原本夾在下面那排連結裡,看不到 */}
+        <p className="welcome-feedback">試了之後哪裡卡住,一句話就好:<Feedback where="歡迎" /></p>
         <p className="welcome-note">
           在別台同步過了?<button type="button" onClick={onSync}>輸入同步碼</button>
           <span aria-hidden="true"> · </span>
@@ -133,8 +142,6 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
           )}
           <span aria-hidden="true"> · </span>
           <a href="/privacy.html">隱私與使用說明</a>
-          <span aria-hidden="true"> · </span>
-          <Feedback where="歡迎" />
           <input
             ref={fileRef}
             type="file"

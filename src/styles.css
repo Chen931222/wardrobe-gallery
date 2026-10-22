@@ -2986,7 +2986,14 @@ h1, h2, h3 {
 .welcome-copy { flex: 1 1 420px; max-width: 520px; }
 .welcome h2 { margin: 0 0 12px; font-size: 26px; }
 .welcome p { margin: 0; font-size: 14px; line-height: 1.8; color: var(--body); }
-.welcome .welcome-steps { margin-top: 8px; }
+.welcome .welcome-steps { margin-top: 14px; }
+/* 入口的優點(2026-10-22):沒有圓點、沒有圖示,每行開頭兩三個字加粗當標題,像印刷品的條目 */
+.welcome-why { list-style: none; margin: 14px 0 0; padding: 0; }
+.welcome-why li { margin: 0; padding: 6px 0 6px 12px; border-left: 2px solid var(--line); font-size: 14px; line-height: 1.7; color: var(--body); }
+.welcome-why li + li { margin-top: 4px; }
+.welcome-why b { font-weight: 500; color: var(--ink); }
+.welcome .welcome-feedback { margin-top: 18px; font-size: 13px; color: var(--muted); }
+.welcome-feedback .feedback-button { margin-left: 4px; }
 .welcome-steps b { font-weight: 500; color: var(--ink); }
 .welcome-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
 .welcome-actions button { min-height: 44px; padding: 0 20px; }
