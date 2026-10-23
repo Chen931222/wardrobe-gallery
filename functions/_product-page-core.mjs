@@ -13,7 +13,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 
-const UA = "Mozilla/5.0 (compatible; WardrobeLinkPreview/1.0; +https://wardrobe-gallery.vercel.app)";
+const UA = "Mozilla/5.0 (compatible; WardrobeLinkPreview/1.0; +https://pairthis.app)";
 const MAX_HTML = 2_000_000;
 const MAX_IMAGE = 10 * 1024 * 1024;
 const MAX_IMAGES = 12;

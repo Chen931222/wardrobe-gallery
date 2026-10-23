@@ -120,8 +120,12 @@ const NO_INDEX = [{ key: "X-Robots-Tag", value: "noindex, noarchive, nosnippet" 
 // /assets/ 的檔名帶內容雜湊(Vite 打包),內容變了檔名就變:存一年、不用再問。
 // Vercel 預設是 max-age=0,手機每次打開都要把 JS、CSS、十幾個字型檔一個個問過伺服器才肯用(2026-10-06 本人回報「載入有點慢」)
 const IMMUTABLE = [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }];
+// www 轉到不帶 www(2026-10-23 換網址 pairthis.app):瀏覽器把 www 和不帶 www 當兩個站,衣櫃會各存一份,
+// 有人從 www 進來會看到空衣櫃。舊網址 wardrobe-gallery.vercel.app 不轉,存在那裡的衣櫃搬不過來
+const WWW_TO_APEX = [{ source: "/(.*)", has: [{ type: "host", value: "www.pairthis.app" }], destination: "https://pairthis.app/$1", permanent: true }];
 await writeFile(join(OUT, "vercel.json"), JSON.stringify({
   git: { deploymentEnabled: false },
+  redirects: WWW_TO_APEX,
   headers: [
     { source: "/(.*)", headers: SECURITY_HEADERS },
     { source: "/assets/(.*)", headers: IMMUTABLE },

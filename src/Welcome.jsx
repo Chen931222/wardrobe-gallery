@@ -91,16 +91,14 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
   return (
     <section className="welcome" aria-labelledby="welcome-title">
       <div className="welcome-copy">
-        <h2 id="welcome-title">我的衣櫃</h2>
-        <p>把自己的衣服放進來,每天照你那邊的天氣配一套,再說為什麼。</p>
-        {/* 優點寫在入口(2026-10-22 本人):每一句都是實測過的事實,限制照寫。不放圖示、不放卡片 */}
-        <ul className="welcome-why">
-          <li><b>不上傳。</b>去背在你的手機裡算,沒有帳號,衣櫃存在這台瀏覽器裡,別人看不到。</li>
-          <li><b>一句話。</b>打「上課,不要外套」,它挑一整套掛上人台。</li>
-          <li><b>貼連結。</b>網購過的衣服貼商品連結就能加,不用拍照。</li>
-          <li><b>限制。</b>衣服是平拍照,袖子不會垂;猜的分類會錯,點一下改。</li>
-        </ul>
-        <p className="welcome-steps">先加<b>一件上衣</b>和<b>一件下身</b>,就能配出第一套。</p>
+        {/* 站名(2026-10-23 本人定):PairThis,中文「搭這件」當副標;網址 pairthis.app、帳號 @pairthis.app 同名 */}
+        <h2 id="welcome-title">PairThis <small>搭這件</small></h2>
+        {/* 入口的字(2026-10-22 本人「寫的太 AI」):不做條列、不做「兩個字加粗當標題」,就四段講話,長短不齊。每句都是實測過的事,限制照講 */}
+        <p>把自己的衣服放進來,它照你那邊的天氣配一套,說為什麼。</p>
+        <p className="welcome-para">照片不會離開你的手機。去背是手機自己算的,沒有帳號,衣櫃就存在這台瀏覽器裡。</p>
+        <p className="welcome-para">想穿什麼用講的,「上課,不要外套」這樣。網購過的衣服貼商品連結就能加,不用拍。</p>
+        <p className="welcome-para">會錯的地方先講:衣服是平放的照片,袖子不會垂。分類是猜的,猜錯了點一下改。</p>
+        <p className="welcome-steps">先加<b>一件上衣</b>、<b>一件下身</b>,就能配出第一套。</p>
         {app && (
           <p className="welcome-tip is-warning" role="note">
             你現在是在 {app} 裡面開的。在這裡加的衣服只存在 {app} 裡,之後用 Safari 或 Chrome 打開會是空的。

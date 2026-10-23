@@ -8,7 +8,8 @@
 // 改了送出的東西,要回來改 public/privacy.html 的「使用統計」。
 import { CAN_EDIT } from "./ownerMode.js";
 
-const SITE = "wardrobe-gallery.vercel.app";
+// 2026-10-23 換網址 pairthis.app;舊的 wardrobe-gallery.vercel.app 還開著(備份檔的說明、舊貼文都指到那裡),兩邊都算
+const SITES = ["pairthis.app", "www.pairthis.app", "wardrobe-gallery.vercel.app"];
 const OFF_KEY = "umami.disabled";   // Umami 腳本自己也會看這個鍵
 
 function optOut() {
@@ -24,7 +25,7 @@ function optOut() {
 
 export function loadAnalytics() {
   const id = import.meta.env.VITE_UMAMI_ID;
-  if (!import.meta.env.PROD || !id || window.location.hostname !== SITE) return;
+  if (!import.meta.env.PROD || !id || !SITES.includes(window.location.hostname)) return;
   optOut();
   try { if (localStorage.getItem(OFF_KEY)) return; } catch { /* 私密瀏覽:照常 */ }
   if (CAN_EDIT) return;
@@ -32,7 +33,7 @@ export function loadAnalytics() {
   script.defer = true;
   script.src = "https://cloud.umami.is/script.js";
   script.dataset.websiteId = id;
-  script.dataset.domains = SITE;
+  script.dataset.domains = SITES.join(",");   // Umami 只在這些網域送
   script.dataset.doNotTrack = "true";
   script.dataset.excludeSearch = "true";
   script.dataset.excludeHash = "true";

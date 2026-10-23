@@ -1,7 +1,7 @@
 {
-  "name": "我的衣櫃",
-  "short_name": "衣櫃",
-  "description": "把每一件衣服當展品拍照建檔的衣物畫廊。",
+  "name": "PairThis 搭這件",
+  "short_name": "PairThis",
+  "description": "把自己的衣服放進來,照你那邊的天氣配一套,說為什麼。照片不離開手機。",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

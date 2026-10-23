@@ -22,7 +22,7 @@ const JSON_NAME = "衣櫃備份.json";
    裡面只有一份說明和一團密文,要回網站「匯入備份」輸入密碼才解得開。
    密碼 → PBKDF2-SHA256 60 萬次 → AES-GCM。密碼忘了就打不開,網站作者也救不回來。 */
 const LOCKED_NAME = "衣櫃備份.加密";
-const LOCKED_README = "這是加了密碼的衣櫃備份。\n到 https://wardrobe-gallery.vercel.app 搭配頁最下面按「匯入備份」選這個檔,再輸入匯出時設的密碼。\n密碼忘了就打不開,誰都救不回來(包括網站作者)。\n";
+const LOCKED_README = "這是加了密碼的衣櫃備份。\n到 https://pairthis.app 搭配頁最下面按「匯入備份」選這個檔,再輸入匯出時設的密碼。\n密碼忘了就打不開,誰都救不回來(包括網站作者)。\n";
 const LOCK_MAGIC = new TextEncoder().encode("WRDLOCK1");
 const LOCK_ROUNDS = 600000;
 
