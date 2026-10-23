@@ -230,6 +230,9 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
   const [refilling, setRefilling] = useState(false);
   const partRef = useRef("");              // 去背好那一刻選的分類(眼鏡不自動補實,見 cutoutFix.js)
   partRef.current = draft?.part || "";
+  // 衣櫃還空著(一件已經有的都沒有;想買的、垃圾桶裡的不算):貼連結預設「已經有了」(2026-10-23 本人定)。
+  // 入口叫新手「網購過的貼連結」,舊預設是「想買」,想買的不算衣櫃、不會配第一套,照著做就卡住
+  const closetEmpty = !existing.some((item) => !item.wishlist && !item.trashedAt);
 
   /* 返回手勢(iPhone 從左緣側滑):舊版會直接離開網站,剛去背好的結果全丟(審查 F34)。
      打開新增時押一筆歷史,返回就只關掉新增;已經去背好的先問一聲。用 UI 關掉時自己把那一筆吃掉。 */
@@ -461,8 +464,8 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
           part: kept ? kept.part : link?.part || partFromName(link?.name) || "",
           color: null,
           secondaryColor: null,
-          // 貼了商品連結才預設「還沒買」;從相簿選的多半是自己已經有的
-          wishlist: kept ? kept.wishlist : store || Boolean(link?.url),
+          // 貼了商品連結才預設「還沒買」;從相簿選的多半是自己已經有的。衣櫃還空著時例外,貼連結也當已經有了(見 closetEmpty)
+          wishlist: kept ? kept.wishlist : store || (Boolean(link?.url) && !closetEmpty),
           dream: kept ? Boolean(kept.dream) : false,   // 夢想區(2026-10-08):還沒買的另一層,很想要、還沒打算買
           sourceUrl: kept ? kept.sourceUrl : link?.url || "",
           // 價錢:商品頁或 GU、UNIQLO 讀得到就先填好,讀不到留空讓人填

@@ -68,13 +68,17 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
     fetchWeather().then((result) => { if (alive) setWeather(result); }).catch(() => { if (alive) setWeather(FALLBACK_WEATHER); });
     return () => { alive = false; };
   }, [city.key]);
-  // 天氣到了才配,配一次就固定(不然每次重新 render 都換一套)
+  // 天氣到了才配,配一次就固定(不然每次重新 render 都換一套)。理由也留著:標題說「說為什麼」,示範就要真的說(最多三條)
   const idsKey = demoItems.map((item) => item.id).join("|");
   const look = useMemo(() => {
     if (!weather || !demoItems.length) return null;
     const result = recommendOutfit(demoItems, weather, {});
-    return result.error ? null : result.outfit;
+    // 引擎的句子是半形標點(全站還沒改),入口這頁都是全形,這裡換掉免得一頁兩種
+    const fullWidth = (text) => text.replace(/,/g, "，").replace(/;/g, "；").replace(/:/g, "：");
+    return result.error ? null : { outfit: result.outfit, reasons: (result.reasons || []).slice(0, 3).map(fullWidth) };
   }, [weather, idsKey]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // 天氣抓不到時用的是假天氣(FALLBACK_WEATHER),那時的理由會講出假的體感,不顯示
+  const realWeather = weather && weather.temp !== null;
 
   // iPhone 的 Safari(不是從主畫面開的):資料久沒用可能被系統清掉,而且主畫面版和 Safari 的資料是分開的,
   // 所以要在還沒加衣服的這個時候講,加完才搬就看不到了
@@ -93,29 +97,25 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
     <section className="welcome" aria-labelledby="welcome-title">
       {/* 站名(2026-10-23 本人定):PairThis,中文「搭這件」;網址 pairthis.app、帳號 @pairthis.app 同名。
           同日本人「入口有點醜、沒有商標」:頂端放標誌(src/Brand.jsx,本人選的 design.com 那張),原本的第一段升成大字標題,
-          示範穿搭放大。排版用 grid:桌機示範穿搭在右欄,手機排在標題下面(還在第一屏)。
+          示範穿搭放大。排版用 grid:桌機示範穿搭在右欄;手機依序是標題、第一步和按鈕、示範(按鈕要在第一屏)。
           標點改全形:半形逗號夾在中文裡會擠在一起,大字更明顯(站上其他頁還是半形,還沒改) */}
       <Logo className="welcome-logo" />
-      {/* 入口的字(2026-10-22 本人「寫的太 AI」):不做條列、不做「兩個字加粗當標題」,就四段講話,長短不齊。每句都是實測過的事,限制照講 */}
+      {/* 入口的字(2026-10-22 本人「寫的太 AI」):不做條列、不做「兩個字加粗當標題」,就幾段講話,長短不齊。每句都是實測過的事,限制照講 */}
       <h2 id="welcome-title" className="welcome-lede">
         <span>把自己的衣服放進來，</span><span>它照你那邊的天氣配一套，</span><span>說為什麼。</span>
       </h2>
 
-      {look && (
-        <figure className="welcome-look">
-          <MiniLook outfit={look} />
-          <figcaption>
-            {weather.temp !== null ? <><CitySelect /> {weather.temp}°，</> : ""}今天這樣穿
-            <span className="welcome-look-items">示範衣櫃：{["wholebody_up", "upperbody", "lowerbody", "shoes"].map((slot) => look[slot]?.name).filter(Boolean).join(" / ")}</span>
-          </figcaption>
-        </figure>
-      )}
-
-      <div className="welcome-copy">
-        <p className="welcome-para">照片不會離開你的手機。去背是手機自己算的，沒有帳號，衣櫃就存在這台瀏覽器裡。</p>
-        <p className="welcome-para">想穿什麼用講的，「上課，不要外套」這樣。網購過的衣服貼商品連結就能加，不用拍。</p>
-        <p className="welcome-para">會錯的地方先講：衣服是平放的照片，袖子不會垂。分類是猜的，猜錯了點一下改。</p>
-        <p className="welcome-steps">先加<b>一件上衣</b>、<b>一件下身</b>，就能配出第一套。</p>
+      {/* 第一步(2026-10-23 本人「讓入門者知道他們在做什麼」):原本按鈕排在三段說明後面,手機要捲才看得到。
+          現在標題下面直接講按下去會發生什麼,再放按鈕。「加一件就配一套」是 App.jsx 的 firstLook(10-21 上線):
+          缺的格子從示範衣櫃借;舊句「先加一件上衣、一件下身」從那天起就不對了 */}
+      <div className="welcome-start">
+        {/* 貼連結平常預設「想買」,但衣櫃還空著時預設「已經有了」(AddGarment.jsx closetEmpty,2026-10-23),
+            這頁只在衣櫃空著時出現,所以不用叫人去點 */}
+        <p className="welcome-steps">
+          <span>加第一件就會配出一套，缺的先跟示範衣櫃借。</span>
+          <span>網購過的貼商品連結，不用拍。</span>
+          <span>沒有連結的，拍一張平放的。</span>
+        </p>
         {app && (
           <p className="welcome-tip is-warning" role="note">
             你現在是在 {app} 裡面開的。在這裡加的衣服只存在 {app} 裡，之後用 Safari 或 Chrome 打開會是空的。
@@ -137,6 +137,27 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
             用 iPhone 建議先按分享鈕 →「加入主畫面」，之後從主畫面打開再加衣服。只放在 Safari 裡久沒開，資料可能被系統清掉。
           </p>
         )}
+      </div>
+
+      {/* 示範:人台穿一套,底下是它給的理由。理由是引擎真的算出來的(recommendOutfit 的 reasons),不是寫死的句子 */}
+      {look && (
+        <figure className="welcome-look">
+          <MiniLook outfit={look.outfit} />
+          <figcaption>
+            <span className="welcome-look-when">{realWeather ? <><CitySelect /> {weather.temp}°，</> : ""}<span className="nowrap">{realWeather ? "示範衣櫃今天這樣穿" : "示範衣櫃的一套"}{realWeather && look.reasons.length ? "：" : ""}</span></span>
+            {realWeather && look.reasons.length > 0 && (
+              <ul className="welcome-look-why">{look.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+            )}
+          </figcaption>
+        </figure>
+      )}
+
+      {/* 先講清楚的事:隱私、怎麼用、會錯的地方。放在按鈕和示範後面,想知道的人往下讀 */}
+      <div className="welcome-copy">
+        <p className="welcome-para">照片不會離開你的手機。去背是手機自己算的，沒有帳號，衣櫃就存在這台瀏覽器裡。</p>
+        {/* 搭配頁講話只用自己的衣服(借來的不算),自己沒有上衣加下身會回「還差下身」 */}
+        <p className="welcome-para">自己有一件上衣、一件下身之後，想換就用講的，<span className="nowrap">「上課，不要外套」</span>這樣。</p>
+        <p className="welcome-para">會錯的地方先講：衣服是平放的照片，袖子不會垂。分類是猜的，猜錯了點一下改。</p>
         {/* 回報鈕獨立一行(2026-10-22 本人「放個訪客問題回報」):原本夾在下面那排連結裡,看不到 */}
         <p className="welcome-feedback">試了之後哪裡卡住，一句話就好：<Feedback where="歡迎" /></p>
       </div>
