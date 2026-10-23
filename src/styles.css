@@ -2520,10 +2520,35 @@ h1, h2, h3 {
   inset: 0 0 auto;
   z-index: 40;
   display: flex;
-  align-items: center;
+  align-items: flex-start;   /* 左上有直式標誌(2026-10-23),導覽留在右上,不跟著置中掉下來 */
   justify-content: space-between;
   padding: 22px 32px;
   pointer-events: none;     /* 標題列蓋到圓環 12 點那張(訪客多一行說明時更明顯):只有按鈕接點擊,其他讓給底下的卡片 */
+}
+/* 左上:標誌,右邊一欄是標題、說明、回報鈕(跟衣櫃、搭配頁同一個排法,2026-10-23)。
+   標誌 115px 高,比訪客那欄(標題＋說明＋按鈕 ~150px)矮;回報鈕排在「建立我的衣櫃」右邊,不另起一行,
+   頂列高度跟改之前一樣(另起一行時頂列 171→204,聚焦放大的卡會鑽到說明底下,驗收抓到) */
+.landing-brand { display: flex; align-items: flex-start; gap: 24px; min-width: 0; }
+.landing-top .landing-logo { width: 96px; flex: none; }   /* 要贏過後面 .logo 的 128px(入口那顆) */
+.landing-feedback { margin: 10px 0 0; }
+@media (min-width: 641px) {
+  /* 說明那個 <p> 拆掉外框(display: contents,字級、顏色照樣傳下去),說明、按鈕、回報鈕直接排進格子 */
+  .landing-title:has(.landing-note) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: "h1 h1" "pitch pitch" "make fb";
+    align-items: center;
+    column-gap: 18px;
+  }
+  .landing-title:has(.landing-note) h1 { grid-area: h1; }
+  .landing-title:has(.landing-note) .landing-note { display: contents; }
+  .landing-title:has(.landing-note) .landing-pitch { grid-area: pitch; max-width: 480px; margin-top: 6px; }
+  .landing-title:has(.landing-note) .landing-make { grid-area: make; justify-self: start; }
+  .landing-title:has(.landing-note) .landing-feedback { grid-area: fb; margin-top: 10px; }
+}
+/* 手機橫放(812×375 這種):高度不夠,標誌縮小,頂列不要比說明那欄高 */
+@media (min-width: 641px) and (max-height: 560px) {
+  .landing-top .landing-logo { width: 56px; }
 }
 .landing-top nav,
 .landing-top button { pointer-events: auto; }
@@ -2569,15 +2594,25 @@ h1, h2, h3 {
   text-decoration: none;
 }
 .landing-note button.landing-make:hover { opacity: .88; }
-.landing-top:has(.landing-note) { align-items: flex-start; }   /* 說明變長時導覽留在右上,不跟著置中掉下來 */
 .landing-top nav button.has-alert { color: var(--ink); }
 /* 手機:標題和導覽一列,說明和「建立我的衣櫃」在下一列用滿整個寬度。說明只留一句「放進來、每天配一套」:
    怎麼放(拍照、貼連結)按下去就看得到,「這是示範」標題已經寫了;說明一長,標題列就吃掉半個圓環(iPhone SE 實測) */
+/* 2026-10-23 加標誌:手機上標誌和回報鈕自己一行在最上面(標題加四顆導覽已經佔滿 375 寬),下面照舊。
+   用 grid 排:外面兩層 display: contents,標誌、回報、標題、導覽、說明都直接放進格子 */
 @media (max-width: 640px) {
-  .landing-top:has(.landing-note) { flex-wrap: wrap; row-gap: 10px; }
-  .landing-top:has(.landing-note) .landing-title { display: contents; }
-  .landing-top:has(.landing-note) nav { order: 1; }
-  .landing-top .landing-note { order: 2; flex: 1 1 100%; max-width: none; margin: 0; display: flex; align-items: center; gap: 12px; }
+  .landing-top {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "logo fb fb" "title title nav" "note note note";
+    align-items: center;
+    column-gap: 12px; row-gap: 8px;
+  }
+  .landing-brand, .landing-title { display: contents; }
+  .landing-top .landing-logo { grid-area: logo; width: 40px; }   /* 比衣櫃頁手機(60)小:這頁的主角是圓環,頂列每多 1px 圓環就縮 */
+  .landing-feedback { grid-area: fb; align-self: end; margin: 0; }
+  .landing-top h1 { grid-area: title; }
+  .landing-top nav { grid-area: nav; }
+  .landing-top .landing-note { grid-area: note; max-width: none; margin: 0; display: flex; align-items: center; gap: 12px; }
   .landing-pitch { flex: 1 1 auto; }
   .landing-pitch-more { display: none; }
   .landing-note button.landing-make { flex: none; margin: 0; padding: 0 14px; }

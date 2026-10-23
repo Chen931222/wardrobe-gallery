@@ -2042,6 +2042,7 @@ export function App() {
             onEnter={setView}
             onAdd={CAN_ADD ? requestAdd : null}
             onWearOutfit={(outfit, daily) => { wearOutfit(outfit, daily); setView("styling"); }}
+            feedback={!CAN_EDIT ? <Feedback where="入口" className="in-brand" /> : null}
           />
         )}
         {view === "landing" && loading && <p className="status">衣櫃載入中</p>}

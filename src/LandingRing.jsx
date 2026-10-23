@@ -1,9 +1,10 @@
 // [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sparkle, X } from "@phosphor-icons/react";
 import { fetchWeather, readWearLog, recommendOutfit } from "./recommend.js";
 import { CitySelect, useCity } from "./CitySelect.jsx";
 import { readTaste } from "./taste.js";
+import { Logo } from "./Brand.jsx";
 
 // 入口導覽頁 v2(2026-07-21 依使用者回饋改版):
 //   - 拿掉滾輪/拖曳/自轉 —— 沒有 rAF 迴圈,平常是純靜態排版,零效能負擔
@@ -73,7 +74,8 @@ const ROW_MAX = 3;
  * @param onAdd        推薦不了(缺上衣或下身)時給一顆「去新增」;沒給就不顯示
  * @param syncAlert    同步有狀況(停掉、上次失敗):「同步」旁亮一個點
  */
-export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = null, onAdd = null, syncAlert = false, onUpdates = null, updatesUnseen = false, title = "我的衣櫃", note = null }) {
+/** @param feedback 回報鈕(App 給,站主模式是 null):放在左上標誌右邊那一欄 */
+export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = null, onAdd = null, syncAlert = false, onUpdates = null, updatesUnseen = false, title = "我的衣櫃", note = null, feedback = null }) {
   // 手機(<640)重排:少放幾件圓環卡才夠大可點,今日推薦從環心移到環下方長條,不再壓卡片
   const [phone, setPhone] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches);
   useEffect(() => {
@@ -152,6 +154,19 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
     observer.observe(stage);
     if (topRef.current) observer.observe(topRef.current);
     return () => observer.disconnect();
+  }, []);
+
+  // 手機的今日推薦長條蓋在舞台底部:圓環往下移的時候不能鑽到它下面。量它的高度,只記最大值
+  // (天氣讀取中那一行很矮,推薦出來才變高;只增不減,圓環不會在讀完天氣那一刻跳一下)
+  const [stripH, setStripH] = useState(0);
+  const stripObserver = useRef(null);
+  const stripRef = useCallback((el) => {
+    stripObserver.current?.disconnect();
+    if (!el) return;
+    const grow = () => setStripH((current) => Math.max(current, el.offsetHeight));
+    grow();
+    stripObserver.current = new ResizeObserver(grow);
+    stripObserver.current.observe(el);
   }, []);
 
   const n = picked.length;
@@ -282,17 +297,28 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
     };
 
     let k = fit(ringR);
-    // 最高的那件轉到 12 點時會頂到標題列:圓心往下、半徑縮小同樣的量,下緣不動(手機下面是今日推薦長條),
-    // 上緣讓出標題列。最多縮到原本的六成,再小就寧可蓋一點
+    // 最高的那件轉到 12 點時會頂到標題列:先整個圓環往下移,用掉環下緣到畫面底之間本來就空著的那段
+    // (手機扣掉今日推薦長條,至少當它 184px 高,再留 8px;桌機留 56px 給底下「滾輪轉動」那行);移不夠的部分才縮:
+    // 圓心往下、半徑縮小同樣的量,下緣不動,上緣讓出標題列。最多縮到原本的六成,再小就寧可蓋一點。
+    // (2026-10-23 頂列左上加了標誌,手機頂列多一行;舊版直接縮,375 寬圓環從 290 掉到 218px,下面空一大段)
     const overlap = topClear - (cy - ringR - (tallest * k) / 2);
     if (overlap > 0) {
-      const shrink = Math.min(overlap / 2, ringR * 0.4);
-      cy += shrink;
-      ringR -= shrink;
-      k = fit(ringR);
+      // 手機的卡最小 40px(styles.css),位置照算出來的高度放、上緣對齊,小卡撐到 40 會往下多出一截:下緣要算進去
+      const shortest = Math.min(...boxes.map((b) => b.h));
+      const below = phone ? Math.max((tallest * k) / 2, 40 - (shortest * k) / 2) : (tallest * k) / 2;
+      const room = Math.max(0, h - (phone ? Math.max(stripH, 184) + 8 : 56) - (cy + ringR + below));
+      const move = Math.min(overlap, room);
+      cy += move;
+      const rest = overlap - move;
+      if (rest > 0) {
+        const shrink = Math.min(rest / 2, ringR * 0.4);
+        cy += shrink;
+        ringR -= shrink;
+        k = fit(ringR);
+      }
     }
     return { wide, ringR, k, cy, row: false };
-  }, [dims, boxes, n, phone, topH]);
+  }, [dims, boxes, n, phone, topH, stripH]);
 
   // 依模式算每張卡的位置與大小(純函式,一次算完交給 CSS transition 去飛)
   const layout = (index) => {
@@ -325,13 +351,18 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
     // 聚焦模式:圓心移到左緣外側,被點的在三點鐘方向(θ=0)。<800 都走原本的手機弧線
     const r = !wide ? w * 0.78 : w * 0.414;
     const cx = !wide ? -w * 0.30 : -w * 0.014;
-    const cy = h * (!wide ? 0.40 : 0.5);
     const a = ((index - focusIdx) / n) * Math.PI * 2;
     const focused = index === focusIdx;
     // 放大倍率全體一致(FOCUS_ZOOM),只有塞不下畫面時才收斂 —— 這樣長褲仍舊比帽T長
     const fBox = boxes[focusIdx];
     const focusLimit = Math.min(h * 0.66, !wide ? w * 0.86 : w * 0.34);
-    const zoom = Math.min(FOCUS_ZOOM, focusLimit / (Math.max(fBox.w, fBox.h) * k));
+    let zoom = Math.min(FOCUS_ZOOM, focusLimit / (Math.max(fBox.w, fBox.h) * k));
+    // 放大那件的上緣要在標題列下面(2026-10-23 左上加了標誌,標題列變高,驗收抓到放大的卡鑽到說明底下):
+    // 圓心照舊在 40%/50% 高,頂到標題列就往下移;往下移到底(畫面 92%)還放不下,才把放大倍率收小
+    const topClear = topH + 8;
+    const fit = h * 0.92 - topClear;
+    if (fBox.h * k * zoom > fit) zoom = Math.max(1, fit / (fBox.h * k));
+    const cy = Math.max(h * (!wide ? 0.40 : 0.5), topClear + (fBox.h * k * zoom) / 2);
     return {
       x: cx + Math.cos(a) * r,
       y: cy - Math.sin(a) * r,
@@ -366,9 +397,15 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
   return (
     <section className="landing" aria-label="衣櫃入口導覽">
       <header className="landing-top" ref={topRef}>
-        <div className="landing-title">
-          <h1>{title}</h1>
-          {note && <p className="landing-note">{note}</p>}
+        {/* 左上(2026-10-23 本人「這一頁左上角也要一樣的改動」,跟衣櫃、搭配頁一樣):標誌,右邊一欄是標題、說明、回報鈕。
+            桌機回報鈕排在「建立我的衣櫃」右邊(不另起一行,頂列高度跟改之前一樣);手機標誌和回報自己一行(見 styles.css) */}
+        <div className="landing-brand">
+          <Logo className="landing-logo" />
+          <div className="landing-title">
+            <h1>{title}</h1>
+            {note && <p className="landing-note">{note}</p>}
+            {feedback && <p className="landing-feedback">{feedback}</p>}
+          </div>
         </div>
         <nav>
           <button type="button" onClick={() => onEnter("closet")}>衣櫃</button>
@@ -462,7 +499,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
 
       {/* 手機:今日推薦改成環下方長條,不再壓圓環卡片 */}
       {phone && focusIdx === null && (
-        <div className="landing-daily-strip">
+        <div className="landing-daily-strip" ref={stripRef}>
           {!daily && <p className="landing-daily-loading">讀取今天的天氣…</p>}
           {daily?.error && <p className="landing-daily-loading">{daily.error}</p>}
           {daily?.missing && onAdd && <button type="button" className="landing-daily-go" onClick={onAdd}>去新增</button>}
