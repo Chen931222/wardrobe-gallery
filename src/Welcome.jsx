@@ -10,6 +10,7 @@ import { fetchWeather, recommendOutfit } from "./recommend.js";
 import { CitySelect, useCity } from "./CitySelect.jsx";
 import { inAppBrowser, isIos, isStandalone } from "./keepSafe.js";
 import { Feedback } from "./Feedback.jsx";
+import { Logo } from "./Brand.jsx";
 
 const FALLBACK_WEATHER = { temp: null, feelsLike: 25, desc: "", rainProb: 0, tMax: 27, tMin: 22 };
 
@@ -18,7 +19,7 @@ function MiniLook({ outfit }) {
   const [nats, setNats] = useState({});
   const [, setTick] = useState(0);
   return (
-    <div className="mini-look" role="img" aria-label={`示範穿搭:${Object.values(outfit).filter(Boolean).map((item) => item.name).join("、")}`}>
+    <div className="mini-look" role="img" aria-label={`示範穿搭：${Object.values(outfit).filter(Boolean).map((item) => item.name).join("、")}`}>
       <Silhouette />
       {Object.entries(outfit).map(([slot, item]) => {
         if (!item || !SLOT_STYLE[slot] || slot === "socks") return null;
@@ -84,25 +85,41 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
   const here = typeof window === "undefined" ? "" : window.location.origin;
   const [copied, setCopied] = useState("");
   const copyLink = async () => {
-    try { await navigator.clipboard.writeText(here); setCopied("已複製,到 Safari 或 Chrome 貼上"); }
-    catch { setCopied(`複製不了,手動輸入:${here.replace(/^https?:\/\//, "")}`); }
+    try { await navigator.clipboard.writeText(here); setCopied("已複製，到 Safari 或 Chrome 貼上"); }
+    catch { setCopied(`複製不了，手動輸入：${here.replace(/^https?:\/\//, "")}`); }
   };
 
   return (
     <section className="welcome" aria-labelledby="welcome-title">
+      {/* 站名(2026-10-23 本人定):PairThis,中文「搭這件」;網址 pairthis.app、帳號 @pairthis.app 同名。
+          同日本人「入口有點醜、沒有商標」:頂端放標誌(src/Brand.jsx,本人選的 design.com 那張),原本的第一段升成大字標題,
+          示範穿搭放大。排版用 grid:桌機示範穿搭在右欄,手機排在標題下面(還在第一屏)。
+          標點改全形:半形逗號夾在中文裡會擠在一起,大字更明顯(站上其他頁還是半形,還沒改) */}
+      <Logo className="welcome-logo" />
+      {/* 入口的字(2026-10-22 本人「寫的太 AI」):不做條列、不做「兩個字加粗當標題」,就四段講話,長短不齊。每句都是實測過的事,限制照講 */}
+      <h2 id="welcome-title" className="welcome-lede">
+        <span>把自己的衣服放進來，</span><span>它照你那邊的天氣配一套，</span><span>說為什麼。</span>
+      </h2>
+
+      {look && (
+        <figure className="welcome-look">
+          <MiniLook outfit={look} />
+          <figcaption>
+            {weather.temp !== null ? <><CitySelect /> {weather.temp}°，</> : ""}今天這樣穿
+            <span className="welcome-look-items">示範衣櫃：{["wholebody_up", "upperbody", "lowerbody", "shoes"].map((slot) => look[slot]?.name).filter(Boolean).join(" / ")}</span>
+          </figcaption>
+        </figure>
+      )}
+
       <div className="welcome-copy">
-        {/* 站名(2026-10-23 本人定):PairThis,中文「搭這件」當副標;網址 pairthis.app、帳號 @pairthis.app 同名 */}
-        <h2 id="welcome-title">PairThis <small>搭這件</small></h2>
-        {/* 入口的字(2026-10-22 本人「寫的太 AI」):不做條列、不做「兩個字加粗當標題」,就四段講話,長短不齊。每句都是實測過的事,限制照講 */}
-        <p>把自己的衣服放進來,它照你那邊的天氣配一套,說為什麼。</p>
-        <p className="welcome-para">照片不會離開你的手機。去背是手機自己算的,沒有帳號,衣櫃就存在這台瀏覽器裡。</p>
-        <p className="welcome-para">想穿什麼用講的,「上課,不要外套」這樣。網購過的衣服貼商品連結就能加,不用拍。</p>
-        <p className="welcome-para">會錯的地方先講:衣服是平放的照片,袖子不會垂。分類是猜的,猜錯了點一下改。</p>
-        <p className="welcome-steps">先加<b>一件上衣</b>、<b>一件下身</b>,就能配出第一套。</p>
+        <p className="welcome-para">照片不會離開你的手機。去背是手機自己算的，沒有帳號，衣櫃就存在這台瀏覽器裡。</p>
+        <p className="welcome-para">想穿什麼用講的，「上課，不要外套」這樣。網購過的衣服貼商品連結就能加，不用拍。</p>
+        <p className="welcome-para">會錯的地方先講：衣服是平放的照片，袖子不會垂。分類是猜的，猜錯了點一下改。</p>
+        <p className="welcome-steps">先加<b>一件上衣</b>、<b>一件下身</b>，就能配出第一套。</p>
         {app && (
           <p className="welcome-tip is-warning" role="note">
-            你現在是在 {app} 裡面開的。在這裡加的衣服只存在 {app} 裡,之後用 Safari 或 Chrome 打開會是空的。
-            先從 {app} 的選單選「用瀏覽器開啟」,再開始加。
+            你現在是在 {app} 裡面開的。在這裡加的衣服只存在 {app} 裡，之後用 Safari 或 Chrome 打開會是空的。
+            先從 {app} 的選單選「用瀏覽器開啟」，再開始加。
             <span className="welcome-tip-actions">
               {/* LINE 認這個參數:帶著它的連結會改用手機的預設瀏覽器開 */}
               {app === "LINE" && <a href={`${here}/?openExternalBrowser=1`}>用瀏覽器開啟</a>}
@@ -117,52 +134,44 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
         </div>
         {ios && !standalone && !app && (
           <p className="welcome-tip">
-            用 iPhone 建議先按分享鈕 →「加入主畫面」,之後從主畫面打開再加衣服。只放在 Safari 裡久沒開,資料可能被系統清掉。
+            用 iPhone 建議先按分享鈕 →「加入主畫面」，之後從主畫面打開再加衣服。只放在 Safari 裡久沒開，資料可能被系統清掉。
           </p>
         )}
         {/* 回報鈕獨立一行(2026-10-22 本人「放個訪客問題回報」):原本夾在下面那排連結裡,看不到 */}
-        <p className="welcome-feedback">試了之後哪裡卡住,一句話就好:<Feedback where="歡迎" /></p>
-        <p className="welcome-note">
-          在別台同步過了?<button type="button" onClick={onSync}>輸入同步碼</button>
-          <span aria-hidden="true"> · </span>
-          有備份檔?<button type="button" onClick={() => fileRef.current?.click()}>匯入備份</button>
-          {trashCount > 0 && onOpenTrash && (
-            <>
-              <span aria-hidden="true"> · </span>
-              垃圾桶裡有 {trashCount} 件<button type="button" onClick={onOpenTrash}>打開</button>
-            </>
-          )}
-          {onUpdates && (
-            <>
-              <span aria-hidden="true"> · </span>
-              最近改了什麼?<button type="button" onClick={onUpdates}>看更新</button>
-            </>
-          )}
-          <span aria-hidden="true"> · </span>
-          <a href="/privacy.html">隱私與使用說明</a>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="application/zip,.zip,application/json,.json"
-            hidden
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (file) onImportFile(file);
-            }}
-          />
-        </p>
+        <p className="welcome-feedback">試了之後哪裡卡住，一句話就好：<Feedback where="歡迎" /></p>
       </div>
 
-      {look && (
-        <figure className="welcome-look">
-          <MiniLook outfit={look} />
-          <figcaption>
-            {weather.temp !== null ? <><CitySelect /> {weather.temp}°,</> : ""}今天這樣穿
-            <span className="welcome-look-items">示範衣櫃:{["wholebody_up", "upperbody", "lowerbody", "shoes"].map((slot) => look[slot]?.name).filter(Boolean).join(" / ")}</span>
-          </figcaption>
-        </figure>
-      )}
+      {/* 頁腳:同步、備份、更新、隱私。一排小字,上面一條細線跟正文隔開 */}
+      <p className="welcome-note">
+        在別台同步過了？<button type="button" onClick={onSync}>輸入同步碼</button>
+        <span aria-hidden="true"> · </span>
+        有備份檔？<button type="button" onClick={() => fileRef.current?.click()}>匯入備份</button>
+        {trashCount > 0 && onOpenTrash && (
+          <>
+            <span aria-hidden="true"> · </span>
+            垃圾桶裡有 {trashCount} 件<button type="button" onClick={onOpenTrash}>打開</button>
+          </>
+        )}
+        {onUpdates && (
+          <>
+            <span aria-hidden="true"> · </span>
+            最近改了什麼？<button type="button" onClick={onUpdates}>看更新</button>
+          </>
+        )}
+        <span aria-hidden="true"> · </span>
+        <a href="/privacy.html">隱私與使用說明</a>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/zip,.zip,application/json,.json"
+          hidden
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file) onImportFile(file);
+          }}
+        />
+      </p>
     </section>
   );
 }

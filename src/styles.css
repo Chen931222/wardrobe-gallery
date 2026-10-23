@@ -2975,32 +2975,59 @@ h1, h2, h3 {
 .viewer-ro-price { margin: 4px 0 0; font-family: var(--font-display); font-size: 18px; color: var(--ink); }
 .add-panel .price-field label { font-size: 13px; color: var(--muted); }
 
-/* ===== 訪客自己的衣櫃還空著:歡迎畫面(左邊說明,右邊一套示範穿搭) ===== */
+/* ===== 訪客自己的衣櫃還空著:歡迎畫面 =====
+   2026-10-23 改版(本人「入口有點醜、沒有商標」):頂端字標＋章;原本第一段升成大字標題;示範穿搭放大當右欄;
+   頁腳一排小字,上面一條細線。桌機兩欄 grid,手機一欄:字標 → 標題 → 示範穿搭(還在第一屏)→ 正文 → 頁腳 */
 .welcome {
-  display: flex;
-  align-items: center;
-  gap: 56px;
-  max-width: 980px;
-  margin: 48px 56px 0;
+  display: grid;
+  grid-template-columns: minmax(0, 34rem) clamp(220px, 26vw, 300px);
+  grid-template-areas: "logo logo" "lede look" "copy look" "note note";
+  grid-template-rows: auto auto minmax(0, 1fr) auto;   /* 右欄人台比左欄高時,多出來的高度給正文那列,標題下面不會被撐開 */
+  column-gap: clamp(48px, 7vw, 96px);
+  align-items: start;
+  max-width: 1040px;
+  margin: 0 56px 56px;
 }
-.welcome-copy { flex: 1 1 420px; max-width: 520px; }
-.welcome h2 { margin: 0 0 12px; font-size: 26px; }
-.welcome h2 small { margin-left: 8px; font-size: 15px; font-weight: 400; letter-spacing: .06em; color: var(--muted); }
-.welcome p { margin: 0; font-size: 14px; line-height: 1.8; color: var(--body); }
-.welcome .welcome-steps { margin-top: 14px; }
-.welcome .welcome-para { margin-top: 10px; }
+.welcome-logo { grid-area: logo; }
+.welcome-lede { grid-area: lede; }
+.welcome-look { grid-area: look; }
+.welcome-copy { grid-area: copy; }
+.welcome-note { grid-area: note; }
+
+/* 標誌(2026-10-23 design.com 那張):只有線條的 alpha 遮罩,用 mask 上色,深色主題自動跟著 --ink 變。圖是直式 594×710 */
+.logo {
+  display: block; width: 150px; aspect-ratio: 594 / 710;
+  background: var(--ink);
+  -webkit-mask: url("/brand/logo-mask.png") center / contain no-repeat;
+  mask: url("/brand/logo-mask.png") center / contain no-repeat;
+}
+.welcome .welcome-logo { margin: 0 0 clamp(28px, 5vh, 48px); justify-self: start; }
+
+/* 大字標題:中文用 Noto Serif TC(Cormorant 沒有中文),一個逗號一行;中文不收字距,反而放一點 */
+.welcome .welcome-lede {
+  margin: 0;
+  font-family: var(--font-body); font-weight: 400;
+  font-size: clamp(26px, 3.1vw, 36px); line-height: 1.5; letter-spacing: .04em;
+  color: var(--ink);
+}
+.welcome-lede span { display: block; }
+
+.welcome-copy { margin-top: 28px; max-width: 27em; }   /* 正文比標題窄:15px 一行 27 字,四段的最後一行都不會只剩兩三個字 */
+.welcome p { margin: 0; font-size: 15px; line-height: 1.9; color: var(--body); text-wrap: pretty; }   /* pretty:最後一行不要只剩一個字 */
+.welcome .welcome-para + .welcome-para { margin-top: 12px; }
+.welcome .welcome-steps { margin-top: 22px; color: var(--ink); }
+.welcome-steps b { font-weight: 500; color: var(--ink); }
+.welcome-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.welcome-actions button { min-height: 44px; padding: 0 22px; }
 .welcome .welcome-feedback { margin-top: 18px; font-size: 13px; color: var(--muted); }
 .welcome-feedback .feedback-button { margin-left: 4px; }
-.welcome-steps b { font-weight: 500; color: var(--ink); }
-.welcome-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
-.welcome-actions button { min-height: 44px; padding: 0 20px; }
-.welcome .welcome-tip { margin-top: 20px; padding-left: 12px; border-left: 2px solid var(--line); font-size: 13px; color: var(--muted); }
-.welcome .welcome-note { margin-top: 22px; font-size: 13px; color: var(--muted); }
+.welcome .welcome-tip { margin-top: 20px; padding-left: 12px; border-left: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.welcome .welcome-note { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 13px; line-height: 2; color: var(--muted); }
 .welcome-note button {
   margin-left: 6px; padding: 0; border: 0; background: none;
   color: var(--ink); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
 }
-.welcome-look { flex: 0 0 auto; margin: 0; width: 240px; }
+.welcome-look { margin: 8px 0 0; }
 .mini-look {
   position: relative;
   aspect-ratio: 200 / 340;
@@ -3008,7 +3035,7 @@ h1, h2, h3 {
   border: 1px solid var(--line);
   background: var(--surface);
 }
-.welcome-look figcaption { margin-top: 10px; font-size: 12px; line-height: 1.6; color: var(--body); }
+.welcome-look figcaption { margin-top: 12px; font-size: 13px; line-height: 1.7; color: var(--body); }
 .welcome-look figcaption .welcome-look-items { display: block; color: var(--muted); }
 /* 訪客加了衣服之後的一次性提醒:留備份 */
 .keep-hint {
@@ -3036,13 +3063,16 @@ h1, h2, h3 {
 .welcome-tip-status { display: block; margin-top: 6px; font-size: 12px; color: var(--muted); }
 .status .welcome-demo { margin-left: 8px; }
 @media (max-width: 760px) {
-  /* 手機:示範穿搭排最上面(放下面會掉到第一屏外,等於沒放),人台在左、說明在右 */
-  .welcome { flex-direction: column; align-items: stretch; gap: 22px; margin: 20px 18px 40px; }
-  .welcome h2 { font-size: 22px; }
-  .welcome-look { order: -1; width: 100%; display: flex; gap: 16px; align-items: center; }
+  /* 手機:示範穿搭緊接在標題下面(放到正文後面會掉出第一屏,等於沒放),人台在左、說明在右 */
+  .welcome { grid-template-columns: minmax(0, 1fr); grid-template-areas: "logo" "lede" "look" "copy" "note"; margin: 0 18px 40px; }
+  .welcome .welcome-logo { margin-bottom: 24px; width: 120px; }
+  .welcome .welcome-lede { font-size: 24px; }
+  .welcome-look { display: flex; gap: 16px; align-items: center; margin-top: 24px; }
   .welcome-look .mini-look { width: 128px; flex: none; }
-  .welcome-look figcaption { margin: 0; font-size: 13px; }
+  .welcome-look figcaption { margin: 0; }
+  .welcome-copy { margin-top: 24px; }
   .welcome .welcome-tip { margin-top: 16px; }
+  .welcome .welcome-note { margin-top: 40px; }
   .keep-hint { margin: 16px 18px 0; }
 }
 

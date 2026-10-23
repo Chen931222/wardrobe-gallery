@@ -41,14 +41,14 @@ export function Feedback({ where = "", className = "" }) {
   return (
     <>
       <button type="button" className={`feedback-button ${className}`.trim()} onClick={() => { setOpen(true); if (state === "sent") setState("idle"); }}>
-        哪裡卡住了?告訴我
+        哪裡卡住了？告訴我
       </button>
       {/* 視窗掛到 body:這顆鈕會放在 <p>(歡迎畫面的 note 行)裡,<div> 不能是 <p> 的子元素 */}
       {open && createPortal(
         <div className="add-overlay" role="dialog" aria-modal="true" aria-label="回報問題" ref={dialogRef}>
           <form className="add-panel feedback-panel" onSubmit={send}>
             <button type="button" className="add-close" onClick={close} aria-label="關閉">✕</button>
-            <p className="add-step">哪裡卡住了?</p>
+            <p className="add-step">哪裡卡住了？</p>
             <small className="add-hint">加衣服加到一半放棄、去背出來很醜、按了沒反應、看不懂哪一步,都寫。一句話就夠。只送你打的字,不送衣服和照片。</small>
             {state === "sent" ? (
               <p className="feedback-done" role="status">收到了,謝謝。改了會寫在「更新」裡。</p>
