@@ -12,6 +12,7 @@ import { hasLocalChanges, lastSyncError, noteDeliberateDelete, scheduleSync, syn
 import { findSameStyle, findSimilar, fitOf, guessWarmth, kindLabel, wishOutfits } from "./wishCheck.js";
 import { colorLabel, colorName, colorRole, colorScore, fetchWeather, isNeutral, recommendOutfit } from "./recommend.js";
 import { Feedback } from "./Feedback.jsx";
+import { Logo } from "./Brand.jsx";
 import { track } from "./analytics.js";
 import { useDialog } from "./useDialog.js";
 import { ScrollRail } from "./ScrollRail.jsx";
@@ -2068,8 +2069,18 @@ export function App() {
         <header className={showWelcome ? "gallery-header is-quiet" : "gallery-header"}>
           <h1 className="visually-hidden">{view === "styling" ? "搭配" : "衣櫃"}</h1>
           <div className="gallery-meta-row">
-            {/* 衣櫃頁的件數、想買的在目錄第一行,這裡只在搭配頁出現 */}
-            <p className="piece-count" hidden={showWelcome || view === "closet"}>{ownedItems.length} 件單品{wishCount > 0 && <span className="piece-count-wish"> · 想買 {wishCount}</span>}</p>
+            {/* 左上角(2026-10-23 本人「問題回報和 logo 做在左上角:logo 在左邊,問題回報在右邊」):標誌,右邊一欄放回報和件數。
+                歡迎畫面有自己的大標誌,這裡不重複 */}
+            {!showWelcome && (
+              <div className="header-brand">
+                <Logo className="header-logo" />
+                <div className="header-brand-side">
+                  {!CAN_EDIT && <Feedback where={view === "closet" ? "衣櫃" : view === "styling" ? "搭配" : "入口"} className="in-brand" />}
+                  {/* 衣櫃頁的件數、想買的在目錄第一行,這裡只在搭配頁出現 */}
+                  <p className="piece-count" hidden={view === "closet"}>{ownedItems.length} 件單品{wishCount > 0 && <span className="piece-count-wish"> · 想買 {wishCount}</span>}</p>
+                </div>
+              </div>
+            )}
             <div className="header-tools">
               {CAN_ADD && (
                 <AddGarment
@@ -2097,7 +2108,6 @@ export function App() {
                 <button type="button" className={view === "closet" ? "active" : ""} aria-current={view === "closet" ? "page" : undefined} onClick={() => setView("closet")}>衣櫃</button>
                 <button type="button" className={view === "styling" ? "active" : ""} aria-current={view === "styling" ? "page" : undefined} onClick={() => setView("styling")}>搭配</button>
               </nav>
-              {!showWelcome && !CAN_EDIT && <Feedback where={view === "closet" ? "衣櫃" : view === "styling" ? "搭配" : "入口"} className="in-nav" />}
             </div>
           </div>
           {!showWelcome && closetSwitch}

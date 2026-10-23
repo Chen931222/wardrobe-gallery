@@ -171,12 +171,12 @@ h1, h2, h3 {
 .gallery-pane { min-width: 0; }
 
 .gallery-header {
-  padding: 60px 56px 0;
+  padding: 40px 56px 0;   /* 2026-10-23 左上放了直式標誌(高 115),上緣從 60 收到 40,搭配頁的輸入框少往下掉一點 */
 }
 
 .gallery-meta-row {
   display: flex;
-  align-items: center;
+  align-items: flex-end;   /* 左邊是直式標誌(2026-10-23),右邊工具列踩它的底邊 */
   justify-content: space-between;
   gap: 24px;
 }
@@ -1186,7 +1186,7 @@ h1, h2, h3 {
 
 .view-nav button + button { border-left: 1px solid var(--line); }
 /* 我的衣櫃/示範衣櫃:跟頁面切換同一套樣式,放在件數那排下面,靠左 */
-.closet-switch { width: fit-content; margin-top: 14px; }
+.closet-switch { width: fit-content; margin-top: 24px; }   /* 上面是標誌和工具列那一排,14px 太貼 */
 .closet-switch small { margin-left: 4px; font-size: 11px; }   /* 不再半透明:數字對比只有 3.5:1(axe 2026-10-06) */
 .view-nav button:hover { color: var(--ink); background: var(--hover-tint); }
 
@@ -3001,7 +3001,7 @@ h1, h2, h3 {
 
 /* 標誌(2026-10-23 design.com 那張):只有線條的 alpha 遮罩,用 mask 上色,深色主題自動跟著 --ink 變。圖是直式 594×710 */
 .logo {
-  display: block; width: 104px; aspect-ratio: 594 / 710;   /* 標誌比標題小:第一眼要讀到的是那句話,不是 logo */
+  display: block; width: 128px; aspect-ratio: 594 / 710;   /* 2026-10-23 本人「logo 大一點」:104→128。還是比標題那三行小,第一眼先讀到那句話 */
   background: var(--ink);
   -webkit-mask: url("/brand/logo-mask.png") center / contain no-repeat;
   mask: url("/brand/logo-mask.png") center / contain no-repeat;
@@ -3077,7 +3077,7 @@ h1, h2, h3 {
 @media (max-width: 760px) {
   /* 手機:示範穿搭緊接在標題下面(放到正文後面會掉出第一屏,等於沒放),人台在左、說明在右 */
   .welcome { grid-template-columns: minmax(0, 1fr); grid-template-areas: "logo" "lede" "start" "look" "copy" "note"; width: auto; margin: 0 18px 40px; }
-  .welcome .welcome-logo { margin-bottom: 20px; width: 72px; }
+  .welcome .welcome-logo { margin-bottom: 20px; width: 84px; }
   .welcome .welcome-lede { font-size: 24px; }
   .welcome-start { margin-top: 20px; }
   .welcome-look { display: flex; gap: 16px; align-items: center; margin-top: 32px; }
@@ -3562,8 +3562,20 @@ h1, h2, h3 {
 /* 重拍一張(2026-10-22):跟回報鈕同一種底線字,夾在提示句尾 */
 .add-text-button { font-size: inherit; min-height: 24px; }
 .add-retake { margin-top: 8px; }
-.feedback-button.in-nav { margin-left: 12px; white-space: nowrap; }
-@media (max-width: 640px) { .feedback-button.in-nav { margin-left: 0; } }
+/* 左上角:標誌,右邊一欄是回報鈕和件數(2026-10-23)。標誌直式,工具列對齊它的底邊,像報頭 */
+/* flex: none + 整排可換行:左邊 233px、工具列 435px,一排要 ~740px;641–740 之間以前會把回報鈕壓在「新增」底下(驗收抓到),
+   現在放不下就讓工具列掉到下一行 */
+.header-brand { display: flex; flex: none; align-items: flex-end; gap: 20px; }
+.gallery-header:not(.is-quiet) .gallery-meta-row { flex-wrap: wrap; row-gap: 14px; }
+.header-logo { width: 96px; flex: none; }
+.header-brand-side { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding-bottom: 4px; }
+.header-brand-side .piece-count[hidden] { display: none; }
+.feedback-button.in-brand { white-space: nowrap; }
+@media (max-width: 520px) {
+  .header-brand { gap: 14px; }
+  .header-logo { width: 60px; }
+  .header-brand-side { padding-bottom: 2px; }
+}
 .feedback-panel { align-items: stretch; text-align: left; gap: 14px; max-width: 440px; }
 .feedback-done { margin: 0; padding: 12px; border: 1px solid var(--line); font-size: 14px; }
 /* 分類是猜的(2026-10-21,分類改選填):小字標在格子左下(右上是垃圾桶鈕;想買的標記也在左下,但猜的只標已經有的,不會撞),點開那件改分類就消失 */
