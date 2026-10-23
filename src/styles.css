@@ -3044,7 +3044,7 @@ h1, h2, h3 {
 }
 .welcome-look figcaption { margin-top: 14px; font-size: 13px; line-height: 1.7; color: var(--body); }
 .welcome-look-when { display: block; }
-.welcome .nowrap { white-space: nowrap; }   /* 引號裡的話和「示範衣櫃今天這樣穿」整段換行,不拆成「已經／有了」「示範／衣櫃」 */
+.nowrap { white-space: nowrap; }   /* 一小段字整段換行:入口的「示範衣櫃今天這樣穿」、引號裡的話,回報視窗的「瀏覽器型號」 */
 /* 它給的理由:標題說「說為什麼」,這裡就是那個為什麼。比圖說大一級、用墨色,一條一行 */
 .welcome-look-why { margin: 8px 0 0; padding: 0; list-style: none; font-size: 14px; line-height: 1.7; color: var(--ink); }
 .welcome-look-why li { text-wrap: pretty; }   /* 「防風外／套」這種只剩一個字的行不要 */

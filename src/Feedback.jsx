@@ -49,7 +49,9 @@ export function Feedback({ where = "", className = "" }) {
           <form className="add-panel feedback-panel" onSubmit={send}>
             <button type="button" className="add-close" onClick={close} aria-label="關閉">✕</button>
             <p className="add-step">哪裡卡住了？</p>
-            <small className="add-hint">加衣服加到一半放棄、去背出來很醜、按了沒反應、看不懂哪一步,都寫。一句話就夠。只送你打的字,不送衣服和照片。</small>
+            {/* 送出的東西照實列(2026-10-23 本人「照實寫會送哪些東西」):舊句「只送你打的字」漏了頁名和瀏覽器型號 */}
+            <small className="add-hint">加衣服加到一半放棄、去背出來很醜、按了沒反應、看不懂哪一步,都寫。一句話就夠。</small>
+            <small className="add-hint">會送出:你打的字、留的聯絡方式、在哪一頁按的、<span className="nowrap">瀏覽器型號。</span>不送衣服和照片。</small>
             {state === "sent" ? (
               <p className="feedback-done" role="status">收到了,謝謝。改了會寫在「更新」裡。</p>
             ) : (
