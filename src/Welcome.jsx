@@ -61,34 +61,30 @@ function MiniLook({ outfit }) {
 /* 往下捲的「怎麼用」三列(2026-10-23 本人:「像 Apple 官網那樣…隨著慢慢往下滾動,會帶出越來越多內容」)。
    借的是節奏(一列一件事、捲到才出現),不借特效:不鎖捲動、不用滾輪刷影片。
    影片是 _video-lab/films/pairthis-intro 錄的真實畫面(訪客從空衣櫃開始那條路),變速和示範衣櫃的標籤燒在畫面裡。
-   每句都對過程式:城市是 city.js 的 CITIES(20 筆,從基隆到金門、馬祖;新竹、嘉義縣市各併一筆,所以不寫「20 個縣市」,驗收抓到);
-   「缺的先借」是 App.jsx 的 firstLook(第一件才借);
-   打一句話換要自己有上衣和下身(搭配頁講話只用自己的衣服,只有一件會回「還差下身」) */
+   每句都對過程式:城市是 city.js 的 CITIES;「缺的先借」是 App.jsx 的 firstLook(第一件才借)。
+   2026-10-24 收短:每章只留「能得到什麼＋一個例子」,錄影那天的天氣、借了幾件、完整理由交給影片和圖。
+   限制搬到發生的地方:打一句話要自己有上衣和下身,搭配頁當下會講(只有一件會回「還差下身」),隱私頁「使用說明」也有 */
 // title 拆成幾段,只在段和段之間換行(手機窄欄會斷成「貼／商品連結」「打／一句話」,2026-10-23 截圖)
 // 2026-10-24 本人「下面不知道怎麼區分」:三章各一種版式,不是同一個模子換左右。編號 01–03 是有理由的:三章是有順序的三步
 const STEPS = [
   { key: "add", no: "01", title: ["網購過的，", "貼商品連結就好"], body: "挑一張商品圖就好。讀不到圖的網站用截圖；沒有連結的，拍一張平放的。" },
-  { key: "weather", no: "02", title: ["照你那邊的天氣", "配一套，說為什麼"], body: "天氣照你選的城市，從基隆到金門、馬祖都有。第一件進櫃時，缺的先跟示範衣櫃借；配出來的那套會寫理由。" },
-  { key: "talk", no: "03", title: ["不喜歡，", "打一句話就換"], body: "要先有自己的上衣和下身；還沒有的話，先在示範衣櫃試。下面是示範衣櫃打一句話前後的兩套。" },
+  { key: "weather", no: "02", title: ["照你那邊的天氣", "配一套，說為什麼"], body: "天氣照你選的城市。加進第一件時，缺的先跟示範衣櫃借。" },
+  { key: "talk", no: "03", title: ["不喜歡，", "打一句話就換"], body: "說個場合，整套照著重挑；只說不要哪一件，就只動那一件。" },
 ];
-// 第二章旁邊的理由:影片裡那一格寫的全部六條(films/pairthis-intro/rec/marks.json 的 add_reason,錄影 2026-10-23 台中 23°、毛毛雨),
-// 字照原文、標點換全形;從手機畫面裡拉出來排成字,手機上讀得到。不用入口上面那套今天的理由:跟影片對不起來(溫度、天氣不同)
+// 第二章旁邊的理由:影片裡那一格寫的(films/pairthis-intro/rec/marks.json 的 add_reason,錄影 2026-10-23),字照原文、標點換全形。
+// 原本六條全列,2026-10-24 收成三條:溫度、下雨、顏色各一,看得出它在講為什麼就夠
 const RECORDED_REASONS = [
-  "第一件進櫃了。這套是你的「男女適穿 棉質圓領T恤(GU)」配示範衣櫃的 5 件挑的；再加幾件自己的，就能整套都用自己的。",
   "體感 23°，薄長袖或短袖都行",
-  "有點涼，搭「深藍連帽防風外套」",
   "降雨 100%，記得帶傘",
-  "會下雨，帆布、真皮的鞋先收著",
   "只有「深藍連帽防風外套」有顏色，其他低調色襯著它",
 ];
-// 第三章前後對照:示範衣櫃實際配出來的兩套(work/preview-2026-10-23-brand/scripts/capture-talk.mjs,2026-10-24,台中 23°、體感 26°、降雨 100%)。
-// 推薦有隨機,腳本重試到「今日推薦有外套」那次才存;人台上的 ✕ 和選取框截圖時藏起來;衣服和位置是 app 真的配出來的。理由是那次的原文。
-// 照「上課」整套重挑,不只拿掉外套:上衣和下身也換了,註記照實寫
+// 第三章前後對照:示範衣櫃實際配出來的兩套(work/preview-2026-10-23-brand/scripts/capture-talk.mjs,2026-10-24)。
+// 推薦有隨機,腳本重試到「今日推薦有外套」那次才存;人台上的 ✕ 和選取框截圖時藏起來;衣服和位置是 app 真的配出來的。
+// 照「上課」整套重挑,不只拿掉外套:上衣和下身也換了,註記照實寫。兩邊的理由句 2026-10-24 拿掉(收短),只留標籤
 const TALK = {
-  before: { src: "/media/talk-before.jpg", label: "今日推薦", why: "會下雨，加件「深藍連帽防風外套」" },
-  // why 照 2026-10-24 修過的引擎改寫(同一個情況:26°、降雨 100%,外套是因為雨才加的,不是因為冷)
-  after: { src: "/media/talk-after.jpg", label: "照這句挑之後", why: "照你說的不要外套；會下雨，本來會加件外套，怕淋濕就自己帶一件" },
-  note: "示範衣櫃實際配出來的兩套，10 月 24 日台中體感 26°、降雨 100%。照「上課」整套重挑，外套拿掉，上衣和下身也跟著換。",
+  before: { src: "/media/talk-before.jpg", label: "今日推薦" },
+  after: { src: "/media/talk-after.jpg", label: "照這句挑之後" },
+  note: "示範衣櫃實際配出來的兩套。照「上課」整套重挑，外套拿掉，上衣和下身也換了。",
 };
 
 /** 一段循環短片:捲到看得見才播、捲走就停,省電也省流量(preload none,封面先頂著)。減少動態的人不自動播,給播放鈕。
@@ -326,7 +322,7 @@ export function Welcome({ demoItems, onAdd, onDemo, onImportFile, trashCount = 0
               )}
               {step.key === "weather" && (
                 <figure className="story-notes">
-                  <figcaption>錄影那天，台中 23°、毛毛雨，它寫的是：</figcaption>
+                  <figcaption>影片裡它寫的理由（節錄）：</figcaption>
                   <ul>{RECORDED_REASONS.map((reason) => <li key={reason}>{keepQuotes(reason)}</li>)}</ul>
                 </figure>
               )}
@@ -334,12 +330,12 @@ export function Welcome({ demoItems, onAdd, onDemo, onImportFile, trashCount = 0
                 <figure className="story-pair">
                   <div className="story-pair-side story-pair-before">
                     <img src={TALK.before.src} alt={`${TALK.before.label}：有深藍連帽防風外套的一套`} loading="lazy" />
-                    <p><b>{TALK.before.label}</b>{TALK.before.why}</p>
+                    <p><b>{TALK.before.label}</b></p>
                   </div>
                   <p className="story-pair-cmd"><span className="nowrap">「上課，</span><span className="nowrap">不要外套」</span></p>
                   <div className="story-pair-side story-pair-after">
                     <img src={TALK.after.src} alt={`${TALK.after.label}：拿掉外套、換成上課穿的一套`} loading="lazy" />
-                    <p><b>{TALK.after.label}</b>{TALK.after.why}</p>
+                    <p><b>{TALK.after.label}</b></p>
                   </div>
                   <figcaption>{TALK.note}</figcaption>
                 </figure>

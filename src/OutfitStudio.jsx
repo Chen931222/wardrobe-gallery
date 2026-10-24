@@ -937,7 +937,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     setBackupMsg("加密中…");
     try {
       const count = await downloadBackupZip({ password: first });
-      setBackupMsg(`已匯出加密備份(${count} 件衣服的圖和紀錄),在你的下載。要用的時候按「匯入備份」選它、輸入這組密碼;密碼忘了就打不開。`);
+      setBackupMsg(`已匯出加密備份(${count} 件衣服的圖和紀錄),在你的下載。要用的時候按「匯入備份」選它、輸入這組密碼。網站不保存這組密碼,忘了就解不開。`);
       setLockPass(["", ""]);
       setLockOpen(false);
     } catch { setBackupMsg("匯出失敗,再試一次"); }
@@ -1264,6 +1264,9 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
           {!wornItems.length && <p className="studio-hint">{stacked ? "從下面點衣服穿上去" : "從右邊點衣服穿上去"}</p>}
         </div>
         {wearing.socks && <p className="studio-socks-note">襪子:{wearing.socks.name}</p>}
+        {/* 預覽的限制貼在預覽底下(2026-10-24 取捨:原本在入口講,太早;只放隱私頁又太深)。
+            人台上沒有衣服時不講;只穿襪子也算沒有(襪子不畫在人台上,驗收抓到) */}
+        {Object.keys(wearing).some((slot) => slot !== "socks" && wearing[slot]) && <p className="studio-preview-note">人台上是平放的照片,穿起來的垂墜感會不一樣。</p>}
 
         {adjusting && wearing[adjusting] && (
           <div className="studio-fit-tools">
@@ -1473,7 +1476,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
                 <input type="password" autoComplete="new-password" value={lockPass[1]} onChange={(event) => setLockPass([lockPass[0], event.target.value])} />
               </label>
               <button type="submit">匯出加密備份</button>
-              <small>加密的備份解開只看得到一份說明,圖和紀錄都要回這裡輸入密碼才打得開。密碼忘了就打不開,誰都救不回來。</small>
+              <small>加密的備份解開只看得到一份說明,圖和紀錄都要回這裡輸入密碼才打得開。網站不保存這組密碼,忘了就解不開。</small>
             </form>
           )}
           {backupMsg && <p className="studio-backup-msg" role="status">{backupMsg}</p>}

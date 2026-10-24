@@ -2091,6 +2091,9 @@ h1, h2, h3 {
   letter-spacing: .08em;
   color: var(--muted);
 }
+/* 預覽限制一行小字,跟襪子那行同一個調,不加字距(句子比較長)。
+   負的上邊距抵掉人台欄 20px gap 裡的 14px,只離上一行 6px:桌機人台大小照「人台以外多高」算,多佔幾 px 人台就縮幾 px */
+.studio-preview-note { margin: -14px 0 0; text-align: center; font-size: 12px; color: var(--muted); text-wrap: balance; }
 
 /* 麥克風聆聽時的隱私揭露:和 Look 卡「零上傳」同一種誠實 */
 .studio-mic-note {

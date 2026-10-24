@@ -7,7 +7,7 @@ import { fetchBrandProduct, fetchProductPage, parseBrandLink, partFromName, part
 import { findSameStyle, findSimilar, fitChoices, kindChoices, kindLabel } from "./wishCheck.js";
 import { useDialog } from "./useDialog.js";
 import { ScrollRail } from "./ScrollRail.jsx";
-import { fixCutout, modelReady, preloadModel, removeBg } from "./cutout.js";
+import { fixCutout, modelReady, preloadModel, preloadsEarly, removeBg } from "./cutout.js";
 import { CURRENCIES, parsePrice } from "./price.js";
 import { brandInUrl, brandOf, brandSuggestions, canonicalBrand } from "./brands.js";
 import { track } from "./analytics.js";
@@ -294,7 +294,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     setStore(true);
     setStage("store");
     pushHistory();
-    preloadModel();   // 開這一頁就先下載模型:等拍完、框好,通常已經下載好了
+    preloadModel();   // 開這一頁就先下載模型(省流量、2G 除外):等拍完、框好,通常已經下載好了
     track("店裡比一下");
   };
   useEffect(() => {
@@ -709,7 +709,9 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
             <small className="add-hint">
               {modelReady()
                 ? "照片在這台裝置上處理,不會上傳。"
-                : "第一次要下載約 80MB 的去背模型,已經開始下載了。用行動網路的話,建議先在家用 Wi-Fi 打開這一頁一次。照片在這台裝置上處理,不會上傳。"}
+                : preloadsEarly()
+                  ? "第一次要下載約 80MB 的去背模型,打開這一頁就開始下載了;建議先在家用 Wi-Fi 打開這一頁一次。照片在這台裝置上處理,不會上傳。"
+                  : "第一次要下載約 80MB 的去背模型,去背時才開始下載;建議先在家用 Wi-Fi 試一次。照片在這台裝置上處理,不會上傳。"}
             </small>
             <div className="add-actions">
               <button type="button" className="secondary-button" onClick={() => inputRef.current?.click()}>從相簿選</button>
@@ -767,8 +769,16 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
             )}
             {/* 打開這頁(open)就開始下載去背模型,所以 80MB 要在這頁講,不是等到去背中才講(2026-10-24 取捨)。
                 原本這裡是拍照前的皺摺提醒:還沒選要拍照就先講,太早;拍完、框衣服那一步有,附「重拍一張」 */}
-            {/* 不寫「已經開始下載」:開了省流量或 2G 時 preloadModel 不先載(cutout.js),驗收抓到 */}
-            {!modelReady() && <small className="add-hint">第一次去背要下載約 80MB 的模型,用行動網路的話建議先連 Wi-Fi。照片在這台裝置上處理,不會上傳。</small>}
+            {/* 照實講什麼時候開始下載:一般是打開這頁就先載(2026-10-05 本人要的,選照片、框衣服時就載完);
+                開了省流量或 2G 不先載(cutout.js 的 preloadsEarly),去背時才下載 */}
+            {!modelReady() && (
+              <small className="add-hint">
+                {preloadsEarly()
+                  ? "第一次去背要下載約 80MB 的模型,打開這一頁就開始下載了。"
+                  : "第一次去背要下載約 80MB 的模型,去背時才開始下載;用行動網路的話,建議連上 Wi-Fi 再選照片。"}
+                照片在這台裝置上處理,不會上傳。
+              </small>
+            )}
             <div className="add-actions">
               <button type="button" className="secondary-button" onClick={() => { setLink(parsedLink?.notProduct ? null : effectiveLink ? { ...effectiveLink, images: [] } : null); inputRef.current?.click(); }}>
                 {parsedLink ? "改用照片" : "沒有連結,拍照或選照片"}

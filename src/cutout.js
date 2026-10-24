@@ -91,11 +91,16 @@ function inWorker(type, payload = {}) {
   });
 }
 
+/** 這台會不會先載(省流量、2G 不先載)。新增視窗的提示照這個講「打開就開始下載」還是「去背時才下載」 */
+export function preloadsEarly() {
+  const connection = typeof navigator !== "undefined" ? navigator.connection : null;
+  return !(connection?.saveData || /2g/.test(connection?.effectiveType || ""));
+}
+
 /** 一打開新增視窗就在背景先載模型(2026-10-05 本人要的:朋友第一次用,選照片、框衣服的這段時間就載完了),
  *  選好照片時再叫一次(前一次斷了會重來,載好了的話什麼都不做)。開了省流量模式、或網路是 2G 等級就不先載。 */
 export function preloadModel() {
-  const connection = typeof navigator !== "undefined" ? navigator.connection : null;
-  if (connection?.saveData || /2g/.test(connection?.effectiveType || "")) return;
+  if (!preloadsEarly()) return;
   const attempt = modelAttempt;
   const onMain = () => import("@imgly/background-removal").then(({ preload }) => preload(modelConfig()));
   const run = workerBroken ? onMain() : inWorker("preload").catch((error) => {
