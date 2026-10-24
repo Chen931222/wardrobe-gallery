@@ -1248,8 +1248,16 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
 
         {adjusting && wearing[adjusting] && (
           <div className="studio-fit-tools">
+            {/* 看這件(2026-10-23 本人「看不到『看這件』這個按鈕…應該要比較像『看這件的詳細』」):原本跟往前一層、重設那些
+                同一個樣子排在第四顆,一排六顆一樣的鈕根本找不到。拉到最上面一行,左邊寫選中的是哪一件,右邊實心鈕 */}
+            {onOpenItem && (
+              <div className="studio-fit-head">
+                <span className="studio-fit-name">{SLOT_LABEL[adjusting]}:{wearing[adjusting].name}</span>
+                <button type="button" className="studio-fit-open" onClick={() => onOpenItem(wearing[adjusting].id)}>看這件的詳細</button>
+              </div>
+            )}
             <span className="studio-fit-hint">
-              {SLOT_LABEL[adjusting]}:框內拖曳移動,拉角落縮放,拉頂端圓點旋轉
+              {onOpenItem ? "" : `${SLOT_LABEL[adjusting]}:`}框內拖曳移動,拉角落縮放,拉頂端圓點旋轉
             </span>
             {(() => {
               const item = wearing[adjusting];
@@ -1264,8 +1272,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
                   <button type="button" className="studio-fit-reset" onClick={() => move(Math.min(...above) + 0.5)} disabled={!above.length}>往前一層</button>
                   <button type="button" className="studio-fit-reset" onClick={() => move(Math.max(...below) - 0.5)} disabled={!below.length}>往後一層</button>
                   <button type="button" className="studio-fit-reset" onClick={() => toggleWear(item)}>脫掉這件</button>
-                  {/* 看這件(2026-10-22 本人:「點圖片上的衣服沒跳出細節」):人台上點一下是選中拖曳,沒有手勢能開單品頁,補在工具列 */}
-                  {onOpenItem && <button type="button" className="studio-fit-reset" onClick={() => onOpenItem(item.id)}>看這件</button>}
+                  {/* 看這件(2026-10-22 本人:「點圖片上的衣服沒跳出細節」)搬到上面那行(studio-fit-head) */}
                 </>
               );
             })()}

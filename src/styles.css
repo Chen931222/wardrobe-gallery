@@ -2007,6 +2007,20 @@ h1, h2, h3 {
   font-size: 11.5px;
   color: var(--muted);
 }
+/* 選中那件的第一行(2026-10-23):左邊是哪一件,右邊「看這件的詳細」實心鈕;下面一條細線,再下面才是調位置的工具 */
+.studio-fit-head {
+  flex: 1 1 100%;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding-bottom: 10px; margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.studio-fit-name { min-width: 0; font-size: 14px; line-height: 1.5; color: var(--ink); text-wrap: pretty; }
+.studio-fit-tools button.studio-fit-open {
+  flex: none; min-height: 40px; padding: 0 18px;
+  border-color: var(--ink); background: var(--ink); color: var(--paper);
+  font-family: var(--font-display); font-size: 13px; letter-spacing: .06em;
+}
+.studio-fit-tools button.studio-fit-open:hover { background: var(--ink); opacity: .88; }
 
 .studio-fit-tools button {
   min-width: 32px;
