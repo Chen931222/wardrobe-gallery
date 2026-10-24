@@ -21,6 +21,7 @@
   --line: #392f22;     /* 髮絲分隔線 */
   --fill: #5a4c3a;     /* 色票、留白佔位 */
   --accent: #cdaf7f;   /* 暖金樺木:文字強調、focus 環 */
+  --band: #2a231b;     /* 入口章節的帶子(深色主題):跟 --surface 同色 */
   --doll: #372f23;     /* 人形剪影:只比 --surface 亮一點點。2026-10-19 調淡(評論:圓頭加膠囊四肢符號感太強,要讓衣服輪廓主導畫面),
                           原本 #4a4030;再更早 #2c2419 是照著 --paper 調的,疊在 --surface 上幾乎消失(對比 1.0:1)。 */
   /* 語意狀態色(成功/失敗),只用在匯入流程的文字上,不是裝飾用強調色 */
@@ -68,6 +69,7 @@
   --line: #d2c4a9;
   --fill: #ab9a7d;
   --accent: #5d4a37;   /* espresso,可當文字與實心底 */
+  --band: #e4d9c2;     /* 2026-10-24 入口章節的米紙帶:比 --surface 深一號,跟紙色分得出來(muted 字在上面 4.6:1) */
   --doll: #e3d7bf;     /* 2026-10-19 調淡:原本 #d6c8ab,改成跟 --surface 只差一點,衣服輪廓主導畫面(#e7dcc7 太淡,手機上幾乎看不到) */
   --ok: #49604b;       /* 6.2:1 */
   --danger: #8a3f35;   /* 6.7:1 */
@@ -3039,7 +3041,7 @@ h1, h2, h3 {
   justify-content: space-between;
   column-gap: clamp(48px, 7vw, 96px);
   align-items: start;
-  width: min(960px, 100% - 112px);
+  width: min(1200px, 100% - 112px);   /* 2026-10-24 960→1200:1920 寬時左右各空 480,一半畫面是空的(本人「太空白」) */
   margin: 0 auto 56px;
 }
 .welcome-logo { grid-area: logo; }
@@ -3050,31 +3052,68 @@ h1, h2, h3 {
 .welcome-note { grid-area: note; }
 .welcome-story { grid-area: story; }
 
-/* 往下捲的「怎麼用」(2026-10-24 改成章節):每段一整幅橫跨整頁的帶子(負邊距從置中的容器破出去),底色紙／米紙交替,
-   髮絲線分隔;裡面再放回容器寬度。左邊大標題＋一段字,右邊手機比例的影片,一章左一章右交替。
+/* 往下捲的「怎麼用」(2026-10-24 改成章節,同日第二版):每段一整幅橫跨整頁的帶子(負邊距從置中的容器破出去),
+   底色紙／米紙帶交替;裡面放回 1200 寬。每章頂上一條 2px 墨色粗線＋大編號,像雜誌的章節頁。三章三種版式:
+   01 字左、影片右;02 影片左、字右,下面把影片裡的理由排成字;03 字在上,下面前後兩套人台夾著那句話。
+   影片是手機直式(720:1558),寬度照視窗高度算(36vh,最多 420),不會比螢幕高。
    捲到才出現:淡入、往上 24px,0.7 秒;減少動態時直接顯示、不動 */
 .welcome-story { margin-top: 72px; width: auto; margin-inline: calc(50% - 50vw); }
-.story-step, .story-intro { padding: clamp(72px, 10vh, 120px) 0; border-top: 1px solid var(--line); }
-.story-step:nth-child(even) { background: var(--surface); }
+.story-step, .story-intro { padding: clamp(80px, 11vh, 136px) 0; }
+.story-weather { background: var(--band); }
 .story-inner {
-  width: min(960px, 100% - 112px); margin: 0 auto;
-  display: grid; grid-template-columns: minmax(0, 1fr) clamp(240px, 24vw, 300px); grid-template-areas: "text media";
-  justify-content: space-between; column-gap: clamp(48px, 7vw, 96px); align-items: center;
+  --media-w: min(420px, 36vh, 34vw);   /* 34vw:平板直放(768×1024)36vh 比欄寬,標題被擠出去(驗收) */
+  width: min(1200px, 100% - 112px); margin: 0 auto;
+  display: grid; column-gap: clamp(56px, 8vw, 128px); align-items: start;
+  border-top: 2px solid var(--ink); padding-top: 22px;
 }
-.story-step:nth-child(even) .story-inner { grid-template-columns: clamp(240px, 24vw, 300px) minmax(0, 1fr); grid-template-areas: "media text"; }
-.story-text { grid-area: text; max-width: 30em; }
-.story-media { grid-area: media; }
+.story-no {
+  grid-area: no; display: block; margin-bottom: clamp(24px, 4vh, 44px);
+  font-family: var(--font-display); font-weight: 500; font-size: clamp(64px, 7vw, 112px); line-height: .9; letter-spacing: -0.02em;
+  color: var(--accent);
+}
+.story-text { grid-area: text; max-width: 34em; }
+.story-media { grid-area: media; width: var(--media-w); }
+/* 01:編號和字在左,影片在右 */
+.story-add .story-inner { grid-template-columns: minmax(0, 1fr) var(--media-w); grid-template-areas: "no media" "text media"; grid-template-rows: auto 1fr; }   /* 1fr 給字那列:影片比字高時,多的高度不要分給編號那列(不然編號和標題中間空一大段) */
+/* 02:影片在左,右邊編號、字,再下面是理由 */
+.story-weather .story-inner { grid-template-columns: var(--media-w) minmax(0, 1fr); grid-template-areas: "media no" "media text" "media notes"; grid-template-rows: auto auto 1fr; }
+/* 03:編號、字一整排,下面前後對照 */
+.story-talk .story-inner { grid-template-columns: minmax(0, 1fr); grid-template-areas: "no" "text" "pair"; }
 .welcome .story-text h3 {
   margin: 0; font-family: var(--font-body); font-weight: 400;
-  font-size: clamp(28px, 3.2vw, 40px); line-height: 1.4; letter-spacing: .03em; color: var(--ink); text-wrap: balance;
+  font-size: clamp(30px, 3.4vw, 46px); line-height: 1.35; letter-spacing: .03em; color: var(--ink); text-wrap: balance;
 }
 .welcome .story-text h3 span { display: block; }
-.welcome .story-text p { margin-top: 20px; max-width: 27em; font-size: 16px; }
+.welcome .story-text p { margin-top: 22px; max-width: 27em; font-size: 16px; }
 .story-media { aspect-ratio: 720 / 1558; border: 1px solid var(--line); background: var(--surface); overflow: hidden; }
 .story-video { display: block; width: 100%; height: 100%; object-fit: cover; background: var(--surface); }
 /* 點一下暫停／繼續(WCAG 2.2.2):整格是一顆按鈕,看起來還是一格影片;停住時左上角小字「已暫停」 */
 .story-toggle { position: relative; display: block; width: 100%; height: 100%; padding: 0; border: 0; background: none; cursor: pointer; }
 .story-paused { position: absolute; left: 10px; top: 10px; padding: 3px 10px; border-radius: 999px; background: rgba(59, 50, 42, .86); color: var(--paper); font-size: 12px; letter-spacing: .04em; }
+/* 02 的理由:影片裡那一格的原文排成字,像書的側欄。上面一條細線,每條一行 */
+.story-notes { grid-area: notes; margin: 40px 0 0; padding-top: 18px; border-top: 1px solid var(--line); max-width: 34em; }
+.welcome .story-notes figcaption { font-size: 13px; color: var(--muted); }
+.story-notes ul { margin: 12px 0 0; padding: 0; list-style: none; }
+.story-notes li { font-size: 15px; line-height: 1.75; color: var(--ink); text-wrap: pretty; }
+.story-notes li + li { margin-top: 8px; }
+/* 03 前後對照:左右兩套人台,中間那句話。人台寬照視窗高度,最多 300 */
+.story-pair {
+  grid-area: pair; margin: clamp(40px, 6vh, 64px) 0 0;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); grid-template-areas: "before cmd after" "note note note";
+  column-gap: clamp(24px, 4vw, 56px); align-items: start;   /* 前後兩張頂端對齊:底下的字一長一短,置中會讓兩張人台一高一低 */
+}
+.story-pair-before { grid-area: before; justify-self: end; }
+.story-pair-after { grid-area: after; justify-self: start; }
+.story-pair-side { display: grid; gap: 14px; width: min(300px, 31vh, 100%); }   /* 100%:平板直放時 31vh 比格子寬,兩張往外溢、被視窗切掉(驗收) */
+.story-pair-side img { display: block; width: 100%; aspect-ratio: 600 / 1018; object-fit: cover; border: 1px solid var(--line); background: var(--surface); }
+.welcome .story-pair-side p { font-size: 14px; line-height: 1.7; color: var(--body); }
+.story-pair-side b { display: block; margin-bottom: 2px; font-weight: 500; color: var(--ink); }
+.welcome .story-pair-cmd {
+  grid-area: cmd; align-self: center; text-align: center;
+  font-family: var(--font-body); font-size: clamp(22px, 2.2vw, 30px); line-height: 1.5; color: var(--ink);
+}
+.story-pair-cmd span { display: block; }
+.welcome .story-pair figcaption { grid-area: note; margin-top: 28px; text-align: center; font-size: 13px; color: var(--muted); }
 .welcome-story.can-reveal .story-inner {
   opacity: 0; transform: translateY(24px);
   transition: opacity 700ms cubic-bezier(.22, .8, .22, 1), transform 700ms cubic-bezier(.22, .8, .22, 1);
@@ -3083,9 +3122,11 @@ h1, h2, h3 {
 @media (prefers-reduced-motion: reduce) {
   .welcome-story.can-reveal .story-inner { opacity: 1; transform: none; transition: none; }
 }
-/* 最後一章:墨色底,像雜誌裡一頁深色跨頁。深色主題時 --ink 和 --paper 對調,這一章就變成淺色,一樣是對比的一頁 */
-.story-intro { background: var(--ink); color: var(--paper); border-top: 0; }
-.story-intro .story-inner { grid-template-columns: minmax(0, 1fr) clamp(220px, 22vw, 280px); grid-template-areas: "text media"; }
+/* 最後一章:墨色底,像雜誌裡一頁深色跨頁。深色主題時 --ink 和 --paper 對調,這一章就變成淺色,一樣是對比的一頁。
+   這章不畫墨色粗線(底就是墨色) */
+.story-intro { background: var(--ink); color: var(--paper); }
+.story-intro .story-inner { border-top: 0; padding-top: 0; grid-template-columns: minmax(0, 1fr) min(300px, 32vh); grid-template-areas: "text media"; align-items: center; }
+.story-intro .story-media { width: auto; }
 .welcome .story-intro h3, .welcome .story-intro p { color: var(--paper); }
 .welcome .story-intro p { opacity: .8; }
 .story-intro-open {
@@ -3147,6 +3188,13 @@ h1, h2, h3 {
 .welcome-look-why { margin: 8px 0 0; padding: 0; list-style: none; font-size: 14px; line-height: 1.7; color: var(--ink); }
 .welcome-look-why li { text-wrap: pretty; }   /* 「防風外／套」這種只剩一個字的行不要 */
 .welcome-look-why li + li { margin-top: 6px; }
+/* 第一屏在寬螢幕(≥1320;要排在 .welcome-look 的基底規則後面,同權重才蓋得過,驗收抓到):右欄放寬到 560,人台和理由並排,不再是一根細欄配一大片空白 */
+@media (min-width: 1320px) {
+  .welcome { grid-template-columns: minmax(0, 34rem) 560px; }
+  .welcome-look { display: grid; grid-template-columns: 270px minmax(0, 1fr); column-gap: 28px; align-items: start; }
+  .welcome-look figcaption { margin-top: 4px; font-size: 14px; }
+  .welcome-look-why { font-size: 15px; }
+}
 /* 訪客加了衣服之後的一次性提醒:留備份 */
 .keep-hint {
   margin: 20px 56px 0;
@@ -3175,15 +3223,22 @@ h1, h2, h3 {
 @media (max-width: 760px) {
   /* 手機:示範穿搭緊接在標題下面(放到正文後面會掉出第一屏,等於沒放),人台在左、說明在右 */
   .welcome { grid-template-columns: minmax(0, 1fr); grid-template-areas: "logo" "lede" "start" "look" "copy" "note" "story"; width: auto; margin: 0 18px 40px; }
-  /* 手機:一章一章疊,字在上、影片在下置中(寬 220),底色交替照舊 */
+  /* 手機:一章一章疊:編號 → 字 → 影片(寬 220 置中)→ 理由／前後對照;粗線和米紙帶照舊 */
   .welcome-story { margin-top: 48px; }
   .story-step, .story-intro { padding: 56px 0; }
-  .story-inner, .story-step:nth-child(even) .story-inner, .story-intro .story-inner {
-    width: auto; margin: 0 18px; grid-template-columns: minmax(0, 1fr); grid-template-areas: "text" "media"; row-gap: 28px;
+  .story-inner, .story-add .story-inner, .story-weather .story-inner, .story-talk .story-inner, .story-intro .story-inner {
+    width: auto; margin: 0 18px; grid-template-columns: minmax(0, 1fr); grid-template-areas: "no" "text" "media" "notes" "pair"; row-gap: 0;
   }
-  .story-media { width: 220px; justify-self: center; }
+  .story-no { margin-bottom: 18px; font-size: 56px; }
+  .story-media, .story-intro .story-media { width: 220px; justify-self: center; margin-top: 28px; }
+  .story-notes { margin-top: 28px; }
   .welcome .story-text h3 { font-size: 26px; }
   .welcome .story-text p { margin-top: 12px; font-size: 15px; line-height: 1.8; }
+  .story-pair { margin-top: 28px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "cmd cmd" "before after" "note note"; column-gap: 14px; row-gap: 18px; align-items: start; }
+  .story-pair-side { width: auto; justify-self: stretch; }
+  .story-pair-cmd span { display: inline; }
+  .welcome .story-pair-side p { font-size: 13px; }
+  .welcome .story-pair figcaption { margin-top: 4px; }
   .welcome .welcome-logo { margin-bottom: 20px; width: 84px; }
   .welcome .welcome-lede { font-size: 24px; }
   .welcome-start { margin-top: 20px; }

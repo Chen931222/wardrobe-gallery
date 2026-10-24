@@ -62,11 +62,30 @@ function MiniLook({ outfit }) {
    「缺的先借」是 App.jsx 的 firstLook(第一件才借);
    打一句話換要自己有上衣和下身(搭配頁講話只用自己的衣服,只有一件會回「還差下身」) */
 // title 拆成幾段,只在段和段之間換行(手機窄欄會斷成「貼／商品連結」「打／一句話」,2026-10-23 截圖)
+// 2026-10-24 本人「下面不知道怎麼區分」:三章各一種版式,不是同一個模子換左右。編號 01–03 是有理由的:三章是有順序的三步
 const STEPS = [
-  { key: "add", title: ["網購過的，", "貼商品連結就好"], body: "挑一張商品圖，去背在這台裝置上算。讀不到圖的網站用截圖；沒有連結的，拍一張平放的。" },
-  { key: "weather", title: ["照你那邊的天氣", "配一套，說為什麼"], body: "天氣照你選的城市，從基隆到金門、馬祖都有。第一件進櫃時，缺的先跟示範衣櫃借；配出來的那套會寫理由。" },
-  { key: "talk", title: ["不喜歡，", "打一句話就換"], body: "像「上課，不要外套」。要先有自己的上衣和下身；還沒有的話，先在示範衣櫃試。" },
+  { key: "add", no: "01", title: ["網購過的，", "貼商品連結就好"], body: "挑一張商品圖，去背在這台裝置上算。讀不到圖的網站用截圖；沒有連結的，拍一張平放的。" },
+  { key: "weather", no: "02", title: ["照你那邊的天氣", "配一套，說為什麼"], body: "天氣照你選的城市，從基隆到金門、馬祖都有。第一件進櫃時，缺的先跟示範衣櫃借；配出來的那套會寫理由。" },
+  { key: "talk", no: "03", title: ["不喜歡，", "打一句話就換"], body: "要先有自己的上衣和下身；還沒有的話，先在示範衣櫃試。下面是示範衣櫃打一句話前後的兩套。" },
 ];
+// 第二章旁邊的理由:影片裡那一格寫的全部六條(films/pairthis-intro/rec/marks.json 的 add_reason,錄影 2026-10-23 台中 23°、毛毛雨),
+// 字照原文、標點換全形;從手機畫面裡拉出來排成字,手機上讀得到。不用入口上面那套今天的理由:跟影片對不起來(溫度、天氣不同)
+const RECORDED_REASONS = [
+  "第一件進櫃了。這套是你的「男女適穿 棉質圓領T恤(GU)」配示範衣櫃的 5 件挑的；再加幾件自己的，就能整套都用自己的。",
+  "體感 23°，薄長袖或短袖都行",
+  "有點涼，搭「深藍連帽防風外套」",
+  "降雨 100%，記得帶傘",
+  "會下雨，帆布、真皮的鞋先收著",
+  "只有「深藍連帽防風外套」有顏色，其他低調色襯著它",
+];
+// 第三章前後對照:示範衣櫃實際配出來的兩套(work/preview-2026-10-23-brand/scripts/capture-talk.mjs,2026-10-24,台中 23°、體感 26°、降雨 100%)。
+// 推薦有隨機,腳本重試到「今日推薦有外套」那次才存;人台上的 ✕ 和選取框截圖時藏起來;衣服和位置是 app 真的配出來的。理由是那次的原文。
+// 照「上課」整套重挑,不只拿掉外套:上衣和下身也換了,註記照實寫
+const TALK = {
+  before: { src: "/media/talk-before.jpg", label: "今日推薦", why: "會下雨，加件「深藍連帽防風外套」" },
+  after: { src: "/media/talk-after.jpg", label: "照這句挑之後", why: "照你說的不要外套；體感 26° 本來會加件外套，怕冷就自己帶一件" },
+  note: "示範衣櫃實際配出來的兩套，10 月 24 日台中體感 26°、降雨 100%。照「上課」整套重挑，外套拿掉，上衣和下身也跟著換。",
+};
 
 /** 一段循環短片:捲到看得見才播、捲走就停,省電也省流量(preload none,封面先頂著)。減少動態的人不自動播,給播放鈕。
  *  一直動超過 5 秒要能停(WCAG 2.2.2,驗收抓到):點一下影片(或 Tab 到按 Enter)暫停,再點繼續;自己停的不會因為捲回來又自己播 */
@@ -157,7 +176,7 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
     setReveal(true);
     const observer = new IntersectionObserver((entries) => {
       for (const entry of entries) if (entry.isIntersecting) { entry.target.classList.add("is-in"); observer.unobserve(entry.target); }
-    }, { threshold: 0.25, rootMargin: "0px 0px -8% 0px" });
+    }, { threshold: 0.1, rootMargin: "0px 0px -8% 0px" });   // 0.25→0.1(2026-10-24 驗收):第 02 章高 1100–1200px,橫放手機那種矮視窗永遠到不了 25%,整章一直透明
     root.querySelectorAll(".story-step, .story-intro").forEach((el) => observer.observe(el));
     return () => observer.disconnect();
   }, []);
@@ -276,16 +295,41 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
       <section ref={storyRef} className={reveal ? "welcome-story can-reveal" : "welcome-story"} aria-label="怎麼用">
         {/* 2026-10-24 本人「像 Apple 一樣有分層」:每段一整幅橫跨整頁的章節,底色紙／米紙交替、標題放大、影片放大左右交替;
             最後一章墨色底放 25 秒介紹。借的是章節的節奏,不做視差、不發光 */}
+        {/* 2026-10-24 第二版:寬螢幕 960→1200;三章三種版式——01 字左影片右;02 影片左、字右,旁邊把影片裡的理由排成字;
+            03 字在上,下面前後兩套人台夾著那句話。每章頂上一條墨色粗線＋大編號,像雜誌的章節頁。影片寬照視窗高度算,不會比螢幕高 */}
         {STEPS.map((step) => (
-          <article key={step.key} className="story-step">
+          <article key={step.key} className={`story-step story-${step.key}`}>
             <div className="story-inner">
+              <span className="story-no" aria-hidden="true">{step.no}</span>
               <div className="story-text">
                 <h3>{step.title.map((part) => <span key={part} className="nowrap">{part}</span>)}</h3>
                 <p>{step.body}</p>
               </div>
-              <div className="story-media">
-                <StoryLoop name={step.key} label={`示範畫面：${step.title.join("")}`} />
-              </div>
+              {step.key !== "talk" && (
+                <div className="story-media">
+                  <StoryLoop name={step.key} label={`示範畫面：${step.title.join("")}`} />
+                </div>
+              )}
+              {step.key === "weather" && (
+                <figure className="story-notes">
+                  <figcaption>錄影那天，台中 23°、毛毛雨，它寫的是：</figcaption>
+                  <ul>{RECORDED_REASONS.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+                </figure>
+              )}
+              {step.key === "talk" && (
+                <figure className="story-pair">
+                  <div className="story-pair-side story-pair-before">
+                    <img src={TALK.before.src} alt={`${TALK.before.label}：有深藍連帽防風外套的一套`} loading="lazy" />
+                    <p><b>{TALK.before.label}</b>{TALK.before.why}</p>
+                  </div>
+                  <p className="story-pair-cmd"><span className="nowrap">「上課，</span><span className="nowrap">不要外套」</span></p>
+                  <div className="story-pair-side story-pair-after">
+                    <img src={TALK.after.src} alt={`${TALK.after.label}：拿掉外套、換成上課穿的一套`} loading="lazy" />
+                    <p><b>{TALK.after.label}</b>{TALK.after.why}</p>
+                  </div>
+                  <figcaption>{TALK.note}</figcaption>
+                </figure>
+              )}
             </div>
           </article>
         ))}
