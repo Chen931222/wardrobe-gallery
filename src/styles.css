@@ -2546,7 +2546,7 @@ h1, h2, h3 {
    標誌 115px 高,比訪客那欄(標題＋說明＋按鈕 ~150px)矮;回報鈕排在「建立我的衣櫃」右邊,不另起一行,
    頂列高度跟改之前一樣(另起一行時頂列 171→204,聚焦放大的卡會鑽到說明底下,驗收抓到) */
 .landing-brand { display: flex; align-items: flex-start; gap: 24px; min-width: 0; }
-.landing-top .landing-logo { width: 96px; flex: none; }   /* 要贏過後面 .logo 的 128px(入口那顆) */
+.landing-top .landing-logo { width: 180px; flex: none; }   /* 要贏過後面 .logo 的 260px(入口那顆) */
 .landing-feedback { margin: 10px 0 0; }
 @media (min-width: 641px) {
   /* 說明那個 <p> 拆掉外框(display: contents,字級、顏色照樣傳下去),說明、按鈕、回報鈕直接排進格子 */
@@ -2565,7 +2565,12 @@ h1, h2, h3 {
 }
 /* 手機橫放(812×375 這種):高度不夠,標誌縮小,頂列不要比說明那欄高 */
 @media (min-width: 641px) and (max-height: 560px) {
-  .landing-top .landing-logo { width: 56px; }
+  .landing-top .landing-logo { width: 140px; }
+}
+/* 641–860(直拿的平板、橫拿的手機):180 寬的標誌把標題那欄擠扁,641 寬時「建立我的衣櫃」變直排、頂列 244→511(驗收抓到)。
+   縮到 110 之後 641 寬頂列 261、768 寬 207,跟換標誌前(244、208)差不多。排在上面那條後面:橫拿的手機兩條都中,取 110 */
+@media (min-width: 641px) and (max-width: 860px) {
+  .landing-top .landing-logo { width: 110px; }
 }
 .landing-top nav,
 .landing-top button { pointer-events: auto; }
@@ -2619,14 +2624,17 @@ h1, h2, h3 {
 @media (max-width: 640px) {
   .landing-top {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-areas: "logo fb fb" "title title nav" "note note note";
+    /* 2026-10-24 標誌換成橫的 130 寬之後,舊的三欄("logo fb fb" / "title title nav")第一欄被標誌撐開、
+       第三欄又被導覽撐開,320–414 寬右邊的「更新」「建立我的衣櫃」被切 15–35px(驗收抓到,已上線過)。
+       改兩欄:標誌獨佔第一列,回報疊在同一列右邊;第二欄的寬只由導覽決定 */
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "logo logo" "title nav" "note note";
     align-items: center;
     column-gap: 12px; row-gap: 8px;
   }
   .landing-brand, .landing-title { display: contents; }
-  .landing-top .landing-logo { grid-area: logo; width: 40px; }   /* 比衣櫃頁手機(60)小:這頁的主角是圓環,頂列每多 1px 圓環就縮 */
-  .landing-feedback { grid-area: fb; align-self: end; margin: 0; }
+  .landing-top .landing-logo { grid-area: logo; width: 130px; }   /* 橫的標誌 130 寬只有 27 高(舊的直式 40 寬、48 高):這頁的主角是圓環,頂列每多 1px 圓環就縮 */
+  .landing-feedback { grid-row: 1; grid-column: 2; justify-self: end; align-self: end; margin: 0; }
   .landing-top h1 { grid-area: title; }
   .landing-top nav { grid-area: nav; }
   .landing-top .landing-note { grid-area: note; max-width: none; margin: 0; display: flex; align-items: center; gap: 12px; }
@@ -2945,6 +2953,18 @@ h1, h2, h3 {
 }
 
 /* 指令框下面的例句:點了就照著做(審查 F51)。手機上一列橫滑,不把貼底列往下推 */
+/* 示範衣櫃人台上面那句「試試:上課,不要外套」(2026-10-24):一句話就能換一套,要第一眼看得到 */
+.studio-try { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 10px; margin: 0 0 12px; font-size: 14px; color: var(--body); }
+.studio-try button {
+  min-height: 40px; padding: 0 16px;
+  border: 1px solid var(--ink); background: transparent; color: var(--ink);
+  font: inherit; letter-spacing: .04em; cursor: pointer;
+}
+.studio-try button:hover:not(:disabled), .studio-try button:focus-visible { background: var(--ink); color: var(--paper); }
+.studio-try button:disabled { opacity: .5; cursor: default; }
+/* 320 寬放不下一行(折成兩行高 66,人台只露 40%):前半句拿掉,留「試試:」和那顆 */
+@media (max-width: 359px) { .studio-try-lead { display: none; } }
+.studio-stage-sticky.is-settling { pointer-events: none; }
 .studio-examples {
   display: flex;
   flex-wrap: wrap;
@@ -3036,8 +3056,9 @@ h1, h2, h3 {
 .welcome {
   display: grid;
   grid-template-columns: minmax(0, 32rem) clamp(240px, 24vw, 270px);
-  /* 示範從標誌那一列就開始:人台加三條理由要在第一屏看得完(1280×800 也是) */
-  grid-template-areas: "logo look" "lede look" "start look" "copy look" "note note" "story story";
+  /* 示範從標題那一列開始(2026-10-24 本人「右邊的圖片放太上面了」):以前從標誌那列開始,是因為直式標誌 153 高、
+     標題被推得太低,人台加三條理由在 1280×800 會出第一屏;標誌換成橫的(53 高)之後放得下 */
+  grid-template-areas: "logo ." "lede look" "start look" "copy look" "story story" "foot foot";
   grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;   /* 右欄人台比左欄高時,多出來的高度給「先講清楚的事」那列,標題和按鈕不會被撐開 */
   justify-content: space-between;
   column-gap: clamp(48px, 7vw, 96px);
@@ -3045,13 +3066,18 @@ h1, h2, h3 {
   width: min(1200px, 100% - 112px);   /* 2026-10-24 960→1200:1920 寬時左右各空 480,一半畫面是空的(本人「太空白」) */
   margin: 0 auto 56px;
 }
+/* 矮的筆電(寬 761–1319、高 ≤720):人台從標題那列開始,三條理由會掉出第一屏(1280×650 掉 70px,驗收抓到)。
+   這種畫面照舊從標誌那列開始排,先保住「看得到為什麼」;≥1320 理由排在人台旁邊,不受影響 */
+@media (min-width: 761px) and (max-width: 1319px) and (max-height: 720px) {
+  .welcome { grid-template-areas: "logo look" "lede look" "start look" "copy look" "story story" "foot foot"; }
+}
 .welcome-logo { grid-area: logo; }
 .welcome-lede { grid-area: lede; }
 .welcome-start { grid-area: start; }
 .welcome-look { grid-area: look; }
 .welcome-copy { grid-area: copy; }
-.welcome-note { grid-area: note; }
 .welcome-story { grid-area: story; }
+.welcome-foot { grid-area: foot; }
 
 /* 往下捲的「怎麼用」(2026-10-24 改成章節,同日第二版):每段一整幅橫跨整頁的帶子(負邊距從置中的容器破出去),
    底色紙／米紙帶交替;裡面放回 1200 寬。每章頂上一條 2px 墨色粗線＋大編號,像雜誌的章節頁。三章三種版式:
@@ -3139,12 +3165,18 @@ h1, h2, h3 {
 .story-media-intro { border-color: rgba(236, 227, 209, .3); background: transparent; }
 .story-media-intro img, .story-intro-video { display: block; width: 100%; height: 100%; object-fit: cover; background: transparent; }
 
-/* 標誌(2026-10-23 design.com 那張):只有線條的 alpha 遮罩,用 mask 上色,深色主題自動跟著 --ink 變。圖是直式 594×710 */
+/* 標誌(2026-10-24 換成「PAIR 鉤 THIS」:底線折成衣架肩膀、兩字中間長出鉤子、鉤子根部綁蝴蝶結):
+   字已轉成外框的 SVG 當遮罩,用 mask 上色,深色主題自動跟著 --ink 變。圖是橫的 464×95。
+   寬度照「不比舊的直式標誌高」給:入口 260 寬只有 53 高(舊的 128 寬、153 高),PAIR THIS 大寫約 22px,還是比標題那三行(36px)小 */
 .logo {
-  display: block; width: 128px; aspect-ratio: 594 / 710;   /* 2026-10-23 本人「logo 大一點」:104→128。還是比標題那三行小,第一眼先讀到那句話 */
+  display: block; width: 260px; aspect-ratio: 464 / 95;
   background: var(--ink);
-  -webkit-mask: url("/brand/logo-mask.png") center / contain no-repeat;
-  mask: url("/brand/logo-mask.png") center / contain no-repeat;
+  -webkit-mask: url("/brand/logo.svg") center / contain no-repeat;
+  mask: url("/brand/logo.svg") center / contain no-repeat;
+}
+/* Windows 的強制色彩模式會把背景換成白,遮罩上色的標誌就看不見(驗收抓到,舊標誌也一樣):改用系統文字色 */
+@media (forced-colors: active) {
+  .logo { forced-color-adjust: none; background: CanvasText; }
 }
 .welcome .welcome-logo { margin: 0 0 clamp(28px, 5vh, 48px); justify-self: start; }
 
@@ -3166,11 +3198,19 @@ h1, h2, h3 {
 .welcome-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .welcome-tip + .welcome-actions { margin-top: 18px; }   /* LINE／IG 那段警告在按鈕上面時 */
 .welcome-actions button { min-height: 48px; padding: 0 26px; font-size: 15px; }
+/* 2026-10-24 按鈕字變長(加入第一件衣服、看看穿搭示範):兩顆加間距要 328,畫面窄於 364 就疊成兩行(360 的 Android 也是),
+   320 寬時 iOS 提醒被擠出第一屏。內距 26→14,兩顆 280,320 寬(可用 284)也排得下一行 */
+@media (max-width: 380px) {
+  .welcome-actions button { padding: 0 14px; }
+}
 .welcome .welcome-feedback { margin-top: 18px; font-size: 13px; color: var(--muted); }
 .welcome-feedback .feedback-button { margin-left: 4px; }
 .welcome .welcome-tip { margin-top: 20px; padding-left: 12px; border-left: 1px solid var(--line); font-size: 13px; color: var(--muted); }
-.welcome .welcome-note { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 13px; line-height: 2; color: var(--muted); }
-.welcome-note button {
+/* 用過的人的入口(同步、備份、垃圾桶):在說明那一欄,接在回報那行下面;不畫細線,不然像頁尾,訪客以為整頁結束了
+   (2026-10-24 試用者)。頁尾在最下面 .welcome-foot */
+.welcome .welcome-note { margin: 4px 0 0; font-size: 13px; line-height: 2; color: var(--muted); }
+.welcome .welcome-foot { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 13px; line-height: 2; color: var(--muted); }
+.welcome-note button, .welcome-foot button {
   margin-left: 6px; padding: 0; border: 0; background: none;
   color: var(--ink); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
 }
@@ -3186,7 +3226,7 @@ h1, h2, h3 {
 .welcome-look-when { display: block; }
 .keep-together { display: inline-block; max-width: 100%; }   /* 理由裡的「品名」:放得下就整段換到下一行,一行都放不下才在裡面斷 */
 .nowrap { white-space: nowrap; }   /* 一小段字整段換行:入口的「示範衣櫃今天這樣穿」、引號裡的話,回報視窗的「瀏覽器型號」 */
-/* 它給的理由:標題說「說為什麼」,這裡就是那個為什麼。比圖說大一級、用墨色,一條一行 */
+/* 它給的理由:標題說「告訴你為什麼」,這裡就是那個為什麼。比圖說大一級、用墨色,一條一行 */
 .welcome-look-why { margin: 8px 0 0; padding: 0; list-style: none; font-size: 14px; line-height: 1.7; color: var(--ink); }
 .welcome-look-why li { text-wrap: pretty; }   /* 「防風外／套」這種只剩一個字的行不要 */
 .welcome-look-why li + li { margin-top: 6px; }
@@ -3226,8 +3266,8 @@ h1, h2, h3 {
 @media (max-width: 760px) {
   /* 手機:示範穿搭緊接在標題下面,再來才是按鈕(2026-10-24 本人「看起來只是文字排版」:原本第一屏是五塊字,人台到 552 才開始、下半截切掉)。
      LINE／IG 裡開的照舊先放按鈕那塊:「用瀏覽器開啟」要在第一屏 */
-  .welcome { grid-template-columns: minmax(0, 1fr); grid-template-areas: "logo" "lede" "look" "start" "copy" "note" "story"; width: auto; margin: 0 18px 40px; }
-  .welcome.is-inapp { grid-template-areas: "logo" "lede" "start" "look" "copy" "note" "story"; }
+  .welcome { grid-template-columns: minmax(0, 1fr); grid-template-areas: "logo" "lede" "look" "start" "copy" "story" "foot"; width: auto; margin: 0 18px 40px; }
+  .welcome.is-inapp { grid-template-areas: "logo" "lede" "start" "look" "copy" "story" "foot"; }
   /* 手機:一章一章疊:編號 → 字 → 影片(寬 220 置中)→ 理由／前後對照;粗線和米紙帶照舊 */
   .welcome-story { margin-top: 48px; }
   .story-step, .story-intro { padding: 56px 0; }
@@ -3244,7 +3284,7 @@ h1, h2, h3 {
   .story-pair-cmd span { display: inline; }
   .welcome .story-pair-side p { font-size: 13px; }
   .welcome .story-pair figcaption { margin-top: 4px; }
-  .welcome .welcome-logo { margin-bottom: 20px; width: 84px; }
+  .welcome .welcome-logo { margin-bottom: 20px; width: 210px; }
   .welcome .welcome-lede { font-size: 24px; }
   .welcome-start { margin-top: 24px; }
   /* 示範那套是一條橫跨整個螢幕的米紙帶(負邊距吃掉左右 18px),跟下面 02 章同一個底色:第一屏有一塊是「東西」,不全是字 */
@@ -3254,13 +3294,13 @@ h1, h2, h3 {
   .welcome-look figcaption { margin: 0; }
   .welcome-copy { margin-top: 36px; }
   .welcome .welcome-tip { margin-top: 16px; }
-  .welcome .welcome-note { margin-top: 40px; }
+  .welcome .welcome-foot { margin-top: 36px; }
   .keep-hint { margin: 16px 18px 0; }
 }
 /* 矮的手機(iPhone SE:Safari 看得到 375×548):字標和人台縮一號、間距收一點,按鈕才留在第一屏(沒縮時掉到 572)。
    門檻 680 不是 620:沒縮時按鈕底在 620,門檻設 620 時 621 高的畫面按鈕貼著底邊;mini 那種 635 也留點空(驗收) */
 @media (max-width: 760px) and (max-height: 680px) {
-  .welcome .welcome-logo { width: 60px; margin-bottom: 14px; }
+  .welcome .welcome-logo { width: 170px; margin-bottom: 14px; }
   .welcome-look { margin-top: 18px; padding-block: 14px; }
   .welcome-look .mini-look { width: 112px; }
   .welcome-start { margin-top: 18px; }
@@ -3690,7 +3730,7 @@ h1, h2, h3 {
 
 /* 更新公告最下面的隱私頁連結(2026-10-09) */
 .updates-foot { margin: 24px 0 0; padding-top: 16px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
-.updates-foot a, .welcome-note a { color: var(--accent); text-underline-offset: 3px; }
+.updates-foot a, .welcome-foot a { color: var(--accent); text-underline-offset: 3px; }
 
 /* ===== 在店裡比一下(2026-10-10) =====
    拍一張 → 框 → 點分類 → 家裡像的、能配的。分類用一排大按鈕(店裡單手點),結果直接用單品頁的 .wish-check */
@@ -3746,18 +3786,18 @@ h1, h2, h3 {
 /* 重拍一張(2026-10-22):跟回報鈕同一種底線字,夾在提示句尾 */
 .add-text-button { font-size: inherit; min-height: 24px; }
 .add-retake { margin-top: 8px; }
-/* 左上角:標誌,右邊一欄是回報鈕和件數(2026-10-23)。標誌直式,工具列對齊它的底邊,像報頭 */
-/* flex: none + 整排可換行:左邊 233px、工具列 435px,一排要 ~740px;641–740 之間以前會把回報鈕壓在「新增」底下(驗收抓到),
-   現在放不下就讓工具列掉到下一行 */
+/* 左上角:標誌,右邊一欄是回報鈕和件數(2026-10-23)。工具列對齊標誌的底邊,像報頭 */
+/* flex: none + 整排可換行:左邊 317px(2026-10-24 標誌換成橫的 180 寬)、工具列 435px,一排要 ~780px;放不下就讓工具列掉到下一行
+   (以前 641–740 之間會把回報鈕壓在「新增」底下,驗收抓到) */
 .header-brand { display: flex; flex: none; align-items: flex-end; gap: 20px; }
 .gallery-header:not(.is-quiet) .gallery-meta-row { flex-wrap: wrap; row-gap: 14px; }
-.header-logo { width: 96px; flex: none; }
+.header-logo { width: 180px; flex: none; }
 .header-brand-side { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding-bottom: 4px; }
 .header-brand-side .piece-count[hidden] { display: none; }
 .feedback-button.in-brand { white-space: nowrap; }
 @media (max-width: 520px) {
   .header-brand { gap: 14px; }
-  .header-logo { width: 60px; }
+  .header-logo { width: 130px; }
   .header-brand-side { padding-bottom: 2px; }
 }
 .feedback-panel { align-items: stretch; text-align: left; gap: 14px; max-width: 440px; }

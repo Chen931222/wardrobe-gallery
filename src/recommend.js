@@ -1439,7 +1439,13 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
     } else reasons.push(`${intent?.forceRainy ? "你說會下雨" : "會下雨"},加件${name}`);
   }
   if (exclusion.applied.length) {
-    const cold = exclusion.noOuter && wantOuter ? `;體感 ${feel}° 本來會加件外套,怕冷就自己帶一件` : "";
+    // 本來要加外套的原因照實講(needOuter):體感 24° 以下是冷,24° 以上是因為會下雨。
+    // 以前一律寫「體感 X° 本來會加件外套」,25° 下雨天就前面說「薄長袖或短袖都行」、這裡又說會加外套(2026-10-24 試用者抓到)
+    const rainyWhy = intent?.forceRainy ? "你說會下雨" : "會下雨";
+    // 衣櫃裡本來就沒外套,「本來會加件外套」是假話(驗收讀 code 抓到):只有櫃裡有外套才講
+    const hadOuter = items.some((item) => item.part === "wholebody_up");
+    const cold = !(exclusion.noOuter && wantOuter && hadOuter) ? ""
+      : feel < 24 ? `;體感 ${feel}° 本來會加件外套,怕冷就自己帶一件` : `;${rainyWhy},本來會加件外套,怕淋濕就自己帶一件`;
     reasons.push(`照你說的不要${exclusion.applied.join("、")}${cold}`);
   }
   reasons.push(...exclusion.notes);

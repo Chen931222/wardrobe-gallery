@@ -142,6 +142,10 @@ export function rememberWearing(outfit, closet = "all") {
   writeWearing(closet, outfit);
 }
 
+// 示範衣櫃人台上面那句例句:場合加一個「不要」,一句話看得出整套重挑、外套拿掉
+const TRY_EXAMPLE = "上課,不要外套";
+const TRY_SEEN_KEY = "pairthis-try-seen";
+
 /** 指令要的東西怎麼說:「黑色」＋「開襟」＋「外套」;都沒講就用那一格的名稱 */
 function askedLabel(spec, fallback) {
   const descriptors = (spec.descriptors || []).map((group) => group[0]).filter((word) => !(spec.category || "").includes(word));
@@ -196,6 +200,12 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   const stacked = useMedia("(max-width: 860px)");
   const phone = useMedia("(max-width: 640px)");
   const [typing, setTyping] = useState(false);            // 指令框聚焦中:手機把貼底列收起來,免得 iOS 鍵盤彈出時蓋住
+  // 示範衣櫃人台上面那句「試試」:說過一句話(點它、點例句、自己打、用說的)就收起來,這次瀏覽不再出現
+  const [tried, setTried] = useState(() => { try { return sessionStorage.getItem(TRY_SEEN_KEY) === "1"; } catch { return false; } });
+  const markTried = () => { setTried(true); try { sessionStorage.setItem(TRY_SEEN_KEY, "1"); } catch { /* 下次再出現一次而已 */ } };
+  // 剛進來的 0.4 秒人台不接點擊:入口連點兩下「看看穿搭示範」,第二下會點到人台上的 ✕,把背包脫掉(驗收抓到)
+  const [settling, setSettling] = useState(true);
+  useEffect(() => { const timer = setTimeout(() => setSettling(false), 400); return () => clearTimeout(timer); }, []);
   // 失焦後晚一點才把貼底列放回來:點「照這句挑」時輸入框先失焦,列要是立刻冒出來會蓋住剛要點的按鈕,那一下就被吃掉
   const untuckRef = useRef(null);
   const focusOccasion = () => { clearTimeout(untuckRef.current); setTyping(true); };
@@ -770,6 +780,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   const handleRequest = (text = occasion) => {
     const req = parseRequest(text);
     if (!req) return;
+    markTried();
     // 句子裡講「襯衫」、要留著/解鎖/脫掉的是上衣那格:改成襯衫格(換單品不用改,找到的那件自己會放進襯衫格)
     if (req.slot === "upperbody" && /襯衫/.test(req.raw || text) && ["keep", "unlock", "remove"].includes(req.kind)) req.slot = "shirt";
 
@@ -1106,7 +1117,15 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       <div className="studio-stage-column">
         {/* 桌機:這一段(人台、指令框、例句、理由、按鈕)跟著畫面走;收藏、準不準、備份留在這一欄最下面(2026-10-08 本人) */}
         <div className="studio-stage-main">
-        <div className="studio-stage-sticky" ref={stickyRef}>
+        <div className={`studio-stage-sticky${settling ? " is-settling" : ""}`} ref={stickyRef}>
+        {/* 示範衣櫃才有(2026-10-24 試用者:「打一句話就能改」藏太深,手機輸入框在人台下面、第一屏看不到):
+            人台上面放一句例句,點了就照這句重挑;說過一句話就收起來。這句沒成功(例如抓不到天氣)就再出現 */}
+        {closet === "demo" && (!tried || daily?.error) && (
+          <p className="studio-try">
+            <span className="studio-try-lead">打一句話就能換一套。</span><span>試試:</span>
+            <button type="button" disabled={dailyBusy} onClick={() => { setOccasion(TRY_EXAMPLE); handleRequest(TRY_EXAMPLE); }}>{TRY_EXAMPLE}</button>
+          </p>
+        )}
         <div
           ref={stageRef}
           className={`studio-stage${adjusting ? " is-adjusting" : ""}`}

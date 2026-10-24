@@ -1,7 +1,7 @@
 {
   "name": "PairThis 搭這件",
   "short_name": "PairThis",
-  "description": "把自己的衣服放進來,照你那邊的天氣配一套,說為什麼。照片不離開手機。",
+  "description": "用你已有的衣服,照今天的天氣搭一套,告訴你為什麼。不用帳號,去背在你的裝置上算。",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

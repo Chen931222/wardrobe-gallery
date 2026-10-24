@@ -86,7 +86,8 @@ const RECORDED_REASONS = [
 // 照「上課」整套重挑,不只拿掉外套:上衣和下身也換了,註記照實寫
 const TALK = {
   before: { src: "/media/talk-before.jpg", label: "今日推薦", why: "會下雨，加件「深藍連帽防風外套」" },
-  after: { src: "/media/talk-after.jpg", label: "照這句挑之後", why: "照你說的不要外套；體感 26° 本來會加件外套，怕冷就自己帶一件" },
+  // why 照 2026-10-24 修過的引擎改寫(同一個情況:26°、降雨 100%,外套是因為雨才加的,不是因為冷)
+  after: { src: "/media/talk-after.jpg", label: "照這句挑之後", why: "照你說的不要外套；會下雨，本來會加件外套，怕淋濕就自己帶一件" },
   note: "示範衣櫃實際配出來的兩套，10 月 24 日台中體感 26°、降雨 100%。照「上課」整套重挑，外套拿掉，上衣和下身也跟著換。",
 };
 
@@ -139,6 +140,7 @@ function StoryLoop({ name, label }) {
 /**
  * @param demoItems 示範衣櫃的那份樣本(沒有就不畫示範穿搭)
  * @param onAdd / onDemo / onSync 三個出口;onImportFile(file) 匯入備份檔
+ *   onDemo(demo):demo = { outfit, daily } 是這頁配好的那套(天氣是假的時 daily 為 null);還沒配好時是 null
  */
 /** @param trashCount 垃圾桶裡有幾件(刪光了回到這裡,還要找得到);onOpenTrash 打開垃圾桶 */
 export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashCount = 0, onOpenTrash = null, onUpdates = null }) {
@@ -147,20 +149,32 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
   const city = useCity();
   useEffect(() => {
     let alive = true;
+    setWeather(null);   // 換城市:舊天氣先清掉,不然新的還沒回來時按示範,會把上一個城市的天氣帶進搭配頁(驗收抓到)
     fetchWeather().then((result) => { if (alive) setWeather(result); }).catch(() => { if (alive) setWeather(FALLBACK_WEATHER); });
     return () => { alive = false; };
   }, [city.key]);
-  // 天氣到了才配,配一次就固定(不然每次重新 render 都換一套)。理由也留著:標題說「說為什麼」,示範就要真的說(最多三條)
+  // 天氣到了才配,配一次就固定(不然每次重新 render 都換一套)。理由也留著:標題說「告訴你為什麼」,示範就要真的說(最多三條)
   const idsKey = demoItems.map((item) => item.id).join("|");
   const look = useMemo(() => {
     if (!weather || !demoItems.length) return null;
     const result = recommendOutfit(demoItems, weather, {});
     // 引擎的句子是半形標點(全站還沒改),入口這頁都是全形,這裡換掉免得一頁兩種
     const fullWidth = (text) => text.replace(/,/g, "，").replace(/;/g, "；").replace(/:/g, "：");
-    return result.error ? null : { outfit: result.outfit, reasons: (result.reasons || []).slice(0, 3).map(fullWidth) };
+    // raw:引擎原本的句子(半形),帶進搭配頁用,那頁全是半形
+    return result.error ? null : { outfit: result.outfit, reasons: (result.reasons || []).slice(0, 3).map(fullWidth), raw: result.reasons || [], details: result.details || [] };
   }, [weather, idsKey]);   // eslint-disable-line react-hooks/exhaustive-deps
   // 天氣抓不到時用的是假天氣(FALLBACK_WEATHER),那時的理由會講出假的體感,不顯示
   const realWeather = weather && weather.temp !== null;
+  // 帶進搭配頁的那套:天氣是假的就不帶理由(會講出假的體感)
+  const demoPayload = () => (look ? { outfit: look.outfit, daily: realWeather ? { weather, reasons: look.raw, details: look.details } : null } : null);
+  // 那套還沒配好就按(正式站按鈕出現後約 0.75 秒天氣才回來,驗收抓到):先記著,配好就帶進去;4 秒還沒好就照舊停在入口
+  const [demoWanted, setDemoWanted] = useState(false);
+  useEffect(() => {
+    if (!demoWanted) return undefined;
+    if (look) { setDemoWanted(false); onDemo(demoPayload()); return undefined; }
+    const timer = setTimeout(() => { setDemoWanted(false); onDemo(null); }, 4000);
+    return () => clearTimeout(timer);
+  }, [demoWanted, look]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // iPhone 的 Safari(不是從主畫面開的):資料久沒用可能被系統清掉,而且主畫面版和 Safari 的資料是分開的,
   // 所以要在還沒加衣服的這個時候講,加完才搬就看不到了
@@ -225,7 +239,7 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
       <Logo className="welcome-logo" />
       {/* 入口的字(2026-10-22 本人「寫的太 AI」):不做條列、不做「兩個字加粗當標題」,就幾段講話,長短不齊。每句都是實測過的事,限制照講 */}
       <h2 id="welcome-title" className="welcome-lede">
-        <span>把自己的衣服放進來，</span><span>它照你那邊的天氣配一套，</span><span>說為什麼。</span>
+        <span>用你已有的衣服，</span><span>照今天的天氣搭一套，</span><span>告訴你為什麼。</span>
       </h2>
 
       {demoFirst && demo}
@@ -248,8 +262,9 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
           </p>
         )}
         <div className="welcome-actions">
-          <button type="button" className="primary-button" onClick={onAdd}>新增第一件</button>
-          {!!demoItems.length && <button type="button" className="secondary-button" onClick={onDemo}>先看看示範</button>}
+          <button type="button" className="primary-button" onClick={onAdd}>加入第一件衣服</button>
+          {/* 2026-10-24(試用者:「打一句話就能改」藏太深):直接帶這頁那套進搭配,不再先停在衣服環繞的入口 */}
+          {!!demoItems.length && <button type="button" className="secondary-button" onClick={() => (look ? onDemo(demoPayload()) : setDemoWanted(true))} disabled={demoWanted} aria-busy={demoWanted}>看看穿搭示範</button>}
         </div>
         {ios && !standalone && !app && (
           // 2026-10-24 縮成兩行(事實不變):手機上它排在示範和按鈕後面,三行時第三行掉出 iPhone 第一屏
@@ -261,48 +276,41 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
 
       {!demoFirst && demo}
 
-      {/* 先講清楚的事:隱私、怎麼用、會錯的地方。放在按鈕和示範後面,想知道的人往下讀 */}
+      {/* 先講清楚的事:隱私、怎麼用、會錯的地方。放在按鈕和示範後面,想知道的人往下讀。
+          2026-10-24 文案(本人「照你的修正版改」):「照片不會離開你的手機」說太滿,開了同步照片會加密上傳;
+          「手機自己算」電腦上的人會卡住。限制照講,只拿掉「會錯的地方先講」那個開頭 */}
       <div className="welcome-copy">
-        <p className="welcome-para">照片不會離開你的手機。去背是手機自己算的，沒有帳號，衣櫃就存在這台瀏覽器裡。</p>
+        <p className="welcome-para">不用註冊，衣櫃存在這個瀏覽器裡。去背在你的裝置上算。要同步到別台時，上傳前會先加密。</p>
         {/* 「用講的換一套」那段拿掉了(2026-10-24):下面第三章講同一件事,連條件「要先有自己的上衣和下身」都寫了,這裡講第二遍 */}
-        <p className="welcome-para">會錯的地方先講：衣服是平放的照片，袖子不會垂。分類是猜的，猜錯了點一下改。</p>
+        <p className="welcome-para">穿搭預覽用的是平放的照片，穿起來的垂墜感會不一樣。分類是自動猜的，猜錯點一下就能改。</p>
         {/* 回報鈕獨立一行(2026-10-22 本人「放個訪客問題回報」):原本夾在下面那排連結裡,看不到 */}
-        <p className="welcome-feedback">試了之後哪裡卡住，一句話就好：<Feedback where="歡迎" /></p>
+        <p className="welcome-feedback">卡住的話，一句話就好：<Feedback where="歡迎" /></p>
+        {/* 用過的人的入口:同步、備份、垃圾桶。排在「怎麼用」那段上面(2026-10-24 驗收):換裝置要輸入同步碼、
+            刪光衣服要找垃圾桶的人都從這排進去,放到最底要先捲過三列影片(1280×800 從 y930 掉到 3035)。
+            2026-10-24 第二版(試用者:「這排看起來像頁尾,以為整頁結束了」):拿掉細線、搬進這一欄接在回報那行下面,更新、隱私搬到真正的頁尾(最下面) */}
+        <p className="welcome-note">
+          在別台同步過了？<button type="button" onClick={onSync}>輸入同步碼</button>
+          <span aria-hidden="true"> · </span>
+          有備份檔？<button type="button" onClick={() => fileRef.current?.click()}>匯入備份</button>
+          {trashCount > 0 && onOpenTrash && (
+            <>
+              <span aria-hidden="true"> · </span>
+              垃圾桶裡有 {trashCount} 件<button type="button" onClick={onOpenTrash}>打開</button>
+            </>
+          )}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/zip,.zip,application/json,.json"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) onImportFile(file);
+            }}
+          />
+        </p>
       </div>
-
-      {/* 頁腳:同步、備份、更新、隱私。一排小字,上面一條細線跟正文隔開。
-          排在「怎麼用」那段上面(2026-10-24 驗收):換裝置要輸入同步碼、刪光衣服要找垃圾桶的人都從這排進去,
-          放到最底要先捲過三列影片(1280×800 從 y930 掉到 3035) */}
-      <p className="welcome-note">
-        在別台同步過了？<button type="button" onClick={onSync}>輸入同步碼</button>
-        <span aria-hidden="true"> · </span>
-        有備份檔？<button type="button" onClick={() => fileRef.current?.click()}>匯入備份</button>
-        {trashCount > 0 && onOpenTrash && (
-          <>
-            <span aria-hidden="true"> · </span>
-            垃圾桶裡有 {trashCount} 件<button type="button" onClick={onOpenTrash}>打開</button>
-          </>
-        )}
-        {onUpdates && (
-          <>
-            <span aria-hidden="true"> · </span>
-            最近改了什麼？<button type="button" onClick={onUpdates}>看更新</button>
-          </>
-        )}
-        <span aria-hidden="true"> · </span>
-        <a href="/privacy.html">隱私與使用說明</a>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="application/zip,.zip,application/json,.json"
-          hidden
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            if (file) onImportFile(file);
-          }}
-        />
-      </p>
 
       <section ref={storyRef} className={reveal ? "welcome-story can-reveal" : "welcome-story"} aria-label="怎麼用">
         {/* 2026-10-24 本人「像 Apple 一樣有分層」:每段一整幅橫跨整頁的章節,底色紙／米紙交替、標題放大、影片放大左右交替;
@@ -364,6 +372,16 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
           </div>
         </div>
       </section>
+
+      <footer className="welcome-foot">
+        {onUpdates && (
+          <>
+            最近改了什麼？<button type="button" onClick={onUpdates}>看更新</button>
+            <span aria-hidden="true"> · </span>
+          </>
+        )}
+        <a href="/privacy.html">隱私與使用說明</a>
+      </footer>
     </section>
   );
 }

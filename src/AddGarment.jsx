@@ -194,7 +194,7 @@ function expandBox(region) {
 /**
  * @param onAdded 存好之後叫,帶兩個參數:這件是不是存進「想買的」、存成什麼名字
  * @param existing 這個衣櫃已經有的(含想買的),存檔前拿來比對有沒有重複;站主是全部,訪客只有自己加的
- * @param openRequest 大於 0 就打開新增(空衣櫃、推薦失敗的「新增第一件」按鈕用);打開後叫 onOpenHandled 讓呼叫端歸零,
+ * @param openRequest 大於 0 就打開新增(空衣櫃、推薦失敗的「加入第一件衣服」按鈕用);打開後叫 onOpenHandled 讓呼叫端歸零,
  *        不然切到入口再回來、這個元件重新掛上時又會自己打開
  */
 /**

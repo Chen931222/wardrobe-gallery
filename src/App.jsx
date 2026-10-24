@@ -1738,7 +1738,7 @@ export function App() {
   // 訪客自己的衣櫃還空著、人在入口:歡迎畫面。這時把件數和衣櫃切換收起來(都是 0,示範從歡迎畫面的按鈕進去)
   const showWelcome = !error && !loading && !ownedItems.length && !unownedCount && view === "landing" && closet === "mine";
 
-  // 「新增第一件」「去新增」:換到衣櫃(新增鈕在那裡的標題列),叫新增自己打開
+  // 「加入第一件衣服」「去新增」:換到衣櫃(新增鈕在那裡的標題列),叫新增自己打開
   const requestAdd = () => {
     setView("closet");
     setAddRequest((count) => count + 1);
@@ -2027,7 +2027,7 @@ export function App() {
             title={closet === "demo" && CAN_ADD ? "示範衣櫃" : "我的衣櫃"}
             note={closet === "demo" && CAN_ADD ? (
               <>
-                <span className="landing-pitch">把自己的衣服<span className="landing-pitch-more">拍照、或貼 GU、UNIQLO 的連結</span>放進來,每天照台中的天氣配一套。衣服不上傳,只存在你這台。<span className="landing-pitch-more">下面是從站主衣櫃挑出來的幾件,先拿來示範。</span></span>
+                <span className="landing-pitch">把自己的衣服<span className="landing-pitch-more">拍照、或貼 GU、UNIQLO 的連結</span>放進來,每天照台中的天氣配一套。衣櫃存在你這台,同步到別台前會先加密。<span className="landing-pitch-more">下面是從站主衣櫃挑出來的幾件,先拿來示範。</span></span>
                 <button type="button" className="landing-make" onClick={() => { chooseCloset("mine"); if (mineCount) setView("closet"); else requestAdd(); }}>
                   {mineCount ? "回我的衣櫃" : "建立我的衣櫃"}
                 </button>
@@ -2183,7 +2183,17 @@ export function App() {
           <Welcome
             demoItems={demoItems}
             onAdd={requestAdd}
-            onDemo={() => chooseCloset("demo")}
+            // 帶著入口配好的那套直接進搭配頁(2026-10-24);那套還沒配好就照舊停在入口。
+            // 不走 wearOutfit:它記「身上這套」用的是切換前的衣櫃(mine),這裡要記在 demo
+            onDemo={(demo) => {
+              chooseCloset("demo");
+              if (!demo) return;
+              rememberWearing(demo.outfit, "demo");
+              setPendingOutfit(demo.outfit);
+              setPendingDaily(demo.daily);
+              setView("styling");
+              window.scrollTo({ top: 0 });   // 入口往下捲過再按,搭配頁會停在同一個高度,人台上面那句看不到(驗收抓到)
+            }}
             onSync={() => setSyncOpen(true)}
             onUpdates={() => setUpdatesOpen(true)}
             trashCount={trashCount}
@@ -2209,8 +2219,9 @@ export function App() {
               {CAN_ADD && (
                 <>
                   <br />
-                  <button type="button" className="secondary-button" onClick={requestAdd}>新增第一件</button>
-                  {closet === "mine" && <button type="button" className="secondary-button welcome-demo" onClick={() => chooseCloset("demo")}>先看看示範</button>}
+                  <button type="button" className="secondary-button" onClick={requestAdd}>加入第一件衣服</button>
+                  {/* 這顆是切到示範衣櫃看衣服,不是進搭配:名字跟入口那顆分開,免得同名不同行為(2026-10-24 驗收) */}
+                  {closet === "mine" && <button type="button" className="secondary-button welcome-demo" onClick={() => chooseCloset("demo")}>看看示範衣櫃</button>}
                 </>
               )}
             </p>
