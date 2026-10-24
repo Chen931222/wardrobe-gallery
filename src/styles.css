@@ -3033,8 +3033,8 @@ h1, h2, h3 {
   display: grid;
   grid-template-columns: minmax(0, 32rem) clamp(240px, 24vw, 270px);
   /* 示範從標誌那一列就開始:人台加三條理由要在第一屏看得完(1280×800 也是) */
-  grid-template-areas: "logo look" "lede look" "start look" "copy look" "note note";
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto;   /* 右欄人台比左欄高時,多出來的高度給最後那列,標題和按鈕不會被撐開 */
+  grid-template-areas: "logo look" "lede look" "start look" "copy look" "note note" "story story";
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;   /* 右欄人台比左欄高時,多出來的高度給「先講清楚的事」那列,標題和按鈕不會被撐開 */
   justify-content: space-between;
   column-gap: clamp(48px, 7vw, 96px);
   align-items: start;
@@ -3047,6 +3047,44 @@ h1, h2, h3 {
 .welcome-look { grid-area: look; }
 .welcome-copy { grid-area: copy; }
 .welcome-note { grid-area: note; }
+.welcome-story { grid-area: story; }
+
+/* 往下捲的「怎麼用」三列(2026-10-23):左邊一句大字＋一段小字,右邊手機比例的循環短片,跟上面示範人台同一欄寬。
+   捲到才出現:淡入、往上 24px,0.7 秒;減少動態時直接顯示、不動 */
+.welcome-story { display: grid; gap: clamp(64px, 9vh, 104px); margin-top: 96px; padding-top: 64px; border-top: 1px solid var(--line); }
+.story-step {
+  display: grid; grid-template-columns: minmax(0, 32rem) clamp(200px, 20vw, 240px);
+  justify-content: space-between; column-gap: clamp(48px, 7vw, 96px); align-items: center;
+}
+.welcome .story-text h3 {
+  margin: 0; font-family: var(--font-body); font-weight: 400;
+  font-size: clamp(22px, 2.3vw, 28px); line-height: 1.5; letter-spacing: .03em; color: var(--ink); text-wrap: balance;
+}
+.welcome .story-text p { margin-top: 14px; max-width: 27em; }
+.story-media { aspect-ratio: 720 / 1558; border: 1px solid var(--line); background: var(--surface); overflow: hidden; }
+.story-video { display: block; width: 100%; height: 100%; object-fit: cover; background: var(--surface); }
+/* 點一下暫停／繼續(WCAG 2.2.2):整格是一顆按鈕,看起來還是一格影片;停住時左上角小字「已暫停」 */
+.story-toggle { position: relative; display: block; width: 100%; height: 100%; padding: 0; border: 0; background: none; cursor: pointer; }
+.story-paused { position: absolute; left: 10px; top: 10px; padding: 3px 10px; border-radius: 999px; background: rgba(59, 50, 42, .86); color: var(--paper); font-size: 12px; letter-spacing: .04em; }
+.welcome-story.can-reveal .story-step {
+  opacity: 0; transform: translateY(24px);
+  transition: opacity 700ms cubic-bezier(.22, .8, .22, 1), transform 700ms cubic-bezier(.22, .8, .22, 1);
+}
+.welcome-story.can-reveal .story-step.is-in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .welcome-story.can-reveal .story-step { opacity: 1; transform: none; transition: none; }
+}
+/* 25 秒介紹:一顆按鈕(封面縮圖＋字),點了換成有聲的播放器 */
+.story-intro { display: flex; justify-content: flex-start; }
+.story-intro-open {
+  display: inline-flex; align-items: center; gap: 20px; padding: 0; border: 0; background: none;
+  font: inherit; color: var(--ink); text-align: left; cursor: pointer;
+}
+.story-intro-open img { width: 96px; aspect-ratio: 9 / 16; object-fit: cover; border: 1px solid var(--line); }
+.story-intro-open span { display: grid; gap: 6px; font-size: 18px; text-decoration: underline; text-underline-offset: 5px; text-decoration-color: var(--line); }
+.story-intro-open small { font-size: 13px; color: var(--muted); text-decoration: none; }
+.story-intro-open:hover span, .story-intro-open:focus-visible span { text-decoration-color: var(--ink); }
+.story-intro-video { width: min(320px, 100%); aspect-ratio: 9 / 16; background: var(--surface); border: 1px solid var(--line); }
 
 /* 標誌(2026-10-23 design.com 那張):只有線條的 alpha 遮罩,用 mask 上色,深色主題自動跟著 --ink 變。圖是直式 594×710 */
 .logo {
@@ -3125,7 +3163,12 @@ h1, h2, h3 {
 .status .welcome-demo { margin-left: 8px; }
 @media (max-width: 760px) {
   /* 手機:示範穿搭緊接在標題下面(放到正文後面會掉出第一屏,等於沒放),人台在左、說明在右 */
-  .welcome { grid-template-columns: minmax(0, 1fr); grid-template-areas: "logo" "lede" "start" "look" "copy" "note"; width: auto; margin: 0 18px 40px; }
+  .welcome { grid-template-columns: minmax(0, 1fr); grid-template-areas: "logo" "lede" "start" "look" "copy" "note" "story"; width: auto; margin: 0 18px 40px; }
+  /* 手機:跟上面示範人台一樣,短片在右邊一小欄,字在左邊 */
+  .welcome-story { margin-top: 56px; padding-top: 40px; gap: 48px; }
+  .story-step { grid-template-columns: minmax(0, 1fr) 128px; column-gap: 16px; align-items: start; }
+  .welcome .story-text h3 { font-size: 20px; }
+  .welcome .story-text p { margin-top: 10px; font-size: 14px; line-height: 1.8; }
   .welcome .welcome-logo { margin-bottom: 20px; width: 84px; }
   .welcome .welcome-lede { font-size: 24px; }
   .welcome-start { margin-top: 20px; }

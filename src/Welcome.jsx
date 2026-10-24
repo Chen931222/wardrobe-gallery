@@ -11,6 +11,7 @@ import { CitySelect, useCity } from "./CitySelect.jsx";
 import { inAppBrowser, isIos, isStandalone } from "./keepSafe.js";
 import { Feedback } from "./Feedback.jsx";
 import { Logo } from "./Brand.jsx";
+import { track } from "./analytics.js";
 
 const FALLBACK_WEATHER = { temp: null, feelsLike: 25, desc: "", rainProb: 0, tMax: 27, tMin: 22 };
 
@@ -54,6 +55,65 @@ function MiniLook({ outfit }) {
   );
 }
 
+/* 往下捲的「怎麼用」三列(2026-10-23 本人:「像 Apple 官網那樣…隨著慢慢往下滾動,會帶出越來越多內容」)。
+   借的是節奏(一列一件事、捲到才出現),不借特效:不鎖捲動、不用滾輪刷影片。
+   影片是 _video-lab/films/pairthis-intro 錄的真實畫面(訪客從空衣櫃開始那條路),變速和示範衣櫃的標籤燒在畫面裡。
+   每句都對過程式:城市是 city.js 的 CITIES(20 筆,從基隆到金門、馬祖;新竹、嘉義縣市各併一筆,所以不寫「20 個縣市」,驗收抓到);
+   「缺的先借」是 App.jsx 的 firstLook(第一件才借);
+   打一句話換要自己有上衣和下身(搭配頁講話只用自己的衣服,只有一件會回「還差下身」) */
+// title 拆成幾段,只在段和段之間換行(手機窄欄會斷成「貼／商品連結」「打／一句話」,2026-10-23 截圖)
+const STEPS = [
+  { key: "add", title: ["網購過的，", "貼商品連結就好"], body: "挑一張商品圖，去背在這台裝置上算。讀不到圖的網站用截圖；沒有連結的，拍一張平放的。" },
+  { key: "weather", title: ["照你那邊的天氣", "配一套，說為什麼"], body: "天氣照你選的城市，從基隆到金門、馬祖都有。第一件進櫃時，缺的先跟示範衣櫃借；配出來的那套會寫理由。" },
+  { key: "talk", title: ["不喜歡，", "打一句話就換"], body: "像「上課，不要外套」。要先有自己的上衣和下身；還沒有的話，先在示範衣櫃試。" },
+];
+
+/** 一段循環短片:捲到看得見才播、捲走就停,省電也省流量(preload none,封面先頂著)。減少動態的人不自動播,給播放鈕。
+ *  一直動超過 5 秒要能停(WCAG 2.2.2,驗收抓到):點一下影片(或 Tab 到按 Enter)暫停,再點繼續;自己停的不會因為捲回來又自己播 */
+function StoryLoop({ name, label }) {
+  const ref = useRef(null);
+  const [still] = useState(() => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+  const [held, setHeld] = useState(false);
+  const heldRef = useRef(false);
+  heldRef.current = held;
+  useEffect(() => {
+    const video = ref.current;
+    if (!video || still || typeof IntersectionObserver === "undefined") return undefined;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && !heldRef.current) video.play().catch(() => {});
+      else video.pause();
+    }, { threshold: 0.4 });
+    observer.observe(video);
+    return () => observer.disconnect();
+  }, [still]);
+  const video = (
+    <video
+      ref={ref}
+      className="story-video"
+      src={`/media/loop-${name}.mp4`}
+      poster={`/media/loop-${name}.jpg`}
+      muted
+      loop
+      playsInline
+      preload="none"
+      controls={still}
+      aria-label={label}
+    />
+  );
+  if (still) return video;
+  const toggle = () => {
+    const v = ref.current;
+    if (!v) return;
+    if (held) { setHeld(false); v.play().catch(() => {}); } else { setHeld(true); v.pause(); }
+  };
+  return (
+    <button type="button" className="story-toggle" onClick={toggle} aria-pressed={held} aria-label={`${label}（${held ? "已暫停，按一下繼續播" : "按一下暫停"}）`}>
+      {video}
+      {held && <span className="story-paused" aria-hidden="true">已暫停</span>}
+    </button>
+  );
+}
+
 /**
  * @param demoItems 示範衣櫃的那份樣本(沒有就不畫示範穿搭)
  * @param onAdd / onDemo / onSync 三個出口;onImportFile(file) 匯入備份檔
@@ -88,6 +148,24 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
   const app = inAppBrowser();
   const here = typeof window === "undefined" ? "" : window.location.origin;
   const [copied, setCopied] = useState("");
+  // 捲到才出現:一列進到畫面就加 is-in(只加一次)。沒有 IntersectionObserver 就全部直接顯示
+  const storyRef = useRef(null);
+  const [reveal, setReveal] = useState(false);
+  useEffect(() => {
+    const root = storyRef.current;
+    if (!root || typeof IntersectionObserver === "undefined") return undefined;
+    setReveal(true);
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) if (entry.isIntersecting) { entry.target.classList.add("is-in"); observer.unobserve(entry.target); }
+    }, { threshold: 0.25, rootMargin: "0px 0px -8% 0px" });
+    root.querySelectorAll(".story-step").forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, []);
+  // 25 秒介紹:點了才載入、才播(有聲音;按鈕本身就是使用者的手勢,瀏覽器准有聲自動播)。
+  // 按鈕換成播放器之後焦點移到播放器上,不然鍵盤使用者的焦點掉回 body(驗收)
+  const [intro, setIntro] = useState(false);
+  const introRef = useRef(null);
+  useEffect(() => { if (intro) introRef.current?.focus(); }, [intro]);
   const copyLink = async () => {
     try { await navigator.clipboard.writeText(here); setCopied("已複製，到 Safari 或 Chrome 貼上"); }
     catch { setCopied(`複製不了，手動輸入：${here.replace(/^https?:\/\//, "")}`); }
@@ -162,7 +240,9 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
         <p className="welcome-feedback">試了之後哪裡卡住，一句話就好：<Feedback where="歡迎" /></p>
       </div>
 
-      {/* 頁腳:同步、備份、更新、隱私。一排小字,上面一條細線跟正文隔開 */}
+      {/* 頁腳:同步、備份、更新、隱私。一排小字,上面一條細線跟正文隔開。
+          排在「怎麼用」那段上面(2026-10-24 驗收):換裝置要輸入同步碼、刪光衣服要找垃圾桶的人都從這排進去,
+          放到最底要先捲過三列影片(1280×800 從 y930 掉到 3035) */}
       <p className="welcome-note">
         在別台同步過了？<button type="button" onClick={onSync}>輸入同步碼</button>
         <span aria-hidden="true"> · </span>
@@ -193,6 +273,30 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
           }}
         />
       </p>
+
+      <section ref={storyRef} className={reveal ? "welcome-story can-reveal" : "welcome-story"} aria-label="怎麼用">
+        {STEPS.map((step) => (
+          <div key={step.key} className="story-step">
+            <div className="story-text">
+              <h3>{step.title.map((part) => <span key={part} className="nowrap">{part}</span>)}</h3>
+              <p>{step.body}</p>
+            </div>
+            <div className="story-media">
+              <StoryLoop name={step.key} label={`示範畫面：${step.title.join("")}`} />
+            </div>
+          </div>
+        ))}
+        <div className="story-intro">
+          {intro ? (
+            <video ref={introRef} className="story-intro-video" src="/media/intro.mp4" poster="/media/intro.jpg" controls autoPlay playsInline aria-label="PairThis 搭這件 25 秒介紹" />
+          ) : (
+            <button type="button" className="story-intro-open" onClick={() => { setIntro(true); track("看介紹影片", { 頁: "入口" }); }}>
+              <img src="/media/intro.jpg" alt="" loading="lazy" />
+              <span>看 25 秒介紹<small>有聲音，點了才載入，約 1.6 MB</small></span>
+            </button>
+          )}
+        </div>
+      </section>
     </section>
   );
 }
