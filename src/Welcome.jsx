@@ -4,7 +4,7 @@
 // 現在直接放一套示範穿搭穿在人台上、配今天的天氣(城市可以選,預設台中),一眼看懂;再講清楚加兩件就能配出第一套。
 // 示範用的是站主衣櫃的那一小份樣本(App 的 demoSample),不會多露出別的衣服。
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Silhouette } from "./OutfitStudio.jsx";
+import { Silhouette, useMedia } from "./OutfitStudio.jsx";
 import { DOLL, MEASURED_SLOTS, SLOT_STYLE, cachedShape, placeGarment, shapeFromImage } from "./dollLayout.js";
 import { fetchWeather, recommendOutfit } from "./recommend.js";
 import { CitySelect, useCity } from "./CitySelect.jsx";
@@ -14,6 +14,9 @@ import { Logo } from "./Brand.jsx";
 import { track } from "./analytics.js";
 
 const FALLBACK_WEATHER = { temp: null, feelsLike: 25, desc: "", rainProb: 0, tMax: 27, tMin: 22 };
+// 理由裡引號框住的單品名整段換行,不從中間斷(「深藍連帽防風／外套」,2026-10-24 手機截圖)。
+// 用 inline-block 不用 nowrap:一行放不下整個品名時才在品名裡面斷,不會撐出窄欄被切掉(320 寬的「駝色斜紋厚棉襯衫式外套」,驗收)
+const keepQuotes = (text) => text.split(/(「[^」]+」)/).map((part, i) => (i % 2 ? <span key={i} className="keep-together">{part}</span> : part));
 
 /** 一套穿搭穿在人台上,只看不能動。比例跟搭配頁同一把尺(src/dollLayout.js):圖載入時量身形,量好才顯示。 */
 function MiniLook({ outfit }) {
@@ -185,16 +188,39 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
   const [intro, setIntro] = useState(false);
   const introRef = useRef(null);
   useEffect(() => { if (intro) introRef.current?.focus(); }, [intro]);
+  // 示範:人台穿一套,旁邊是它給的理由。理由是引擎真的算出來的(recommendOutfit 的 reasons),不是寫死的句子。
+  // 天氣還沒回來時先放空人台佔位:手機上示範排在按鈕前面,晚出現會把按鈕往下推 296px(驗收:天氣慢 2.5 秒時按鈕從 276 跳到 572)
+  const demo = look ? (
+    <figure className="welcome-look">
+      <MiniLook outfit={look.outfit} />
+      <figcaption>
+        <span className="welcome-look-when">{realWeather ? <><CitySelect /> {weather.temp}°，</> : ""}<span className="nowrap">{realWeather ? "示範衣櫃今天這樣穿" : "示範衣櫃的一套"}{realWeather && look.reasons.length ? "：" : ""}</span></span>
+        {realWeather && look.reasons.length > 0 && (
+          <ul className="welcome-look-why">{look.reasons.map((reason) => <li key={reason}>{keepQuotes(reason)}</li>)}</ul>
+        )}
+      </figcaption>
+    </figure>
+  ) : !weather && demoItems.length > 0 ? (
+    <figure className="welcome-look" aria-hidden="true">
+      <div className="mini-look"><Silhouette /></div>
+    </figure>
+  ) : null;
+  // 手機:示範在按鈕前面;桌機示範在右欄,DOM 放按鈕後面。DOM 跟著畫面換,不只靠 grid 搬:Tab 和讀屏的順序要跟眼睛看的一樣(驗收)。
+  // LINE／IG 裡開的不管寬窄都是按鈕那塊先:「用瀏覽器開啟」要先看到
+  const narrow = useMedia("(max-width: 760px)");
+  const demoFirst = narrow && !app;
   const copyLink = async () => {
     try { await navigator.clipboard.writeText(here); setCopied("已複製，到 Safari 或 Chrome 貼上"); }
     catch { setCopied(`複製不了，手動輸入：${here.replace(/^https?:\/\//, "")}`); }
   };
 
   return (
-    <section className="welcome" aria-labelledby="welcome-title">
+    <section className={app ? "welcome is-inapp" : "welcome"} aria-labelledby="welcome-title">
       {/* 站名(2026-10-23 本人定):PairThis,中文「搭這件」;網址 pairthis.app、帳號 @pairthis.app 同名。
           同日本人「入口有點醜、沒有商標」:頂端放標誌(src/Brand.jsx,本人選的 design.com 那張),原本的第一段升成大字標題,
-          示範穿搭放大。排版用 grid:桌機示範穿搭在右欄;手機依序是標題、第一步和按鈕、示範(按鈕要在第一屏)。
+          示範穿搭放大。排版用 grid:桌機示範穿搭在右欄;手機(2026-10-24 本人「看起來只是文字排版」)依序是
+          標題、示範那套(一條米紙帶)、按鈕:講它做什麼 → 真的配一套給你看 → 開始。三樣在 393×700(iPhone Safari)和 375×548(SE)都在第一屏。
+          從 LINE／IG 開的(is-inapp)例外,按鈕那塊排回示範前面:要先看到「用瀏覽器開啟」,不然衣服加在 LINE 裡。
           標點改全形:半形逗號夾在中文裡會擠在一起,大字更明顯(站上其他頁還是半形,還沒改) */}
       <Logo className="welcome-logo" />
       {/* 入口的字(2026-10-22 本人「寫的太 AI」):不做條列、不做「兩個字加粗當標題」,就幾段講話,長短不齊。每句都是實測過的事,限制照講 */}
@@ -202,17 +228,13 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
         <span>把自己的衣服放進來，</span><span>它照你那邊的天氣配一套，</span><span>說為什麼。</span>
       </h2>
 
-      {/* 第一步(2026-10-23 本人「讓入門者知道他們在做什麼」):原本按鈕排在三段說明後面,手機要捲才看得到。
-          現在標題下面直接講按下去會發生什麼,再放按鈕。「加一件就配一套」是 App.jsx 的 firstLook(10-21 上線):
-          缺的格子從示範衣櫃借;舊句「先加一件上衣、一件下身」從那天起就不對了 */}
+      {demoFirst && demo}
+
+      {/* 按鈕(2026-10-23 本人「讓入門者知道他們在做什麼」)。
+          標題下原本有三句「加第一件就會配出一套…／網購過的貼商品連結，不用拍／沒有連結的，拍一張平放的」,
+          2026-10-24 本人「下面已經有介紹了,上面是不是就不需要」拿掉。意思都在下面:缺的先借在 02 章,貼連結是 01 章標題,
+          拍平放的在 01 章內文(一字不差)。「不用拍」三個字這頁沒有了,在新增那頁的第一句;「加一件就配一套」加完第一件時 App 會講(firstLook 那條理由) */}
       <div className="welcome-start">
-        {/* 貼連結平常預設「想買」,但衣櫃還空著時預設「已經有了」(AddGarment.jsx closetEmpty,2026-10-23),
-            這頁只在衣櫃空著時出現,所以不用叫人去點 */}
-        <p className="welcome-steps">
-          <span>加第一件就會配出一套，缺的先跟示範衣櫃借。</span>
-          <span>網購過的貼商品連結，不用拍。</span>
-          <span>沒有連結的，拍一張平放的。</span>
-        </p>
         {app && (
           <p className="welcome-tip is-warning" role="note">
             你現在是在 {app} 裡面開的。在這裡加的衣服只存在 {app} 裡，之後用 Safari 或 Chrome 打開會是空的。
@@ -230,24 +252,14 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
           {!!demoItems.length && <button type="button" className="secondary-button" onClick={onDemo}>先看看示範</button>}
         </div>
         {ios && !standalone && !app && (
+          // 2026-10-24 縮成兩行(事實不變):手機上它排在示範和按鈕後面,三行時第三行掉出 iPhone 第一屏
           <p className="welcome-tip">
-            用 iPhone 建議先按分享鈕 →「加入主畫面」，之後從主畫面打開再加衣服。只放在 Safari 裡久沒開，資料可能被系統清掉。
+            iPhone 建議先從分享鈕「加入主畫面」，再從主畫面打開來加。只放在 Safari 久沒開，資料可能被系統清掉。
           </p>
         )}
       </div>
 
-      {/* 示範:人台穿一套,底下是它給的理由。理由是引擎真的算出來的(recommendOutfit 的 reasons),不是寫死的句子 */}
-      {look && (
-        <figure className="welcome-look">
-          <MiniLook outfit={look.outfit} />
-          <figcaption>
-            <span className="welcome-look-when">{realWeather ? <><CitySelect /> {weather.temp}°，</> : ""}<span className="nowrap">{realWeather ? "示範衣櫃今天這樣穿" : "示範衣櫃的一套"}{realWeather && look.reasons.length ? "：" : ""}</span></span>
-            {realWeather && look.reasons.length > 0 && (
-              <ul className="welcome-look-why">{look.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
-            )}
-          </figcaption>
-        </figure>
-      )}
+      {!demoFirst && demo}
 
       {/* 先講清楚的事:隱私、怎麼用、會錯的地方。放在按鈕和示範後面,想知道的人往下讀 */}
       <div className="welcome-copy">
@@ -313,7 +325,7 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
               {step.key === "weather" && (
                 <figure className="story-notes">
                   <figcaption>錄影那天，台中 23°、毛毛雨，它寫的是：</figcaption>
-                  <ul>{RECORDED_REASONS.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+                  <ul>{RECORDED_REASONS.map((reason) => <li key={reason}>{keepQuotes(reason)}</li>)}</ul>
                 </figure>
               )}
               {step.key === "talk" && (

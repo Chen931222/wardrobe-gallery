@@ -3031,7 +3031,8 @@ h1, h2, h3 {
    2026-10-23 改版(本人「入口有點醜、沒有商標」):頂端字標＋章;原本第一段升成大字標題;示範穿搭放大當右欄;
    頁腳一排小字,上面一條細線。桌機兩欄 grid,手機一欄:字標 → 標題 → 示範穿搭(還在第一屏)→ 正文 → 頁腳 */
 /* 2026-10-23 第二版(本人「讓入門者知道他們在做什麼」):閱讀順序是 標題 → 第一步和按鈕 → 示範和理由 → 先講清楚的事。
-   整塊置中:寬螢幕(2000px)以前全擠在左半邊,右邊空一大片 */
+   整塊置中:寬螢幕(2000px)以前全擠在左半邊,右邊空一大片。
+   2026-10-24:「第一步」那三句拿掉(下面章節講過);手機改成 標題 → 示範(米紙帶)→ 按鈕,見 max-width 760 那段 */
 .welcome {
   display: grid;
   grid-template-columns: minmax(0, 32rem) clamp(240px, 24vw, 270px);
@@ -3156,14 +3157,14 @@ h1, h2, h3 {
 }
 .welcome-lede span { display: block; }
 
-/* 第一步緊貼標題(28px),先講清楚的事跟它拉開(56px):按鈕跟它上面那句是一組,說明是另一組 */
-.welcome-start { margin-top: 28px; max-width: 27em; }
+/* 按鈕緊貼標題(36px),先講清楚的事跟它拉開(56px):按鈕跟標題那句是一組,說明是另一組。
+   標題下那三句 2026-10-24 拿掉(01、02 章講同一件事),按鈕直接接在標題後面 */
+.welcome-start { margin-top: 36px; max-width: 27em; }
 .welcome-copy { margin-top: 56px; max-width: 27em; }   /* 正文比標題窄:15px 一行 27 字,最後一行不會只剩兩三個字 */
 .welcome p { margin: 0; font-size: 15px; line-height: 1.9; color: var(--body); text-wrap: pretty; }   /* pretty:最後一行不要只剩一個字 */
 .welcome .welcome-para + .welcome-para { margin-top: 12px; }
-.welcome .welcome-steps { font-size: 16px; color: var(--ink); }
-.welcome-steps > span { display: block; }   /* 一句一行:桌機三句剛好各一行,不會在「商品」中間斷 */
-.welcome-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.welcome-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.welcome-tip + .welcome-actions { margin-top: 18px; }   /* LINE／IG 那段警告在按鈕上面時 */
 .welcome-actions button { min-height: 48px; padding: 0 26px; font-size: 15px; }
 .welcome .welcome-feedback { margin-top: 18px; font-size: 13px; color: var(--muted); }
 .welcome-feedback .feedback-button { margin-left: 4px; }
@@ -3183,6 +3184,7 @@ h1, h2, h3 {
 }
 .welcome-look figcaption { margin-top: 14px; font-size: 13px; line-height: 1.7; color: var(--body); }
 .welcome-look-when { display: block; }
+.keep-together { display: inline-block; max-width: 100%; }   /* 理由裡的「品名」:放得下就整段換到下一行,一行都放不下才在裡面斷 */
 .nowrap { white-space: nowrap; }   /* 一小段字整段換行:入口的「示範衣櫃今天這樣穿」、引號裡的話,回報視窗的「瀏覽器型號」 */
 /* 它給的理由:標題說「說為什麼」,這裡就是那個為什麼。比圖說大一級、用墨色,一條一行 */
 .welcome-look-why { margin: 8px 0 0; padding: 0; list-style: none; font-size: 14px; line-height: 1.7; color: var(--ink); }
@@ -3212,6 +3214,7 @@ h1, h2, h3 {
 .keep-hint button.is-main { background: var(--ink); color: var(--paper); }
 /* 開在 LINE／IG 內建瀏覽器裡:要在加衣服之前看到,所以放在按鈕上面、線條用墨色 */
 .welcome .welcome-tip.is-warning { margin: 18px 0; border-left-color: var(--ink); color: var(--body); }
+.welcome .welcome-tip.is-warning:first-child { margin-top: 0; }
 .welcome-tip-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .welcome-tip-actions a, .welcome-tip-actions button {
   display: inline-flex; align-items: center; padding: 2px 12px; min-height: 36px;
@@ -3221,8 +3224,10 @@ h1, h2, h3 {
 .welcome-tip-status { display: block; margin-top: 6px; font-size: 12px; color: var(--muted); }
 .status .welcome-demo { margin-left: 8px; }
 @media (max-width: 760px) {
-  /* 手機:示範穿搭緊接在標題下面(放到正文後面會掉出第一屏,等於沒放),人台在左、說明在右 */
-  .welcome { grid-template-columns: minmax(0, 1fr); grid-template-areas: "logo" "lede" "start" "look" "copy" "note" "story"; width: auto; margin: 0 18px 40px; }
+  /* 手機:示範穿搭緊接在標題下面,再來才是按鈕(2026-10-24 本人「看起來只是文字排版」:原本第一屏是五塊字,人台到 552 才開始、下半截切掉)。
+     LINE／IG 裡開的照舊先放按鈕那塊:「用瀏覽器開啟」要在第一屏 */
+  .welcome { grid-template-columns: minmax(0, 1fr); grid-template-areas: "logo" "lede" "look" "start" "copy" "note" "story"; width: auto; margin: 0 18px 40px; }
+  .welcome.is-inapp { grid-template-areas: "logo" "lede" "start" "look" "copy" "note" "story"; }
   /* 手機:一章一章疊:編號 → 字 → 影片(寬 220 置中)→ 理由／前後對照;粗線和米紙帶照舊 */
   .welcome-story { margin-top: 48px; }
   .story-step, .story-intro { padding: 56px 0; }
@@ -3241,14 +3246,31 @@ h1, h2, h3 {
   .welcome .story-pair figcaption { margin-top: 4px; }
   .welcome .welcome-logo { margin-bottom: 20px; width: 84px; }
   .welcome .welcome-lede { font-size: 24px; }
-  .welcome-start { margin-top: 20px; }
-  .welcome-look { display: flex; gap: 16px; align-items: center; margin-top: 32px; }
-  .welcome-look .mini-look { width: 128px; flex: none; }
+  .welcome-start { margin-top: 24px; }
+  /* 示範那套是一條橫跨整個螢幕的米紙帶(負邊距吃掉左右 18px),跟下面 02 章同一個底色:第一屏有一塊是「東西」,不全是字 */
+  .welcome-look { display: flex; gap: 18px; align-items: center; margin: 24px -18px 0; padding: 20px 18px; background: var(--band); }
+  .welcome.is-inapp .welcome-look { margin-top: 32px; }
+  .welcome-look .mini-look { width: 136px; flex: none; }
   .welcome-look figcaption { margin: 0; }
   .welcome-copy { margin-top: 36px; }
   .welcome .welcome-tip { margin-top: 16px; }
   .welcome .welcome-note { margin-top: 40px; }
   .keep-hint { margin: 16px 18px 0; }
+}
+/* 矮的手機(iPhone SE:Safari 看得到 375×548):字標和人台縮一號、間距收一點,按鈕才留在第一屏(沒縮時掉到 572)。
+   門檻 680 不是 620:沒縮時按鈕底在 620,門檻設 620 時 621 高的畫面按鈕貼著底邊;mini 那種 635 也留點空(驗收) */
+@media (max-width: 760px) and (max-height: 680px) {
+  .welcome .welcome-logo { width: 60px; margin-bottom: 14px; }
+  .welcome-look { margin-top: 18px; padding-block: 14px; }
+  .welcome-look .mini-look { width: 112px; }
+  .welcome-start { margin-top: 18px; }
+}
+/* 320 寬:24px 時「它照你那邊的天氣配一套，」放不下一行,剩「套，」掉到下一行,標題多一行把按鈕推出第一屏(驗收)。22px 剛好一行 */
+/* 同寬度:冷天理由帶長品名(「駝色斜紋厚棉襯衫式外套」)時米紙帶比人台高,320×568 按鈕掉出 31px(驗收,35 次抽樣)。人台和理由字各縮一號 */
+@media (max-width: 340px) {
+  .welcome .welcome-lede { font-size: 22px; }
+  .welcome-look .mini-look { width: 100px; }
+  .welcome-look-why { font-size: 13px; }
 }
 
 /* 天氣那行開頭的城市:看起來是字(底下一條虛線＋小箭頭),整塊蓋著一個透明的原生選單,點了叫出系統的選單/滾輪 */

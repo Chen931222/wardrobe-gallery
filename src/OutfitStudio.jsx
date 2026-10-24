@@ -88,7 +88,7 @@ function readFits() {
 }
 
 // 斷點要影響「畫什麼」時用(純樣式的照舊放 CSS)。寫法同 LandingRing 的 phone。
-function useMedia(query) {
+export function useMedia(query) {
   const [matches, setMatches] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
