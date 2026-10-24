@@ -46,7 +46,7 @@
   - 加了新衣服還沒備份，會提醒（`src/keepSafe.js`）。
   - 從 LINE、Instagram 開的會先警告：在 app 內建瀏覽器加的衣服，用 Safari 打開會看不到。
 - 站主自己的裝置之間：同步碼（`src/sync.js`）。
-  - 衣服和紀錄在瀏覽器裡先用同步碼推出的金鑰加密（AES-GCM），才上傳到私有的 Vercel Blob。伺服器只看得到密文。
+  - 衣服和紀錄在瀏覽器裡先用同步碼推出的金鑰加密（AES-GCM），才上傳到私有的 Vercel Blob。存下來的是密文和同步碼的雜湊；不過同步碼每次會隨請求送到伺服器，所以不算嚴格的端對端加密。
   - 網站上第一個同步空間開了之後，新的空間只能由手上有有效同步碼的人開。
   - 亂編的同步碼灌不爆額度：真的碼查快取的開通名單；查不到的，每台 function 30 秒最多讀一次最新名單，其餘回「忙」。
 - 刪除先進垃圾桶，可以復原：
@@ -135,7 +135,7 @@ git grep -l "\[本 fork 修改\]"    # 7 個：上游檔案，改動寫在該行
 | `src/AddGarment.jsx`、`src/localWardrobe.js` | 新增、換圖、瀏覽器內去背、IndexedDB |
 | `src/brandLink.js`、`src/price.js` | 貼商品連結：品名、分類、價錢、商品圖 |
 | `src/wishCheck.js` | 想買的：櫃裡很像的、能配出幾套 |
-| `src/sync.js`、`src/SyncPanel.jsx` | 同步碼、端對端加密、三方合併 |
+| `src/sync.js`、`src/SyncPanel.jsx` | 同步碼、上傳前加密、三方合併 |
 | `src/backup.js`、`src/zip.js`、`src/keepSafe.js` | 備份 ZIP、備份提醒、app 內建瀏覽器警告 |
 | `src/lookCard.js`、`src/LookCard.jsx` | Look 卡：在瀏覽器裡把一套穿搭合成一張圖，不上傳 |
 | `src/ownerMode.js` | 站主與訪客看到的不一樣 |

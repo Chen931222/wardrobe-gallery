@@ -34,7 +34,7 @@ export function Feedback({ where = "", className = "" }) {
       track("回報", { 頁: where || "不明" });
     } catch (cause) {
       setState("error");
-      setError(/還沒接上/.test(cause?.message) ? "回報功能還沒接上,先寄到 chenchen931222@gmail.com。" : `送不出去:${cause?.message || cause}`);
+      setError(/還沒接上/.test(cause?.message) ? "回報功能還沒接上,先到 GitHub 的 Issues 留言(隱私說明最下面有連結)。" : `送不出去:${cause?.message || cause}`);
     }
   };
 
