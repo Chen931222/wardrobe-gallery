@@ -166,6 +166,7 @@ h1, h2, h3 {
 .app-shell {
   min-height: 100vh;
   background: var(--paper);
+  overflow-x: clip;   /* 入口章節用 100vw 破出容器,桌機有捲軸時會多 17px;clip 不像 hidden 會讓 sticky 失效(2026-10-24) */
 }
 
 .gallery-pane { min-width: 0; }
@@ -3049,42 +3050,52 @@ h1, h2, h3 {
 .welcome-note { grid-area: note; }
 .welcome-story { grid-area: story; }
 
-/* 往下捲的「怎麼用」三列(2026-10-23):左邊一句大字＋一段小字,右邊手機比例的循環短片,跟上面示範人台同一欄寬。
+/* 往下捲的「怎麼用」(2026-10-24 改成章節):每段一整幅橫跨整頁的帶子(負邊距從置中的容器破出去),底色紙／米紙交替,
+   髮絲線分隔;裡面再放回容器寬度。左邊大標題＋一段字,右邊手機比例的影片,一章左一章右交替。
    捲到才出現:淡入、往上 24px,0.7 秒;減少動態時直接顯示、不動 */
-.welcome-story { display: grid; gap: clamp(64px, 9vh, 104px); margin-top: 96px; padding-top: 64px; border-top: 1px solid var(--line); }
-.story-step {
-  display: grid; grid-template-columns: minmax(0, 32rem) clamp(200px, 20vw, 240px);
+.welcome-story { margin-top: 72px; width: auto; margin-inline: calc(50% - 50vw); }
+.story-step, .story-intro { padding: clamp(72px, 10vh, 120px) 0; border-top: 1px solid var(--line); }
+.story-step:nth-child(even) { background: var(--surface); }
+.story-inner {
+  width: min(960px, 100% - 112px); margin: 0 auto;
+  display: grid; grid-template-columns: minmax(0, 1fr) clamp(240px, 24vw, 300px); grid-template-areas: "text media";
   justify-content: space-between; column-gap: clamp(48px, 7vw, 96px); align-items: center;
 }
+.story-step:nth-child(even) .story-inner { grid-template-columns: clamp(240px, 24vw, 300px) minmax(0, 1fr); grid-template-areas: "media text"; }
+.story-text { grid-area: text; max-width: 30em; }
+.story-media { grid-area: media; }
 .welcome .story-text h3 {
   margin: 0; font-family: var(--font-body); font-weight: 400;
-  font-size: clamp(22px, 2.3vw, 28px); line-height: 1.5; letter-spacing: .03em; color: var(--ink); text-wrap: balance;
+  font-size: clamp(28px, 3.2vw, 40px); line-height: 1.4; letter-spacing: .03em; color: var(--ink); text-wrap: balance;
 }
-.welcome .story-text p { margin-top: 14px; max-width: 27em; }
+.welcome .story-text h3 span { display: block; }
+.welcome .story-text p { margin-top: 20px; max-width: 27em; font-size: 16px; }
 .story-media { aspect-ratio: 720 / 1558; border: 1px solid var(--line); background: var(--surface); overflow: hidden; }
 .story-video { display: block; width: 100%; height: 100%; object-fit: cover; background: var(--surface); }
 /* 點一下暫停／繼續(WCAG 2.2.2):整格是一顆按鈕,看起來還是一格影片;停住時左上角小字「已暫停」 */
 .story-toggle { position: relative; display: block; width: 100%; height: 100%; padding: 0; border: 0; background: none; cursor: pointer; }
 .story-paused { position: absolute; left: 10px; top: 10px; padding: 3px 10px; border-radius: 999px; background: rgba(59, 50, 42, .86); color: var(--paper); font-size: 12px; letter-spacing: .04em; }
-.welcome-story.can-reveal .story-step {
+.welcome-story.can-reveal .story-inner {
   opacity: 0; transform: translateY(24px);
   transition: opacity 700ms cubic-bezier(.22, .8, .22, 1), transform 700ms cubic-bezier(.22, .8, .22, 1);
 }
-.welcome-story.can-reveal .story-step.is-in { opacity: 1; transform: none; }
+.welcome-story.can-reveal .is-in .story-inner { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) {
-  .welcome-story.can-reveal .story-step { opacity: 1; transform: none; transition: none; }
+  .welcome-story.can-reveal .story-inner { opacity: 1; transform: none; transition: none; }
 }
-/* 25 秒介紹:一顆按鈕(封面縮圖＋字),點了換成有聲的播放器 */
-.story-intro { display: flex; justify-content: flex-start; }
+/* 最後一章:墨色底,像雜誌裡一頁深色跨頁。深色主題時 --ink 和 --paper 對調,這一章就變成淺色,一樣是對比的一頁 */
+.story-intro { background: var(--ink); color: var(--paper); border-top: 0; }
+.story-intro .story-inner { grid-template-columns: minmax(0, 1fr) clamp(220px, 22vw, 280px); grid-template-areas: "text media"; }
+.welcome .story-intro h3, .welcome .story-intro p { color: var(--paper); }
+.welcome .story-intro p { opacity: .8; }
 .story-intro-open {
-  display: inline-flex; align-items: center; gap: 20px; padding: 0; border: 0; background: none;
-  font: inherit; color: var(--ink); text-align: left; cursor: pointer;
+  display: inline-flex; align-items: center; min-height: 48px; margin-top: 28px; padding: 0 26px;
+  border: 1px solid var(--paper); background: var(--paper); color: var(--ink);
+  font-family: var(--font-display); font-size: 15px; letter-spacing: .08em; text-transform: uppercase; cursor: pointer;
 }
-.story-intro-open img { width: 96px; aspect-ratio: 9 / 16; object-fit: cover; border: 1px solid var(--line); }
-.story-intro-open span { display: grid; gap: 6px; font-size: 18px; text-decoration: underline; text-underline-offset: 5px; text-decoration-color: var(--line); }
-.story-intro-open small { font-size: 13px; color: var(--muted); text-decoration: none; }
-.story-intro-open:hover span, .story-intro-open:focus-visible span { text-decoration-color: var(--ink); }
-.story-intro-video { width: min(320px, 100%); aspect-ratio: 9 / 16; background: var(--surface); border: 1px solid var(--line); }
+.story-intro-open:hover, .story-intro-open:focus-visible { opacity: .9; }
+.story-media-intro { border-color: rgba(236, 227, 209, .3); background: transparent; }
+.story-media-intro img, .story-intro-video { display: block; width: 100%; height: 100%; object-fit: cover; background: transparent; }
 
 /* 標誌(2026-10-23 design.com 那張):只有線條的 alpha 遮罩,用 mask 上色,深色主題自動跟著 --ink 變。圖是直式 594×710 */
 .logo {
@@ -3164,11 +3175,15 @@ h1, h2, h3 {
 @media (max-width: 760px) {
   /* 手機:示範穿搭緊接在標題下面(放到正文後面會掉出第一屏,等於沒放),人台在左、說明在右 */
   .welcome { grid-template-columns: minmax(0, 1fr); grid-template-areas: "logo" "lede" "start" "look" "copy" "note" "story"; width: auto; margin: 0 18px 40px; }
-  /* 手機:跟上面示範人台一樣,短片在右邊一小欄,字在左邊 */
-  .welcome-story { margin-top: 56px; padding-top: 40px; gap: 48px; }
-  .story-step { grid-template-columns: minmax(0, 1fr) 128px; column-gap: 16px; align-items: start; }
-  .welcome .story-text h3 { font-size: 20px; }
-  .welcome .story-text p { margin-top: 10px; font-size: 14px; line-height: 1.8; }
+  /* 手機:一章一章疊,字在上、影片在下置中(寬 220),底色交替照舊 */
+  .welcome-story { margin-top: 48px; }
+  .story-step, .story-intro { padding: 56px 0; }
+  .story-inner, .story-step:nth-child(even) .story-inner, .story-intro .story-inner {
+    width: auto; margin: 0 18px; grid-template-columns: minmax(0, 1fr); grid-template-areas: "text" "media"; row-gap: 28px;
+  }
+  .story-media { width: 220px; justify-self: center; }
+  .welcome .story-text h3 { font-size: 26px; }
+  .welcome .story-text p { margin-top: 12px; font-size: 15px; line-height: 1.8; }
   .welcome .welcome-logo { margin-bottom: 20px; width: 84px; }
   .welcome .welcome-lede { font-size: 24px; }
   .welcome-start { margin-top: 20px; }

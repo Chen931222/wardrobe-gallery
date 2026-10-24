@@ -158,7 +158,7 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
     const observer = new IntersectionObserver((entries) => {
       for (const entry of entries) if (entry.isIntersecting) { entry.target.classList.add("is-in"); observer.unobserve(entry.target); }
     }, { threshold: 0.25, rootMargin: "0px 0px -8% 0px" });
-    root.querySelectorAll(".story-step").forEach((el) => observer.observe(el));
+    root.querySelectorAll(".story-step, .story-intro").forEach((el) => observer.observe(el));
     return () => observer.disconnect();
   }, []);
   // 25 秒介紹:點了才載入、才播(有聲音;按鈕本身就是使用者的手勢,瀏覽器准有聲自動播)。
@@ -233,8 +233,7 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
       {/* 先講清楚的事:隱私、怎麼用、會錯的地方。放在按鈕和示範後面,想知道的人往下讀 */}
       <div className="welcome-copy">
         <p className="welcome-para">照片不會離開你的手機。去背是手機自己算的，沒有帳號，衣櫃就存在這台瀏覽器裡。</p>
-        {/* 搭配頁講話只用自己的衣服(借來的不算),自己沒有上衣加下身會回「還差下身」 */}
-        <p className="welcome-para">自己有一件上衣、一件下身之後，想換就用講的，<span className="nowrap">「上課，不要外套」</span>這樣。</p>
+        {/* 「用講的換一套」那段拿掉了(2026-10-24):下面第三章講同一件事,連條件「要先有自己的上衣和下身」都寫了,這裡講第二遍 */}
         <p className="welcome-para">會錯的地方先講：衣服是平放的照片，袖子不會垂。分類是猜的，猜錯了點一下改。</p>
         {/* 回報鈕獨立一行(2026-10-22 本人「放個訪客問題回報」):原本夾在下面那排連結裡,看不到 */}
         <p className="welcome-feedback">試了之後哪裡卡住，一句話就好：<Feedback where="歡迎" /></p>
@@ -275,26 +274,38 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
       </p>
 
       <section ref={storyRef} className={reveal ? "welcome-story can-reveal" : "welcome-story"} aria-label="怎麼用">
+        {/* 2026-10-24 本人「像 Apple 一樣有分層」:每段一整幅橫跨整頁的章節,底色紙／米紙交替、標題放大、影片放大左右交替;
+            最後一章墨色底放 25 秒介紹。借的是章節的節奏,不做視差、不發光 */}
         {STEPS.map((step) => (
-          <div key={step.key} className="story-step">
-            <div className="story-text">
-              <h3>{step.title.map((part) => <span key={part} className="nowrap">{part}</span>)}</h3>
-              <p>{step.body}</p>
+          <article key={step.key} className="story-step">
+            <div className="story-inner">
+              <div className="story-text">
+                <h3>{step.title.map((part) => <span key={part} className="nowrap">{part}</span>)}</h3>
+                <p>{step.body}</p>
+              </div>
+              <div className="story-media">
+                <StoryLoop name={step.key} label={`示範畫面：${step.title.join("")}`} />
+              </div>
             </div>
-            <div className="story-media">
-              <StoryLoop name={step.key} label={`示範畫面：${step.title.join("")}`} />
-            </div>
-          </div>
+          </article>
         ))}
         <div className="story-intro">
-          {intro ? (
-            <video ref={introRef} className="story-intro-video" src="/media/intro.mp4" poster="/media/intro.jpg" controls autoPlay playsInline aria-label="PairThis 搭這件 25 秒介紹" />
-          ) : (
-            <button type="button" className="story-intro-open" onClick={() => { setIntro(true); track("看介紹影片", { 頁: "入口" }); }}>
-              <img src="/media/intro.jpg" alt="" loading="lazy" />
-              <span>看 25 秒介紹<small>有聲音，點了才載入，約 1.6 MB</small></span>
-            </button>
-          )}
+          <div className="story-inner">
+            <div className="story-text">
+              <h3><span className="nowrap">25 秒，</span><span className="nowrap">從放進來到配好</span></h3>
+              <p>有聲音，點了才載入，約 1.6 MB。畫面是真的在站上操作錄下來的。</p>
+              {!intro && (
+                <button type="button" className="story-intro-open" onClick={() => { setIntro(true); track("看介紹影片", { 頁: "入口" }); }}>看 25 秒介紹</button>
+              )}
+            </div>
+            <div className="story-media story-media-intro">
+              {intro ? (
+                <video ref={introRef} className="story-intro-video" src="/media/intro.mp4" poster="/media/intro.jpg" controls autoPlay playsInline aria-label="PairThis 搭這件 25 秒介紹" />
+              ) : (
+                <img src="/media/intro.jpg" alt="" loading="lazy" />
+              )}
+            </div>
+          </div>
         </div>
       </section>
     </section>
