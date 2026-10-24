@@ -67,7 +67,7 @@ function MiniLook({ outfit }) {
 // title 拆成幾段,只在段和段之間換行(手機窄欄會斷成「貼／商品連結」「打／一句話」,2026-10-23 截圖)
 // 2026-10-24 本人「下面不知道怎麼區分」:三章各一種版式,不是同一個模子換左右。編號 01–03 是有理由的:三章是有順序的三步
 const STEPS = [
-  { key: "add", no: "01", title: ["網購過的，", "貼商品連結就好"], body: "挑一張商品圖，去背在這台裝置上算。讀不到圖的網站用截圖；沒有連結的，拍一張平放的。" },
+  { key: "add", no: "01", title: ["網購過的，", "貼商品連結就好"], body: "挑一張商品圖就好。讀不到圖的網站用截圖；沒有連結的，拍一張平放的。" },
   { key: "weather", no: "02", title: ["照你那邊的天氣", "配一套，說為什麼"], body: "天氣照你選的城市，從基隆到金門、馬祖都有。第一件進櫃時，缺的先跟示範衣櫃借；配出來的那套會寫理由。" },
   { key: "talk", no: "03", title: ["不喜歡，", "打一句話就換"], body: "要先有自己的上衣和下身；還沒有的話，先在示範衣櫃試。下面是示範衣櫃打一句話前後的兩套。" },
 ];
@@ -139,11 +139,11 @@ function StoryLoop({ name, label }) {
 
 /**
  * @param demoItems 示範衣櫃的那份樣本(沒有就不畫示範穿搭)
- * @param onAdd / onDemo / onSync 三個出口;onImportFile(file) 匯入備份檔
+ * @param onAdd / onDemo 兩個出口;onImportFile(file) 匯入備份檔。同步不放這裡:只給站主,歡迎畫面只有訪客看得到
  *   onDemo(demo):demo = { outfit, daily } 是這頁配好的那套(天氣是假的時 daily 為 null);還沒配好時是 null
  */
 /** @param trashCount 垃圾桶裡有幾件(刪光了回到這裡,還要找得到);onOpenTrash 打開垃圾桶 */
-export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashCount = 0, onOpenTrash = null, onUpdates = null }) {
+export function Welcome({ demoItems, onAdd, onDemo, onImportFile, trashCount = 0, onOpenTrash = null, onUpdates = null }) {
   const fileRef = useRef(null);
   const [weather, setWeather] = useState(null);
   const city = useCity();
@@ -267,32 +267,24 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
           {!!demoItems.length && <button type="button" className="secondary-button" onClick={() => (look ? onDemo(demoPayload()) : setDemoWanted(true))} disabled={demoWanted} aria-busy={demoWanted}>看看穿搭示範</button>}
         </div>
         {ios && !standalone && !app && (
-          // 2026-10-24 縮成兩行(事實不變):手機上它排在示範和按鈕後面,三行時第三行掉出 iPhone 第一屏
+          // 2026-10-24 縮成兩行(事實不變):手機上它排在示範和按鈕後面,三行時第三行掉出 iPhone 第一屏。
+          // 排在「不用註冊」前面:這句要在加衣服之前做,375×548 放後面會被推出第一屏 39px(驗收)
           <p className="welcome-tip">
             iPhone 建議先從分享鈕「加入主畫面」，再從主畫面打開來加。只放在 Safari 久沒開，資料可能被系統清掉。
           </p>
         )}
+        <p className="welcome-free">不用註冊，衣櫃存在這個瀏覽器裡。</p>
       </div>
 
       {!demoFirst && demo}
 
-      {/* 先講清楚的事:隱私、怎麼用、會錯的地方。放在按鈕和示範後面,想知道的人往下讀。
-          2026-10-24 文案(本人「照你的修正版改」):「照片不會離開你的手機」說太滿,開了同步照片會加密上傳;
-          「手機自己算」電腦上的人會卡住。限制照講,只拿掉「會錯的地方先講」那個開頭。
-          同日再改:「要同步到別台時,上傳前會先加密」訪客讀了會以為自己能同步,其實同步只開給站主(SyncPanel 訪客只能輸入碼);
-          改講訪客真的能做的:換手機用備份檔搬 */}
+      {/* 2026-10-24 全站取捨:入口只回答能做什麼、長什麼樣、怎麼開始。原本這裡的四件事各搬回用得到的地方——
+          去背在裝置上算 → 隱私說明;垂墜感、分類會猜錯 → 隱私說明的「使用說明」(分類那句新增表單本來就有);
+          換手機用備份檔 → 隱私說明的「儲存與備份」;回報 → 頁尾。同步不開放給訪客,入口不放它的按鈕 */}
       <div className="welcome-copy">
-        <p className="welcome-para">不用註冊，衣櫃存在這個瀏覽器裡。去背在你的裝置上算。換手機時用備份檔搬，同步還沒開放。</p>
-        {/* 「用講的換一套」那段拿掉了(2026-10-24):下面第三章講同一件事,連條件「要先有自己的上衣和下身」都寫了,這裡講第二遍 */}
-        <p className="welcome-para">穿搭預覽用的是平放的照片，穿起來的垂墜感會不一樣。分類是自動猜的，猜錯點一下就能改。</p>
-        {/* 回報鈕獨立一行(2026-10-22 本人「放個訪客問題回報」):原本夾在下面那排連結裡,看不到 */}
-        <p className="welcome-feedback">卡住的話，一句話就好：<Feedback where="歡迎" /></p>
-        {/* 用過的人的入口:同步、備份、垃圾桶。排在「怎麼用」那段上面(2026-10-24 驗收):換裝置要輸入同步碼、
-            刪光衣服要找垃圾桶的人都從這排進去,放到最底要先捲過三列影片(1280×800 從 y930 掉到 3035)。
-            2026-10-24 第二版(試用者:「這排看起來像頁尾,以為整頁結束了」):拿掉細線、搬進這一欄接在回報那行下面,更新、隱私搬到真正的頁尾(最下面) */}
+        {/* 用過的人的入口:備份、垃圾桶。排在「怎麼用」那段上面(2026-10-24 驗收):刪光衣服要找垃圾桶的人從這裡進去,
+            放到最底要先捲過三列影片 */}
         <p className="welcome-note">
-          在別台同步過了？<button type="button" onClick={onSync}>輸入同步碼</button>
-          <span aria-hidden="true"> · </span>
           有備份檔？<button type="button" onClick={() => fileRef.current?.click()}>匯入備份</button>
           {trashCount > 0 && onOpenTrash && (
             <>
@@ -359,9 +351,9 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
           <div className="story-inner">
             <div className="story-text">
               <h3><span className="nowrap">25 秒，</span><span className="nowrap">從放進來到配好</span></h3>
-              <p>有聲音，點了才載入，約 1.6 MB。畫面是真的在站上操作錄下來的。</p>
+              {/* 載入大小、怎麼錄的不寫(2026-10-24 取捨):要知道的只有「會出聲」 */}
               {!intro && (
-                <button type="button" className="story-intro-open" onClick={() => { setIntro(true); track("看介紹影片", { 頁: "入口" }); }}>看 25 秒介紹</button>
+                <button type="button" className="story-intro-open" onClick={() => { setIntro(true); track("看介紹影片", { 頁: "入口" }); }}>看 25 秒介紹（有聲音）</button>
               )}
             </div>
             <div className="story-media story-media-intro">
@@ -375,14 +367,17 @@ export function Welcome({ demoItems, onAdd, onDemo, onSync, onImportFile, trashC
         </div>
       </section>
 
+      {/* 頁尾:更新、說明、回饋各一個連結,不加前綴問句 */}
       <footer className="welcome-foot">
         {onUpdates && (
           <>
-            最近改了什麼？<button type="button" onClick={onUpdates}>看更新</button>
+            <button type="button" onClick={onUpdates}>更新紀錄</button>
             <span aria-hidden="true"> · </span>
           </>
         )}
         <a href="/privacy.html">隱私與使用說明</a>
+        <span aria-hidden="true"> · </span>
+        <Feedback where="歡迎" label="意見回饋" />
       </footer>
     </section>
   );

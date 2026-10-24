@@ -1372,7 +1372,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
         )}
         {item.wishlist && (
           <div className="viewer-wish">
-            <p>{item.dream ? "在夢幻逸品:很想要、還沒打算買。" : "還沒買。"}不會出現在公開的衣櫃;開了同步的話,你的其他裝置也看得到。</p>
+            <p>{item.dream ? "在夢幻逸品:很想要、還沒打算買。" : "還沒買。"}不會出現在公開的衣櫃{CAN_EDIT ? ";開了同步的話,你的其他裝置也看得到" : ""}。</p>
             <div className="viewer-wish-actions">
               {item.sourceUrl && !productUrlProblem(item.sourceUrl) && (
                 <a className="secondary-button" href={item.sourceUrl} target="_blank" rel="noopener noreferrer">回商品頁</a>
@@ -2027,14 +2027,14 @@ export function App() {
             title={closet === "demo" && CAN_ADD ? "示範衣櫃" : "我的衣櫃"}
             note={closet === "demo" && CAN_ADD ? (
               <>
-                <span className="landing-pitch">把自己的衣服<span className="landing-pitch-more">拍照、或貼 GU、UNIQLO 的連結</span>放進來,每天照台中的天氣配一套。衣櫃只存在你這台,不用帳號。<span className="landing-pitch-more">下面是從站主衣櫃挑出來的幾件,先拿來示範。</span></span>
+                <span className="landing-pitch">把自己的衣服<span className="landing-pitch-more">拍照、或貼 GU、UNIQLO 的連結</span>放進來,每天照天氣配一套。衣櫃只存在你這台,不用帳號。<span className="landing-pitch-more">下面是從站主衣櫃挑出來的幾件,先拿來示範。</span></span>
                 <button type="button" className="landing-make" onClick={() => { chooseCloset("mine"); if (mineCount) setView("closet"); else requestAdd(); }}>
                   {mineCount ? "回我的衣櫃" : "建立我的衣櫃"}
                 </button>
               </>
             ) : null}
             items={ownedItems}
-            onSync={CAN_ADD ? () => setSyncOpen(true) : null}
+            onSync={CAN_EDIT ? () => setSyncOpen(true) : null}   // 同步只給站主(2026-10-24):訪客按了也只能輸入碼,不放出來再用字解釋不能用
             syncAlert={syncAlert}
             onUpdates={() => setUpdatesOpen(true)}
             updatesUnseen={updatesUnseen}
@@ -2194,7 +2194,6 @@ export function App() {
               setView("styling");
               window.scrollTo({ top: 0 });   // 入口往下捲過再按,搭配頁會停在同一個高度,人台上面那句看不到(驗收抓到)
             }}
-            onSync={() => setSyncOpen(true)}
             onUpdates={() => setUpdatesOpen(true)}
             trashCount={trashCount}
             onOpenTrash={() => { setView("closet"); setActiveType("trash"); }}

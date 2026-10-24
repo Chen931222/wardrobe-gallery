@@ -765,7 +765,10 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
                 這件加過了:「{linkDupe.name}」{linkDupe.wishlist ? ",在想買的裡" : ",已經在衣櫃裡"}。還是可以再加一次。
               </small>
             )}
-            {!parsedLink && <small className="add-hint">要拍的話:掛起來拍,或攤平、把皺摺拉開。揉成一團拍,去背出來也是一團。</small>}
+            {/* 打開這頁(open)就開始下載去背模型,所以 80MB 要在這頁講,不是等到去背中才講(2026-10-24 取捨)。
+                原本這裡是拍照前的皺摺提醒:還沒選要拍照就先講,太早;拍完、框衣服那一步有,附「重拍一張」 */}
+            {/* 不寫「已經開始下載」:開了省流量或 2G 時 preloadModel 不先載(cutout.js),驗收抓到 */}
+            {!modelReady() && <small className="add-hint">第一次去背要下載約 80MB 的模型,用行動網路的話建議先連 Wi-Fi。照片在這台裝置上處理,不會上傳。</small>}
             <div className="add-actions">
               <button type="button" className="secondary-button" onClick={() => { setLink(parsedLink?.notProduct ? null : effectiveLink ? { ...effectiveLink, images: [] } : null); inputRef.current?.click(); }}>
                 {parsedLink ? "改用照片" : "沒有連結,拍照或選照片"}
@@ -804,7 +807,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
               {store
                 ? "衣架、旁邊的衣服、你的手框在外面,比出來的顏色才準。"
                 : ownPhoto
-                  ? "皺成一團的話,先拉平或掛起來重拍,去背出來差很多。截圖的話,把狀態列、價格框在外面。"
+                  ? "衣服掛起來或攤平、拉開皺摺再拍,去背會乾淨很多。截圖的話,把狀態列、價格框在外面。"
                   : "截圖的話,把狀態列、價格、按鈕框在外面。模特兒穿著的圖去背後人也會留下,盡量挑平拍那張。"}
               {ownPhoto && <> <button type="button" className="add-text-button" onClick={retake}>重拍一張</button></>}
             </small>
@@ -1110,7 +1113,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
             )}
 
             {draft.wishlist && link?.url && (
-              <small className="add-hint">品牌的照片不會出現在公開的衣櫃;開了同步的話,雲端只存加密過的一份。</small>
+              <small className="add-hint">品牌的照片不會出現在公開的衣櫃。</small>
             )}
 
             {dupes.length > 0 && (

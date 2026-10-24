@@ -1,5 +1,6 @@
 /* 隱私與使用說明頁(2026-10-09):跟網站同一套淺樺木配色,沒有用網站的字型檔(那些是打包過的檔名),退到系統的襯線字
-   2026-10-24:頂上放標誌(跟網站一樣用 /brand/logo.svg 當遮罩)、開頭一段改導言、統計事件改成表格 */
+   2026-10-24:頂上放標誌(跟網站一樣用 /brand/logo.svg 當遮罩)、開頭一段改導言、統計事件改成表格;
+   同日分成四大段(資料與隱私／儲存與備份／使用說明／使用規則)加目錄,授權和重要修訂放頁尾 */
 :root {
   --paper: #ece3d1;
   --ink: #3b322a;
@@ -38,7 +39,16 @@ main { max-width: 640px; margin: 0 auto; padding: 40px 20px 96px; }
 h1 { margin: 0; font-size: 28px; font-weight: 500; letter-spacing: .02em; color: var(--ink); text-wrap: balance; }
 .updated { margin: 6px 0 28px; font-size: 13px; line-height: 1.7; color: var(--muted); }
 .lede { margin: 0 0 8px; font-size: 18px; line-height: 1.75; color: var(--ink); }
-h2 { margin: 40px 0 10px; padding-top: 20px; border-top: 1px solid var(--line); font-size: 17px; font-weight: 500; color: var(--ink); }
+/* 段落目錄:四個大段,一行排得下就一行,窄螢幕兩兩換行 */
+.toc { display: flex; flex-wrap: wrap; gap: 6px 20px; margin: 24px 0 0; padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 15px; }
+.toc a { text-decoration: none; }
+.toc a:hover { text-decoration: underline; }
+section { scroll-margin-top: 16px; }
+/* 大段:粗線分開,字大一級;大段裡的小題(h3)不加線 */
+h2 { margin: 56px 0 4px; padding-top: 20px; border-top: 2px solid var(--ink); font-size: 21px; font-weight: 500; color: var(--ink); }
+h3 { margin: 28px 0 8px; font-size: 16px; font-weight: 600; color: var(--ink); }
+.foot { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 14px; line-height: 1.75; color: var(--muted); }
+.foot b { color: var(--body); }
 p { margin: 0 0 12px; }
 /* 中文段落最後一行常剩一個字(「會。」「除。」):pretty 讓瀏覽器重排,不支援的照舊 */
 p, li, td { text-wrap: pretty; }

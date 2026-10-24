@@ -5,8 +5,9 @@ import { createPortal } from "react-dom";
 import { useDialog } from "./useDialog.js";
 import { track } from "./analytics.js";
 
-/** @param where 在哪一頁(入口、衣櫃、搭配),跟著送出,方便對照是哪一步卡住 */
-export function Feedback({ where = "", className = "" }) {
+/** @param where 在哪一頁(入口、衣櫃、搭配),跟著送出,方便對照是哪一步卡住
+ *  @param label 按鈕上的字;歡迎畫面頁尾用「意見回饋」,其他頁照舊 */
+export function Feedback({ where = "", className = "", label = "哪裡卡住了？告訴我" }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [contact, setContact] = useState("");
@@ -41,7 +42,7 @@ export function Feedback({ where = "", className = "" }) {
   return (
     <>
       <button type="button" className={`feedback-button ${className}`.trim()} onClick={() => { setOpen(true); if (state === "sent") setState("idle"); }}>
-        哪裡卡住了？告訴我
+        {label}
       </button>
       {/* 視窗掛到 body:這顆鈕會放在 <p>(歡迎畫面的 note 行)裡,<div> 不能是 <p> 的子元素 */}
       {open && createPortal(

@@ -1477,7 +1477,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
             </form>
           )}
           {backupMsg && <p className="studio-backup-msg" role="status">{backupMsg}</p>}
-          <p className="studio-backup-note">備份是一個 ZIP,存在你自己手上、不經過雲端:解開有每件自己加的衣服的去背圖(PNG),和穿著紀錄、收藏、微調。換裝置或清資料前先「匯出」,到新裝置「匯入」這個 ZIP。同步碼不會寫進備份檔。</p>
+          <p className="studio-backup-note">備份是一個 ZIP,存在你自己手上、不經過雲端:解開有每件自己加的衣服的去背圖(PNG),和穿著紀錄、收藏、微調。換裝置或清資料前先「匯出」,到新裝置「匯入」這個 ZIP。{syncCode() ? "同步碼不會寫進備份檔。" : ""}</p>
         </div>
       </div>
 

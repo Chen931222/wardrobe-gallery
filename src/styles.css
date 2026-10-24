@@ -3192,9 +3192,8 @@ h1, h2, h3 {
 /* 按鈕緊貼標題(36px),先講清楚的事跟它拉開(56px):按鈕跟標題那句是一組,說明是另一組。
    標題下那三句 2026-10-24 拿掉(01、02 章講同一件事),按鈕直接接在標題後面 */
 .welcome-start { margin-top: 36px; max-width: 27em; }
-.welcome-copy { margin-top: 56px; max-width: 27em; }   /* 正文比標題窄:15px 一行 27 字,最後一行不會只剩兩三個字 */
+.welcome-copy { margin-top: 20px; max-width: 27em; }   /* 2026-10-24 說明段落搬走後只剩「匯入備份、垃圾桶」一行小字,跟「不用註冊」那行同一組,不再拉開 56px */
 .welcome p { margin: 0; font-size: 15px; line-height: 1.9; color: var(--body); text-wrap: pretty; }   /* pretty:最後一行不要只剩一個字 */
-.welcome .welcome-para + .welcome-para { margin-top: 12px; }
 .welcome-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .welcome-tip + .welcome-actions { margin-top: 18px; }   /* LINE／IG 那段警告在按鈕上面時 */
 .welcome-actions button { min-height: 48px; padding: 0 26px; font-size: 15px; }
@@ -3203,17 +3202,18 @@ h1, h2, h3 {
 @media (max-width: 380px) {
   .welcome-actions button { padding: 0 14px; }
 }
-.welcome .welcome-feedback { margin-top: 18px; font-size: 13px; color: var(--muted); }
-.welcome-feedback .feedback-button { margin-left: 4px; }
+/* 按鈕下一行小字(2026-10-24 取捨):入口只留「不用註冊」這件跟開始有關的事,其他說明搬去隱私說明 */
+.welcome .welcome-free { margin-top: 14px; font-size: 13px; color: var(--muted); }
 .welcome .welcome-tip { margin-top: 20px; padding-left: 12px; border-left: 1px solid var(--line); font-size: 13px; color: var(--muted); }
-/* 用過的人的入口(同步、備份、垃圾桶):在說明那一欄,接在回報那行下面;不畫細線,不然像頁尾,訪客以為整頁結束了
-   (2026-10-24 試用者)。頁尾在最下面 .welcome-foot */
+/* 用過的人的入口(備份、垃圾桶):不畫細線,不然像頁尾,訪客以為整頁結束了(2026-10-24 試用者)。頁尾在最下面 .welcome-foot,
+   更新紀錄、隱私說明、意見回饋三個連結 */
 .welcome .welcome-note { margin: 4px 0 0; font-size: 13px; line-height: 2; color: var(--muted); }
 .welcome .welcome-foot { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 13px; line-height: 2; color: var(--muted); }
 .welcome-note button, .welcome-foot button {
   margin-left: 6px; padding: 0; border: 0; background: none;
   color: var(--ink); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
 }
+.welcome .welcome-foot button { margin-left: 0; }   /* 頁尾的按鈕不接在問句後面,不用左邊那 6px */
 .welcome-look { margin: 8px 0 0; }
 .mini-look {
   position: relative;
@@ -3292,7 +3292,7 @@ h1, h2, h3 {
   .welcome.is-inapp .welcome-look { margin-top: 32px; }
   .welcome-look .mini-look { width: 136px; flex: none; }
   .welcome-look figcaption { margin: 0; }
-  .welcome-copy { margin-top: 36px; }
+  .welcome-copy { margin-top: 16px; }
   .welcome .welcome-tip { margin-top: 16px; }
   .welcome .welcome-foot { margin-top: 36px; }
   .keep-hint { margin: 16px 18px 0; }
