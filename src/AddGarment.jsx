@@ -1,13 +1,14 @@
 // [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, SpinnerGap, Storefront, X } from "@phosphor-icons/react";
+import { Eraser, Plus, SpinnerGap, Storefront, X } from "@phosphor-icons/react";
 import { cropBlob, deleteLocalItem, findUrl, garmentColors, guessPart, productUrlProblem, refillGaps, saveLocalItem, shrinkImage, trimTransparent } from "./localWardrobe.js";
 import { PART_GROUPS, PART_ORDER, PARTS } from "./parts.js";
 import { fetchBrandProduct, fetchProductPage, parseBrandLink, partFromName, partFromProduct, sameProduct } from "./brandLink.js";
 import { findSameStyle, findSimilar, fitChoices, kindChoices, kindLabel } from "./wishCheck.js";
 import { useDialog } from "./useDialog.js";
 import { ScrollRail } from "./ScrollRail.jsx";
-import { fixCutout, modelReady, preloadModel, preloadsEarly, removeBg } from "./cutout.js";
+import { abandonCutout, fixCutout, modelReady, preloadModel, preloadsEarly, removeBg } from "./cutout.js";
+import { CutoutEraser } from "./CutoutEraser.jsx";
 import { CURRENCIES, parsePrice } from "./price.js";
 import { brandInUrl, brandOf, brandSuggestions, canonicalBrand } from "./brands.js";
 import { track } from "./analytics.js";
@@ -21,7 +22,7 @@ const FULL = { x: 0, y: 0, w: 1, h: 1 };
 /* 在照片上拖一個框。座標存成 0–1,和照片實際解析度無關。
    手指點下去常常會動 1–3px,舊版一動就把框重畫成一個點,按鈕變灰也不說原因(審查 F32):移動不到 8px 不算拖。 */
 const DRAG_THRESHOLD = 8;
-function CropBox({ src, box, onChange }) {
+function CropBox({ src, box, onChange, hint = "" }) {
   const frameRef = useRef(null);
   const startRef = useRef(null);
 
@@ -70,6 +71,8 @@ function CropBox({ src, box, onChange }) {
           className="crop-rect"
           style={{ left: `${box.x * 100}%`, top: `${box.y * 100}%`, width: `${box.w * 100}%`, height: `${box.h * 100}%` }}
         />
+        {/* 還沒框之前,照片中間一個虛線框寫怎麼框(2026-10-25 新訪客實測:看不出照片可以拖);一拖就不見 */}
+        {hint && box.w >= 1 && box.h >= 1 && <span className="crop-hint" aria-hidden="true">{hint}</span>}
       </div>
     </div>
   );
@@ -257,6 +260,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     setLink(null);
     setReplacing(null);
     setStore(false);
+    setErasing(false);   // 擦到一半關掉:下一件去背好不能直接跳進擦除(驗收抓到)
     retakeRef.current = false;
   };
   const reset = () => {
@@ -441,6 +445,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
       watchdogRef.current = setTimeout(() => {
         if (!alive()) return;
         runRef.current += 1;
+        abandonCutout();   // 卡住的那次整個停掉,「再試一次」才會馬上重來,不用等它自己逾時
         fail("去背模型下載停住了。檢查網路後按「再試一次」。");
       }, 60000);
     };
@@ -549,6 +554,38 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
       <small className="add-hint">
         {draft.filled ? "包包背帶、手把圈起來的空隙也一起補上了;不對就還原。" : "衣服跟背景都很白時用。包包背帶圈起來的空隙也會被補上,看預覽決定。"}
       </small>
+    </div>
+  );
+
+  /* 擦掉多餘的(2026-10-25 新訪客實測:自己拍的衣服去背後衣架、床單還在,以前只能重拍)。
+     在 CutoutEraser 用手指塗掉,塗到的變透明;回來重裁透明邊、重抓顏色(床單擦掉,副色才不會是床單的白)。
+     擦過的圖不是模型那份了:「補滿」是拿模型的結果重做後半段,會把擦掉的補回來,所以擦過就收掉補滿(cutRef 清掉) */
+  const [erasing, setErasing] = useState(false);
+  const applyErase = async (erased) => {
+    const run = runRef.current;
+    try {
+      const blob = await shrinkImage((await trimTransparent(erased)).blob);
+      const colors = await garmentColors(blob);
+      if (run !== runRef.current) return;
+      cutRef.current = null;
+      setDraft((current) => {
+        if (!current) return current;
+        if (current.preview) URL.revokeObjectURL(current.preview);
+        return { ...current, blob, preview: URL.createObjectURL(blob), ...colors, filled: false };
+      });
+    } catch (cause) {
+      console.error(cause);
+      if (run === runRef.current) setError(`沒有擦成功:${cause?.message || cause}`);
+    } finally {
+      setErasing(false);
+    }
+  };
+  const eraseButton = () => draft?.blob && !draft.pending && (
+    <div className="add-fill add-erase">
+      <button type="button" className="add-fill-button" onClick={() => { setError(""); setErasing(true); }} disabled={refilling}>
+        <Eraser size={15} aria-hidden="true" /> 還留著衣架、床單或手?擦掉
+      </button>
+      <small className="add-hint">用手指塗過去,塗到的地方會變透明。{fillToggle() ? "要「補滿」先補,擦過就不能補了。" : ""}</small>
     </div>
   );
 
@@ -829,7 +866,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
                     : "截圖的話,把狀態列、價格、按鈕框在外面。模特兒穿著的圖去背後人也會留下,盡量挑平拍那張。"}
               {ownPhoto && <> <button type="button" className="add-text-button" onClick={retake}>重拍一張</button></>}
             </small>
-            <CropBox src={source.url} box={box} onChange={setBox} />
+            <CropBox src={source.url} box={box} onChange={setBox} hint={brandPick ? "要框的話,在照片上拖出一個框" : "在照片上拖出一個框"} />
             {box !== FULL && tooSmall && <small className="add-field-error" role="status">框太小了,重新拖一個。</small>}
             <div className="add-actions">
               {brandPick ? (
@@ -1015,6 +1052,9 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
         <div className="add-overlay" role="dialog" aria-modal="true" aria-label="確認新增的衣物" ref={dialogRef}>
           <div className="add-panel add-panel-review">
             {closeButton()}
+            {erasing && draft.blob ? (
+              <CutoutEraser src={draft.preview} onDone={applyErase} onCancel={() => setErasing(false)} />
+            ) : (<>
             <div className={draft.blob ? "add-preview-wrap" : "add-preview-wrap is-pending"}>
               <img className="add-preview" src={draft.preview} alt={draft.blob ? "去背結果預覽" : "框起來的照片,還沒去背"} />
               {draft.pending && (
@@ -1024,6 +1064,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
               )}
             </div>
             {fillToggle()}
+            {eraseButton()}
             {ownPhoto && draft.blob && (
               <small className="add-hint add-retake">
                 看起來皺皺的?掛起來或拉平再拍一張,名稱和分類會留著。{" "}
@@ -1170,12 +1211,14 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
               </div>
             )}
 
-            <div className="add-actions">
+            {/* 釘在視窗底(2026-10-25 新訪客實測:表單比手機一屏長,「加入衣櫃」要捲到底才看得到) */}
+            <div className="add-actions add-actions-sticky">
               <button type="button" className="secondary-button" onClick={requestClose}>取消</button>
               <button type="button" className="primary-button" onClick={() => save()} disabled={urlInvalid || !draft.blob}>
                 {!draft.blob ? "去背好就能存" : dupes.length ? "還是要存" : draft.wishlist ? (draft.dream ? "放進夢幻逸品" : "放進想買的") : "加入衣櫃"}
               </button>
             </div>
+            </>)}
           </div>
         </div>
       )}

@@ -119,6 +119,21 @@ function inWorker(type, payload = {}) {
   });
 }
 
+/** 下載停住、看門狗把去背停掉之後叫(AddGarment):把 Worker 整個砍掉,正在等它的工作全部回「停住了」。
+ *  不砍的話,那個卡住的分段 fetch 還掛在 Worker 裡,去背一次只算一張(previousRun),再按「再試一次」就卡在
+ *  「上一張還在算,等它結束…」直到那段自己逾時(2026-10-25 驗收)。下一次會開新的 Worker、重新初始化;
+ *  已經下載完的分段在瀏覽器快取裡,不用重抓。主執行緒算的那條退路停不下來,照舊只能等。 */
+export function abandonCutout() {
+  modelAttempt += 1;
+  resetModelMeter();
+  if (!worker) return;
+  const waiting = [...jobs.values()];
+  jobs.clear();
+  worker.terminate();
+  worker = null;
+  for (const job of waiting) job.reject(new Error("去背模型下載停住,這次停掉了"));
+}
+
 /** 這台會不會先載(省流量、2G 不先載)。新增視窗的提示照這個講「打開就開始下載」還是「去背時才下載」 */
 export function preloadsEarly() {
   const connection = typeof navigator !== "undefined" ? navigator.connection : null;

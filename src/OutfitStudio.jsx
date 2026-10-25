@@ -3,7 +3,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useIndexIndicator } from "./useIndexIndicator.js";
 import { ArrowCounterClockwise, ArrowsClockwise, CalendarCheck, Export, FloppyDisk, ImageSquare, Lock, LockOpen, MagnifyingGlass, Microphone, Sparkle, Trash, X } from "@phosphor-icons/react";
 import { CitySelect } from "./CitySelect.jsx";
-import { adjustIntent, fetchWeather, findItemForSwap, parseRequest, randomOutfit, readWearLog, recommendOutfitWithBorrow, recordWear, unrecordWear } from "./recommend.js";
+import { adjustIntent, borrowables, fetchWeather, findItemForSwap, parseRequest, randomOutfitWithBorrow, readWearLog, recommendOutfitWithBorrow, recordWear, unrecordWear } from "./recommend.js";
 import { syncCode } from "./sync.js";
 import { track } from "./analytics.js";
 import { downloadBackupZip, importBackupFile } from "./backup.js";
@@ -570,14 +570,26 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     });
   };
 
-  // 隨機一套:有天氣(推薦過一次、或背景抓到了)就避開跟今天差太多的;還沒抓到不等,完全隨機(審查 F27)
+  // 隨機一套:有天氣(推薦過一次、或背景抓到了)就避開跟今天差太多的;還沒抓到不等,完全隨機(審查 F27)。
+  // 自己的衣服不夠一套時跟推薦一樣借示範衣櫃的(2026-10-25 驗收:只有一件裙子時按隨機,人台只剩裙子)
   const randomize = () => {
-    const next = toStudio(randomOutfit(items, weatherRef.current));
+    const { outfit, borrowed } = randomOutfitWithBorrow(items, borrowPool, weatherRef.current);
+    const next = toStudio(outfit);
     setAdjusting(null);
     pushHistory(wearing); dirtyRef.current = true;
     setWearing(next);
-    setDaily(null);
+    setDaily(borrowed ? { understood: "隨機一套", reasons: [`這套有 ${borrowed} 件是借示範衣櫃的;再加幾件自己的,就能整套都用自己的。`] } : null);
   };
+
+  // 換單品(「換成黑色襯衫」):自己櫃裡沒有這一類才借示範衣櫃的,跟推薦整套同一條規則(2026-10-25 驗收:只有一件裙子時說換成黑色襯衫,回「櫃裡沒有上衣這一類」)
+  const findSwap = (spec, wearLog, excludeId = null) => {
+    const own = findItemForSwap(items, spec, wearLog, excludeId);
+    if (own) return own;
+    const extra = borrowables(items, borrowPool);
+    const lent = extra.length ? findItemForSwap(extra, spec, wearLog, excludeId) : null;
+    return lent ? { ...lent, item: { ...lent.item, borrowed: true }, lent: true } : null;
+  };
+  const lentNote = (found) => (found.lent ? [`「${found.item.name}」是借示範衣櫃的,你的衣櫃還沒有這一類。`] : []);
 
   /* ---------- 今日推薦(天氣 + 規則引擎)與穿著紀錄 ---------- */
   const [daily, setDaily] = useState(() => (initialOutfit ? initialDaily : null));   // { weather, reasons } | { error }
@@ -656,7 +668,9 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     return () => window.removeEventListener("wardrobe-synced", onSynced);
   }, []);
   const today = new Date().toLocaleDateString("sv");
-  const recorded = wornItems.length > 0 && wornItems.every((item) => wornDates[item.id] === today);
+  // 借示範衣櫃的不進穿著紀錄(2026-10-25):不是自己的衣服,記了只會讓示範衣櫃的 id 混進洗衣籃。「已記錄」也只看自己那幾件
+  const ownWorn = wornItems.filter((item) => !item.borrowed);
+  const recorded = ownWorn.length > 0 && ownWorn.every((item) => wornDates[item.id] === today);
   const weatherRef = useRef(null);               // 快取,同一次瀏覽不重抓
   // 背景先抓一次天氣:「隨機一套」要用,但不擋畫面;抓不到就算了,隨機照舊
   useEffect(() => {
@@ -706,13 +720,13 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
         result.reasons.push(`「${unknownRaw}」我還沒學過,這套是純照天氣挑的;想更準可以說場合(約會、上班、看球賽)、色系(全黑、大地色)或「換成黑色襯衫」`);
       }
       if (pin) {
-        const found = findItemForSwap(items, pin, wearLog, null);
+        const found = findSwap(pin, wearLog);
         if (found) {
           result.outfit[found.item.part] = found.item;   // 放進它自己的格子(見上面換單品)
           const asked = askedLabel(pin, SLOT_LABEL[pin.slot]);
           result.reasons.push(found.exact
             ? `照你指定換上「${found.item.name}」`
-            : `你指定的${asked}櫃裡沒有,先用最接近的「${found.item.name}」`);
+            : `你指定的${asked}櫃裡沒有,先用最接近的「${found.item.name}」`, ...lentNote(found));
         }
       }
       lastIntentRef.current = intent;
@@ -846,15 +860,15 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     if (req.kind === "swap") {
       const vague = !req.color && !req.category && !(req.descriptors || []).length && !req.byText;   // 「換一件上衣」→ 要跟身上那件不一樣
       // 「褲子不好看」:記下這件配身上其他幾件不好,之後推薦少推這個組合(taste.js)
-      if (req.disliked && wearing[req.slot]) {
-        noteDislike(wearing[req.slot].id, Object.entries(wearing).filter(([key, item]) => key !== req.slot && item).map(([, item]) => item.id));
+      if (req.disliked && wearing[req.slot] && !wearing[req.slot].borrowed) {   // 借來的不記口味(taste.js)
+        noteDislike(wearing[req.slot].id, Object.entries(wearing).filter(([key, item]) => key !== req.slot && item && !item.borrowed).map(([, item]) => item.id));
       }
       // 只說「換一件上衣」「褲子不好看」:不是隨便抓一件,而是其他幾件都不動、配著它們和天氣挑最搭的那一件
       if (vague && ["upperbody", "lowerbody", "shoes", "bag"].includes(req.slot) && wearing.upperbody && wearing.lowerbody) {
         swapToMatch(req.slot);
         return;
       }
-      const found = findItemForSwap(items, req, readWearLog(), vague && req.slot ? (wearing[req.slot]?.id || null) : null);
+      const found = findSwap(req, readWearLog(), vague && req.slot ? (wearing[req.slot]?.id || null) : null);
       // 「穿哈利波特那件」這種點名:品名、標籤裡找不到那幾個字,就當成沒學過的詞,不亂換一件
       if (req.byText && !found?.textHit) { runRecommend(null, null, req.raw); return; }
       const askedSlotLabel = SLOT_LABEL[req.slot] || "這件";
@@ -868,7 +882,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       setWearing((current) => ({ ...current, [slot]: found.item }));
       setDaily({
         understood: `換${label}${vague ? "" : `:${req.byText ? req.phrase : asked}`}`,
-        reasons: [found.exact ? `換上「${found.item.name}」` : `櫃裡沒有${asked},最接近的是「${found.item.name}」,先換上這件`],
+        reasons: [found.exact ? `換上「${found.item.name}」` : `櫃裡沒有${asked},最接近的是「${found.item.name}」,先換上這件`, ...lentNote(found)],
       });
       return;
     }
@@ -990,10 +1004,10 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
 
   // 按了「今天穿這套」可以取消(審查 F29):記之前每件的日期留著,取消時換回去。只留到換一套或離開這頁
   const [wearUndo, setWearUndo] = useState(null);   // { ids: "a|b|c", before: { id: 日期|null }, note: taste 那筆的 id }
-  const wornKey = wornItems.map((item) => item.id).sort().join("|");
+  const wornKey = ownWorn.map((item) => item.id).sort().join("|");
   const canUndoWear = Boolean(wearUndo && wearUndo.ids === wornKey);
   const wearToday = () => {
-    if (!wornItems.length) return;
+    if (!ownWorn.length) return;
     if (recorded && canUndoWear) {   // 過了午夜、或別台改過日期,就不是「剛記的那一下」,照常記
       setWornDates(unrecordWear(wearUndo.before));
       unnoteWear(wearUndo.note);
@@ -1002,7 +1016,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       return;
     }
     const note = noteWear(wearing);   // 先記「照不照推薦穿」:recordWear 會通知同步,兩份一起推
-    const { log, before } = recordWear(wornItems);
+    const { log, before } = recordWear(ownWorn);
     setWornDates(log);
     setWearUndo({ ids: wornKey, before, note });
     setStats(recoStats());
@@ -1101,8 +1115,9 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       type="button"
       className={`studio-wear-today${recorded ? " done" : ""}`}
       onClick={wearToday}
-      disabled={!wornItems.length || (recorded && !canUndoWear)}
+      disabled={!ownWorn.length || (recorded && !canUndoWear)}
       aria-label={recorded && canUndoWear ? "已記錄今天穿這套;按一下取消" : undefined}
+      title={wornItems.length && !ownWorn.length ? "身上都是借示範衣櫃的,沒有自己的衣服可以記" : undefined}
     >
       <CalendarCheck size={15} weight="regular" aria-hidden="true" />{" "}
       {!recorded ? "今天穿這套" : canUndoWear ? (phone ? "已記錄 · 取消" : "已記錄,近幾天不再推薦 · 取消") : (phone ? "已記錄" : "已記錄,近幾天不再推薦")}
