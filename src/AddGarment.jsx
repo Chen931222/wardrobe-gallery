@@ -171,7 +171,7 @@ function cutoutErrorText(cause) {
     return `這張圖對手機來說太大,記憶體不夠。框小一點、或關掉其他分頁再試。(${raw.slice(0, 80)})`;
   }
   if (/load failed|failed to fetch|networkerror|network|fetch|timeout|aborterror/i.test(raw)) {
-    return `去背模型沒下載完(約 80MB,手機訊號弱時常斷掉)。連上 Wi-Fi 再按一次。(${raw.slice(0, 80)})`;
+    return `去背模型沒下載完(約 100MB,手機訊號弱時常斷掉)。連上 Wi-Fi 再按一次。(${raw.slice(0, 80)})`;
   }
   return `去背失敗,再按一次試試;還是不行就換一張。(${raw.slice(0, 80) || "沒有錯誤訊息"})`;
 }
@@ -420,7 +420,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     preloadModel();
   };
 
-  /* 去背:先把表單打開,去背在背景算(2026-10-05)。第一次要下載約 80MB 的模型,4G 上要等好一陣子,
+  /* 去背:先把表單打開,去背在背景算(2026-10-05)。第一次要下載約 100MB 的模型,4G 上要等好一陣子,
      舊版這段只有一個轉圈,等完才開始填名稱、分類;現在等的同時就能填,去背好了預覽換成去背圖、存檔鈕才亮。
      失敗了表單和填好的字都留著,可以「再試一次」或回去重新框。 */
   const cutout = async (region) => {
@@ -714,8 +714,8 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
               {modelReady()
                 ? "照片在這台裝置上處理,不會上傳。"
                 : preloadsEarly()
-                  ? "第一次要下載約 80MB 的去背模型,打開這一頁就開始下載了;建議先在家用 Wi-Fi 打開這一頁一次。照片在這台裝置上處理,不會上傳。"
-                  : "第一次要下載約 80MB 的去背模型,去背時才開始下載;建議先在家用 Wi-Fi 試一次。照片在這台裝置上處理,不會上傳。"}
+                  ? "第一次要下載約 100MB 的去背模型,打開這一頁就開始下載了;建議先在家用 Wi-Fi 打開這一頁一次。照片在這台裝置上處理,不會上傳。"
+                  : "第一次要下載約 100MB 的去背模型,去背時才開始下載;建議先在家用 Wi-Fi 試一次。照片在這台裝置上處理,不會上傳。"}
             </small>
             <div className="add-actions">
               <button type="button" className="secondary-button" onClick={() => inputRef.current?.click()}>從相簿選</button>
@@ -771,15 +771,15 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
                 這件加過了:「{linkDupe.name}」{linkDupe.wishlist ? ",在想買的裡" : ",已經在衣櫃裡"}。還是可以再加一次。
               </small>
             )}
-            {/* 打開這頁(open)就開始下載去背模型,所以 80MB 要在這頁講,不是等到去背中才講(2026-10-24 取捨)。
+            {/* 打開這頁(open)就開始下載去背模型,所以 100MB 要在這頁講,不是等到去背中才講(2026-10-24 取捨)。
                 原本這裡是拍照前的皺摺提醒:還沒選要拍照就先講,太早;拍完、框衣服那一步有,附「重拍一張」 */}
             {/* 照實講什麼時候開始下載:一般是打開這頁就先載(2026-10-05 本人要的,選照片、框衣服時就載完);
                 開了省流量或 2G 不先載(cutout.js 的 preloadsEarly),去背時才下載 */}
             {!modelReady() && (
               <small className="add-hint">
                 {preloadsEarly()
-                  ? "第一次去背要下載約 80MB 的模型,打開這一頁就開始下載了。"
-                  : "第一次去背要下載約 80MB 的模型,去背時才開始下載;用行動網路的話,建議連上 Wi-Fi 再選照片。"}
+                  ? "第一次去背要下載約 100MB 的模型,打開這一頁就開始下載了。"
+                  : "第一次去背要下載約 100MB 的模型,去背時才開始下載;用行動網路的話,建議連上 Wi-Fi 再選照片。"}
                 照片在這台裝置上處理,不會上傳。
               </small>
             )}
@@ -856,7 +856,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
             <SpinnerGap size={30} className="add-spinner" aria-hidden="true" />
             <p role="status" aria-live="polite">{status}</p>
             <small>
-              {modelReady() ? "" : "第一次使用要下載約 80MB 的去背模型,之後會快很多。"}
+              {modelReady() ? "" : "第一次使用要下載約 100MB 的去背模型,之後會快很多。"}
               照片在這台裝置上處理,不會上傳。
             </small>
             <button type="button" className="secondary-button add-cancel" onClick={cancelWork}>取消</button>
@@ -1032,7 +1032,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
             )}
             {draft.pending && (
               <small className="add-hint">
-                {modelReady() ? "去背中,趁這段時間先填名稱和分類。" : "第一次要下載約 80MB 的去背模型,趁這段時間先填名稱和分類。"}
+                {modelReady() ? "去背中,趁這段時間先填名稱和分類。" : "第一次要下載約 100MB 的去背模型,趁這段時間先填名稱和分類。"}
                 照片在這台裝置上處理,不會上傳。
               </small>
             )}

@@ -7,8 +7,11 @@
  * 現在整個去背在自己的 Worker(cutoutWorker.js)裡算,主執行緒只收進度和結果。
  * 舊 Safari 開不了 module Worker、或 Worker 裡沒有 OffscreenCanvas 2D(Safari 16.4 以前)的,照舊在主執行緒算。 */
 
-/* 去背模型有 80MB 左右,第一次用會下載。動態 import / Worker 讓它不進主 bundle,
+/* 去背第一次要下載約 100MB(模型 isnet_fp16 88MB＋運算程式 12MB;staticimgly.com 的 resources.json,2026-10-25。沒設 device,套件預設 cpu,不抓 WebGPU 版)。
+   動態 import / Worker 讓它不進主 bundle,
    沒按「新增」的人完全不會付這個成本。 */
+import { meterModelDownload, resetModelMeter } from "./cutoutDownload.js";
+
 const MODEL_READY_KEY = "open-wardrobe-bgmodel-v1";   // 這台成功去背過一次 = 模型已經在瀏覽器快取裡
 export const modelReady = () => { try { return localStorage.getItem(MODEL_READY_KEY) === "1"; } catch { return false; } };
 
@@ -17,22 +20,47 @@ export const modelReady = () => { try { return localStorage.getItem(MODEL_READY_
    所以回呼固定一個,真正要通知誰放在 currentProgress。Worker 那邊也是固定一個,進度用訊息傳回來再交給這裡。 */
 let currentProgress = null;
 let downloading = false;
+let metered = false;   // 收到過實際位元組的進度(cutoutDownload.js):套件自己那個整段才跳的百分比就不用了
+const mb = (bytes) => Math.round(bytes / 1e6);
+// 字一秒最多換一次(進度每 250ms 來一筆;狀態行是 aria-live,一直換讀屏會一直念,驗收);中間那幾筆照樣讓看門狗重新計時
+let shownText = "";
+let shownAt = 0;
 const onModelProgress = (key, current, total) => {
+  if (key === "download") {
+    metered = true;
+    if (!currentProgress || !total) return;
+    downloading = true;
+    if (current >= total) {
+      // 到齊了、還沒開始算(手機要等運算環境建好):先講下一步,看門狗也停(第二個參數 false)
+      currentProgress("模型下載好了,準備去背…", false);
+      return;
+    }
+    // 「已經下載過」的記號不可靠:Safari 會把這麼大的快取清掉,隔天又要重抓。下載中就講明下載了多少、建議 Wi-Fi
+    const now = Date.now();
+    if (!shownText || now - shownAt >= 1000) {
+      shownText = `下載去背模型 ${Math.floor((current / total) * 100)}%(${mb(current)} / ${mb(total)} MB,建議用 Wi-\u2060Fi)`;   // \u2060 接在「Wi-」後面:「Wi-」「Fi」不要拆成兩行(手機截圖)
+      shownAt = now;
+    }
+    currentProgress(shownText, true);
+    return;
+  }
   if (!currentProgress) return;
   if (key === "retry") {   // 對比太低,拉開再算一次(cutoutFix.js 的 retryLowContrast)
     currentProgress("衣服跟背景太像,拉高對比再算一次…", false);
     return;
   }
-  if (key.startsWith("fetch") && current < total) {
-    downloading = true;
-    // 「已經下載過」的記號不可靠:Safari 會把這麼大的快取清掉,隔天又要重抓。下載中就講明多大、建議 Wi-Fi
-    currentProgress(`下載去背模型 ${Math.round((current / total) * 100)}%(約 80MB,建議用 Wi-Fi)`, true);
-  } else if (key.startsWith("fetch")) {
-    // 下載到 100% 之後要算 7–9 秒,先講清楚接下來在做什麼(審查 F33)
-    currentProgress(downloading ? "模型下載好了,開始去背,約 10–20 秒…" : "去背中,約 10–20 秒…", false);
-  } else {
-    currentProgress("去背中,約 10–20 秒…", false);
+  if (key.startsWith("fetch")) {
+    if (metered) return;
+    // 退路(包不了 fetch 的瀏覽器):照套件的進度,一份資源的分段到齊一段跳一次
+    if (current < total) {
+      downloading = true;
+      currentProgress(`下載去背模型 ${Math.round((current / total) * 100)}%(約 100MB,建議用 Wi-Fi)`, true);
+    }
+    return;
   }
+  // 開始算了(compute:decode → inference → mask → encode 會連著來好幾次)。下載完之後要算 7–9 秒,先講清楚接下來在做什麼(審查 F33);
+  // downloading 在 removeBg 開頭歸零,下一件不會再說「下載好了」
+  currentProgress(downloading ? "模型下載好了,開始去背,約 10–20 秒…" : "去背中,約 10–20 秒…", false);
 };
 
 /* 去背套件把「初始化」照設定內容記起來,失敗的也記:模型下載斷過一次,同一頁之後怎麼按都立刻失敗,
@@ -102,12 +130,12 @@ export function preloadsEarly() {
 export function preloadModel() {
   if (!preloadsEarly()) return;
   const attempt = modelAttempt;
-  const onMain = () => import("@imgly/background-removal").then(({ preload }) => preload(modelConfig()));
+  const onMain = () => { meterModelDownload((loaded, total) => onModelProgress("download", loaded, total)); return import("@imgly/background-removal").then(({ preload }) => preload(modelConfig())); };
   const run = workerBroken ? onMain() : inWorker("preload").catch((error) => {
     if (error instanceof WorkerUnavailable) return onMain();
     throw error;
   });
-  run.catch(() => { if (attempt === modelAttempt) modelAttempt += 1; });
+  run.catch(() => { if (attempt === modelAttempt) { modelAttempt += 1; resetModelMeter(); } });   // 主執行緒那份的已下載量;Worker 那份看 quality 換了自己清
 }
 
 // 一次只算一張:取消只是不看結果,模型那邊停不下來;馬上再按一次去背,兩張一起算,iPad 的記憶體會撐不住
@@ -124,6 +152,7 @@ export async function removeBg(file, onProgress) {
     if (pending > 1) onProgress("上一張還在算,等它結束…", false);
     await waitFor;
     downloading = false;
+    shownText = "";
     currentProgress = onProgress;
     const attempt = modelAttempt;
     try {
@@ -136,6 +165,7 @@ export async function removeBg(file, onProgress) {
         }
       }
       if (!result) {
+        meterModelDownload((loaded, total) => onModelProgress("download", loaded, total));   // 主執行緒算的也照實際位元組報進度
         const { removeBackground } = await import("@imgly/background-removal");
         result = await removeBackground(file, modelConfig());
         const { retryLowContrast } = await import("./cutoutFix.js");
@@ -144,7 +174,7 @@ export async function removeBg(file, onProgress) {
       try { localStorage.setItem(MODEL_READY_KEY, "1"); } catch { /* 存不了就每次都顯示第一次的提示 */ }
       return result;
     } catch (error) {
-      if (attempt === modelAttempt) modelAttempt += 1;   // 下一次重新初始化,不沿用失敗的那次
+      if (attempt === modelAttempt) { modelAttempt += 1; resetModelMeter(); }   // 下一次重新初始化,不沿用失敗的那次;已下載量從 0 算
       throw error;
     }
   } finally {

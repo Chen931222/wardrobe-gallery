@@ -11,7 +11,7 @@ import { markBackedUp } from "./keepSafe.js";
 const FORMAT = "open-wardrobe-backup";
 const LS_PREFIX = "open-wardrobe-";
 const SYNC_PREFIX = "open-wardrobe-sync-";
-// 「這台的去背模型已經下載過」只對這台成立;帶到新裝置會把「第一次要下載 80MB」的提示藏掉
+// 「這台的去背模型已經下載過」只對這台成立;帶到新裝置會把「第一次要下載約 100MB」的提示藏掉
 // 「備份過沒」也只對這台成立(open-wardrobe-backup-mark-v1)
 // 站主衣櫃存在這台的那份(App.jsx 的 CLOSET_CACHE_KEY)只是快取,也不進備份
 const DEVICE_ONLY = new Set(["open-wardrobe-bgmodel-v1", "open-wardrobe-keep-hint-v1", "open-wardrobe-backup-mark-v1", "open-wardrobe-closet-cache-v1"]);

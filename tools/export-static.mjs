@@ -84,7 +84,7 @@ await writeFile(join(OUT, "package.json"), JSON.stringify({ private: true, type:
 // 安全標頭(2026-10-03,審查報告的資安項)。同步碼存在瀏覽器裡,萬一哪天被塞進一段腳本,
 // CSP 讓它只能連到下面這幾個地方,碼送不出去。每一條都對得到用途,加新的外部服務要記得補:
 //   api.open-meteo.com           今日推薦的天氣
-//   staticimgly.com              去背模型(第一次約 80MB)與它的 WASM 執行檔
+//   staticimgly.com              去背模型與它的 WASM 執行檔(第一次共約 100MB)
 //   www.gu-global.com/uniqlo.com 貼連結挑圖:縮圖要顯示、大圖要下載回來去背
 //   cloud.umami.is / gateway.umami.is 使用統計的腳本與送出位址(2026-10-09;src/analytics.js,擁有者模式不載入)
 //   blob: / data:                自己加的衣服(IndexedDB 的圖)、去背中間結果、匯入備份檔裡的圖;

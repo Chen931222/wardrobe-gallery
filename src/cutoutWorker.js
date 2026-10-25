@@ -3,10 +3,17 @@
    進度回呼固定一個(去背套件會把第一次的設定連回呼一起快取),進度用訊息傳回主執行緒。 */
 import { preload, removeBackground } from "@imgly/background-removal";
 import { retryLowContrast, solidifyCutout } from "./cutoutFix.js";
+import { meterModelDownload, resetModelMeter } from "./cutoutDownload.js";
 
 const progress = (key, current, total) => self.postMessage({ type: "progress", key, current, total });
+// 模型下載照實際位元組報進度(cutoutDownload.js);套件自己的 fetch: 進度整段到齊才跳,只當退路
+meterModelDownload((loaded, total) => progress("download", loaded, total));
 
+// quality 是 cutout.js 的「第幾次初始化」記號:換了 = 上一次失敗、要重抓,已下載量從 0 算
+let lastQuality = null;
 self.onmessage = async ({ data: { id, type, file, cut, quality, part, strong } }) => {
+  if (lastQuality !== null && quality !== lastQuality) resetModelMeter();
+  lastQuality = quality;
   const config = { output: { format: "image/png", quality }, progress };
   try {
     if (type === "preload") {
