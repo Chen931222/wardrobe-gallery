@@ -2228,7 +2228,7 @@ export function App() {
         )}
 
         {view === "styling" && !loading && !!ownedItems.length && (
-          <OutfitStudio key={closet} closet={closet} items={wearItems} initialOutfit={pendingOutfit} initialDaily={pendingDaily} onOpenItem={setSelectedId} itemMatches={itemMatchesQuery} />
+          <OutfitStudio key={closet} closet={closet} items={wearItems} initialOutfit={pendingOutfit} initialDaily={pendingDaily} onOpenItem={setSelectedId} itemMatches={itemMatchesQuery} borrowPool={closet === "mine" ? demoItems : null} />
         )}
 
         {/* 示範衣櫃的眼鏡、手錶這幾類是 0 件,點下去整頁空白(審查 F52) */}

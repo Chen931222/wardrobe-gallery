@@ -130,10 +130,26 @@ function readWearing(closet) {
   }
 }
 
+/* 借來的那幾件(第一件加完配的那套,App firstLook)不在這個衣櫃裡,只記 id 的話重新整理就找不回來,整套只剩自己那件
+   (2026-10-25 新訪客實測)。另記一份「哪幾件是借的」,還原時從示範衣櫃找回來 */
+const borrowedKey = (closet) => `${wearingKey(closet)}-borrowed`;
+function readBorrowed(closet) {
+  try {
+    const value = JSON.parse(localStorage.getItem(borrowedKey(closet)) || "[]");
+    return new Set(Array.isArray(value) ? value : []);
+  } catch {
+    return new Set();
+  }
+}
+
 function writeWearing(closet, outfit) {
   try {
-    const ids = Object.fromEntries(Object.entries(outfit || {}).filter(([, item]) => item).map(([slot, item]) => [slot, item.id]));
+    const worn = Object.entries(outfit || {}).filter(([, item]) => item);
+    const ids = Object.fromEntries(worn.map(([slot, item]) => [slot, item.id]));
     localStorage.setItem(wearingKey(closet), JSON.stringify(ids));
+    const borrowed = worn.filter(([, item]) => item.borrowed).map(([, item]) => item.id);
+    if (borrowed.length) localStorage.setItem(borrowedKey(closet), JSON.stringify(borrowed));
+    else localStorage.removeItem(borrowedKey(closet));
   } catch { /* 私密模式等存不了就算了 */ }
 }
 
@@ -159,10 +175,12 @@ function askedLabel(spec, fallback) {
  */
 /* 衣架(2026-10-08 本人選「靠近加放大」＋「分頁標出身上有穿」):分頁改成跟衣櫃目錄同一套(文字、件數、書籤底線),
    身上有穿的那類旁邊一個小點;縮圖放大、下面寫品名(上衣 45 件,好幾件灰 T 只看圖分不出來)。 */
-export function OutfitStudio({ items, initialOutfit = null, initialDaily = null, onOpenItem = null, closet = "all", itemMatches = null }) {
+/** @param borrowPool 借得到的衣服(訪客「我的衣櫃」= 示範衣櫃):還原身上那套時,借來的那幾件從這裡找 */
+export function OutfitStudio({ items, initialOutfit = null, initialDaily = null, onOpenItem = null, closet = "all", itemMatches = null, borrowPool = null }) {
   const [wearing, setWearing] = useState(() => toStudio(initialOutfit));   // 帶一套進來時一開始就穿著,寫回時才不會先寫出空的
   const [looks, setLooks] = useState(readLooks);
-  const [stripType, setStripType] = useState("upperbody");
+  // 一開始就停在有衣服的第一格(不然先畫一格「這一類還沒有單品」再跳,2026-10-25 驗收);之後衣服變了由下面的 effect 補
+  const [stripType, setStripType] = useState(() => (RACK_TABS.find((tab) => items.some((item) => tab.slots.includes(slotOf(item)))) || RACK_TABS[0]).id);
   // 衣架搜尋(2026-10-08 本人:「右邊一樣加入搜尋的地方」):跟衣櫃頁同一套比對(App 傳進來的 itemMatches),
   // 範圍是整個衣架、不限目前停的分頁;點分頁就清掉,回到逛分類
   const [rackQuery, setRackQuery] = useState("");
@@ -262,12 +280,15 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     restoredRef.current = true;
     if (initialOutfit) return;
     const next = {};
+    const borrowed = readBorrowed(closet);
     for (const [slot, id] of Object.entries(readWearing(closet))) {
-      const item = items.find((existing) => existing.id === id);
+      const own = items.find((existing) => existing.id === id);
+      const lent = !own && borrowed.has(id) ? borrowPool?.find((existing) => existing.id === id) : null;
+      const item = own || (lent && { ...lent, borrowed: true });
       if (item) next[slotOf(item)] = item;
     }
     if (Object.keys(next).length) setWearing(next);
-  }, [items, initialOutfit, closet]);
+  }, [items, initialOutfit, closet]);   // eslint-disable-line react-hooks/exhaustive-deps -- borrowPool 只在還原那一次查
   useEffect(() => {
     if (dirtyRef.current) writeWearing(closet, wearing);
   }, [wearing, closet]);
@@ -315,6 +336,13 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   // 衣架現在要列的:搜尋中 = 整個衣架裡對得上的(照分頁順序排),否則 = 這一類
   const activeTab = RACK_TABS.find((tab) => tab.id === stripType) || RACK_TABS[0];
   const tabCount = (tab) => tab.slots.reduce((sum, slot) => sum + (wardrobeByType[slot]?.length || 0), 0);
+  // 停在的那格沒有衣服就換到第一個有衣服的(2026-10-25 新訪客實測:只加了一件裙子,衣架停在「上衣 0／這一類還沒有單品」)。
+  // 空的分頁不會出現在分頁列,所以不會蓋掉使用者自己點的選擇
+  useEffect(() => {
+    if (tabCount(activeTab)) return;
+    const first = RACK_TABS.find((tab) => tabCount(tab));
+    if (first) setStripType(first.id);
+  }, [wardrobeByType]);   // eslint-disable-line react-hooks/exhaustive-deps
   // 一段 = 一個槽位;一格裡超過一類有衣服(配件、鞋襪)才加小標題。搜尋時整個衣架一段、不分
   const rackSections = rackSearching
     ? [{ slot: null, items: RACK_TABS.flatMap((tab) => tab.slots).flatMap((slot) => (wardrobeByType[slot] || []).filter((item) => itemMatches(item, rackQuery))) }]

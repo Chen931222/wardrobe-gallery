@@ -565,6 +565,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
      不做偵測:瀏覽器裡沒有皺摺模型,土法會把針織紋路、印花當成皺,誤判一次就把人擋在最煩的那一步。
      只在自己拍的照片上提醒;商品圖、商品頁截圖、店裡比一下不提 */
   const ownPhoto = !store && !source?.fromBrand && !link?.url;
+  const brandPick = !store && Boolean(source?.fromBrand);   // 從商品頁挑的商品圖(不是截圖、不是自己拍的)
   const retake = () => { retakeRef.current = true; inputRef.current?.click(); };
 
   const tooSmall = box.w < 0.05 || box.h < 0.05;
@@ -812,22 +813,35 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
         <div className="add-overlay" role="dialog" aria-modal="true" aria-label="框出衣服" ref={dialogRef}>
           <div className="add-panel add-panel-review">
             {closeButton()}
-            <p className="add-step">用手指框出衣服</p>
+            {/* 挑好的商品圖(2026-10-25 新訪客實測):原本跟截圖共用「截圖的話…」那句,「去背框起來的」又灰著,以為非框不可。
+                商品圖多半整張去背就好:主按鈕換成「整張去背」,框是選用的 */}
+            <p className="add-step">{brandPick ? "去背這張商品圖" : "用手指框出衣服"}</p>
             <small className="add-hint">
               {store
                 ? "衣架、旁邊的衣服、你的手框在外面,比出來的顏色才準。"
-                : ownPhoto
-                  ? "衣服掛起來或攤平、拉開皺摺再拍,去背會乾淨很多。截圖的話,把狀態列、價格框在外面。"
-                  : "截圖的話,把狀態列、價格、按鈕框在外面。模特兒穿著的圖去背後人也會留下,盡量挑平拍那張。"}
+                : brandPick
+                  ? "商品圖直接按「整張去背」就好。圖裡有標誌或別的東西,再用手指框出衣服。"
+                  : ownPhoto
+                    ? "衣服掛起來或攤平、拉開皺摺再拍,去背會乾淨很多。截圖的話,把狀態列、價格框在外面。"
+                    : "截圖的話,把狀態列、價格、按鈕框在外面。模特兒穿著的圖去背後人也會留下,盡量挑平拍那張。"}
               {ownPhoto && <> <button type="button" className="add-text-button" onClick={retake}>重拍一張</button></>}
             </small>
             <CropBox src={source.url} box={box} onChange={setBox} />
             {box !== FULL && tooSmall && <small className="add-field-error" role="status">框太小了,重新拖一個。</small>}
             <div className="add-actions">
-              <button type="button" className="secondary-button" onClick={() => cutout(FULL)}>整張去背</button>
-              <button type="button" className="primary-button" onClick={() => cutout(box)} disabled={box === FULL || tooSmall}>
-                去背框起來的
-              </button>
+              {brandPick ? (
+                <>
+                  <button type="button" className="secondary-button" onClick={() => cutout(box)} disabled={box === FULL || tooSmall}>去背框起來的</button>
+                  <button type="button" className="primary-button" onClick={() => cutout(FULL)}>整張去背</button>
+                </>
+              ) : (
+                <>
+                  <button type="button" className="secondary-button" onClick={() => cutout(FULL)}>整張去背</button>
+                  <button type="button" className="primary-button" onClick={() => cutout(box)} disabled={box === FULL || tooSmall}>
+                    去背框起來的
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -1029,8 +1043,19 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
               </div>
             )}
 
+            {/* 「已經有了」排第一(2026-10-25 新訪客實測:排最後、窄螢幕掉到第二行還縮排不同,預設選中的那個反而最難看到)。
+                順序 = 有了 → 想買 → 夢幻逸品;「這件」自己一行 */}
             <fieldset className="add-owned">
               <legend>這件</legend>
+              <label>
+                <input
+                  type="radio"
+                  name="owned"
+                  checked={!draft.wishlist}
+                  onChange={() => setDraft((current) => ({ ...current, wishlist: false, dream: false }))}
+                />
+                已經有了
+              </label>
               <label>
                 <input
                   type="radio"
@@ -1048,15 +1073,6 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
                   onChange={() => setDraft((current) => ({ ...current, wishlist: true, dream: true }))}
                 />
                 夢幻逸品
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="owned"
-                  checked={!draft.wishlist}
-                  onChange={() => setDraft((current) => ({ ...current, wishlist: false, dream: false }))}
-                />
-                已經有了
               </label>
             </fieldset>
 

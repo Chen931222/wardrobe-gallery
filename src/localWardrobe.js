@@ -390,7 +390,9 @@ export async function trimTransparent(blob, maxSize = 1400) {
   let minX = canvas.width, minY = canvas.height, maxX = -1, maxY = -1;
   for (let y = 0; y < canvas.height; y += 1) {
     for (let x = 0; x < canvas.width; x += 1) {
-      if (data[((y * canvas.width) + x) * 4 + 3] > 12) {
+      // 門檻 12→24(2026-10-25):商品圖整張去背,角落的品牌標誌會留一層幾乎看不見的殘影(alpha 最高 14),
+      // 框就被撐到整張圖、衣服縮在一角。24 以下肉眼看不到;只是框收緊,像素不刪,外面還留 3% 邊
+      if (data[((y * canvas.width) + x) * 4 + 3] > 24) {
         if (x < minX) minX = x;
         if (x > maxX) maxX = x;
         if (y < minY) minY = y;
