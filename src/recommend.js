@@ -1192,6 +1192,29 @@ export function randomOutfit(items, weather = null) {
  */
 /** @param taste 自己穿過、收藏過、嫌過的組合(taste.js 的 readTaste);沒給就只看規則
  *  回傳的 recalled = 這套是「回味」穿過、收藏過的組合(三成的推薦會這樣挑) */
+/** 自己的衣服不夠一套時,缺的那幾類跟示範衣櫃借(2026-10-25 新訪客實測:第一件那套之後按「再推薦一套」變成「還差上衣」)。
+ *  搭配頁(OutfitStudio runRecommend)和入口圓環(LandingRing)共用,跟第一件那套(App firstLook)同一個做法:
+ *  自己完全沒有的那幾類才借,自己有的只用自己的;借來的標 borrowed,理由最前面講借了幾件。
+ *  鎖住的是借來的那件(「褲子留著,其他重挑」)時,引擎不會回報缺件,也要借,不然鞋、包整個不見(驗收抓到)。
+ *  沒給 borrowPool、或自己的就配得出來,照舊回引擎的結果;借了也配不出來,回原本的錯 */
+export function recommendOutfitWithBorrow(items, borrowPool, weather, wearLog, intent = null, locked = {}, avoid = null, taste = null) {
+  const own = recommendOutfit(items, weather, wearLog, intent, locked, avoid, taste);
+  const lockedBorrowed = Object.values(locked || {}).some((item) => item?.borrowed);
+  if (!borrowPool?.length || (!own.missing && !lockedBorrowed)) return own;
+  const ownParts = new Set(items.filter((item) => !item.wishlist).map((item) => item.part));
+  const extra = borrowPool.filter((item) => !item.wishlist && !ownParts.has(item.part));
+  if (!extra.length) return own;
+  const lent = recommendOutfit([...items, ...extra], weather, wearLog, intent, locked, avoid, taste);
+  if (lent.error) return own;
+  const lentIds = new Set(extra.map((item) => item.id));
+  let count = 0;
+  for (const [slot, item] of Object.entries(lent.outfit)) if (item && lentIds.has(item.id)) { lent.outfit[slot] = { ...item, borrowed: true }; count += 1; }
+  if (!count) return lent;
+  lent.reasons = [`這套有 ${count} 件是借示範衣櫃的${own.missing ? `(你的衣櫃還沒有${own.missing})` : ""};再加幾件自己的,就能整套都用自己的。`, ...(lent.reasons || [])];
+  lent.borrowed = count;
+  return lent;
+}
+
 export function recommendOutfit(items, weather, wearLog, intent = null, locked = {}, avoid = null, taste = null) {
   // 「不要外套」「不要短褲」:挑之前就排掉(鎖住的那件也一樣),理由裡講照做了哪些、哪些做不到
   const exclusion = applyExclusions(items, locked, intent?.exclude);

@@ -3,7 +3,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useIndexIndicator } from "./useIndexIndicator.js";
 import { ArrowCounterClockwise, ArrowsClockwise, CalendarCheck, Export, FloppyDisk, ImageSquare, Lock, LockOpen, MagnifyingGlass, Microphone, Sparkle, Trash, X } from "@phosphor-icons/react";
 import { CitySelect } from "./CitySelect.jsx";
-import { adjustIntent, fetchWeather, findItemForSwap, parseRequest, randomOutfit, readWearLog, recommendOutfit, recordWear, unrecordWear } from "./recommend.js";
+import { adjustIntent, fetchWeather, findItemForSwap, parseRequest, randomOutfit, readWearLog, recommendOutfitWithBorrow, recordWear, unrecordWear } from "./recommend.js";
 import { syncCode } from "./sync.js";
 import { track } from "./analytics.js";
 import { downloadBackupZip, importBackupFile } from "./backup.js";
@@ -175,7 +175,7 @@ function askedLabel(spec, fallback) {
  */
 /* 衣架(2026-10-08 本人選「靠近加放大」＋「分頁標出身上有穿」):分頁改成跟衣櫃目錄同一套(文字、件數、書籤底線),
    身上有穿的那類旁邊一個小點;縮圖放大、下面寫品名(上衣 45 件,好幾件灰 T 只看圖分不出來)。 */
-/** @param borrowPool 借得到的衣服(訪客「我的衣櫃」= 示範衣櫃):還原身上那套時,借來的那幾件從這裡找 */
+/** @param borrowPool 借得到的衣服(訪客「我的衣櫃」= 示範衣櫃):還原身上那套時,借來的那幾件從這裡找;自己的衣服不夠一套時也從這裡借 */
 export function OutfitStudio({ items, initialOutfit = null, initialDaily = null, onOpenItem = null, closet = "all", itemMatches = null, borrowPool = null }) {
   const [wearing, setWearing] = useState(() => toStudio(initialOutfit));   // 帶一套進來時一開始就穿著,寫回時才不會先寫出空的
   const [looks, setLooks] = useState(readLooks);
@@ -685,7 +685,8 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       // 最近三次推薦出現過的往後排:「再推薦一套」才不會換來換去還是那幾件
       const avoid = new Map();
       for (const ids of shownRef.current) for (const id of ids) avoid.set(id, (avoid.get(id) || 0) + 1);
-      const result = recommendOutfit(items, weather, wearLog, intent, locked, avoid, readTaste());
+      // 自己的衣服不夠一套時,缺的先跟示範衣櫃借(recommend.js recommendOutfitWithBorrow,2026-10-25)
+      const result = recommendOutfitWithBorrow(items, borrowPool, weather, wearLog, intent, locked, avoid, readTaste());
       if (result.error) { setDaily({ error: result.error }); return; }
       noteRecommendation(result.outfit, result.recalled);
       track("用過推薦", { 來源: intent ? "指令" : "今日推薦" });   // 漏斗(2026-10-21)
@@ -788,7 +789,8 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       if (slot === "upperbody" || slot === "shirt") { delete lockedStudio.upperbody; delete lockedStudio.shirt; }
       const engineSlot = slot === "shirt" ? "upperbody" : slot;
       const avoid = new Map(wearing[slot] ? [[wearing[slot].id, 99]] : []);
-      const result = recommendOutfit(items, weather, readWearLog(), lastIntentRef.current, toEngineLocks(lockedStudio), avoid, readTaste());
+      // 身上有借來的(或自己沒有這一類)時也借,「換一件上衣」才換得到示範衣櫃的別件(2026-10-25)
+      const result = recommendOutfitWithBorrow(items, borrowPool, weather, readWearLog(), lastIntentRef.current, toEngineLocks(lockedStudio), avoid, readTaste());
       const next = result.outfit?.[engineSlot];
       const label = SLOT_LABEL[slot];
       if (!next || next.id === wearing[slot]?.id) { setDaily({ understood: `換${label}`, reasons: [`櫃裡沒有別的${label}可以換`] }); return; }
@@ -1021,10 +1023,17 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));
   };
 
+  // 收藏的那套裡有借來的(2026-10-25 驗收:存了 5 件,清單只顯示自己那件、穿回也只有 1 件):自己櫃裡找不到就從借得到的找
+  const findWearable = (id) => {
+    const own = items.find((existing) => existing.id === id);
+    if (own) return own;
+    const lent = borrowPool?.find((existing) => existing.id === id);
+    return lent ? { ...lent, borrowed: true } : null;
+  };
   const wearLook = (look) => {
     const next = {};
     for (const id of look.itemIds) {
-      const item = items.find((existing) => existing.id === id);
+      const item = findWearable(id);
       if (item) next[slotOf(item)] = item;
     }
     setAdjusting(null);
@@ -1445,7 +1454,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
             <ul>
               {looks.map((look) => {
                 const names = look.itemIds
-                  .map((id) => items.find((item) => item.id === id)?.name)
+                  .map((id) => findWearable(id)?.name)
                   .filter(Boolean);
                 if (!names.length) return null;
                 return (
@@ -1460,7 +1469,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
                       title="做成一張可分享的圖"
                       onClick={() => {
                         const map = {};
-                        for (const id of look.itemIds) { const item = items.find((existing) => existing.id === id); if (item) map[slotOf(item)] = item; }
+                        for (const id of look.itemIds) { const item = findWearable(id); if (item) map[slotOf(item)] = item; }
                         openCard(map, { title: "收藏的穿搭" });
                       }}
                     >

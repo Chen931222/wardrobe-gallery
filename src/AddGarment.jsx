@@ -538,7 +538,10 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
       setRefilling(false);
     }
   };
-  const fillToggle = () => draft?.blob && cutRef.current && (
+  // 「補滿」只給淺色的(2026-10-25 新訪客實測:深咖啡裙也跳「白色衣服被去掉一塊?補滿」)。看去背後抓到的主色、副色,
+  // 亮度 150 以上才出現(170 太緊:暗光拍的白襯衫被吃掉一塊後只剩 178–181,驗收);已經補過的照樣留著,才按得到「還原」
+  const isLight = (hex) => { if (!hex) return false; const n = parseInt(hex.slice(1), 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) >= 150; };
+  const fillToggle = () => draft?.blob && cutRef.current && (draft.filled || isLight(draft.color) || isLight(draft.secondaryColor)) && (
     <div className="add-fill">
       <button type="button" className="add-fill-button" onClick={toggleFill} disabled={refilling} aria-pressed={Boolean(draft.filled)}>
         {refilling ? "補滿中…" : draft.filled ? "還原成原本的去背" : "白色衣服被去掉一塊?補滿"}

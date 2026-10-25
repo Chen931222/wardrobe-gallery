@@ -1612,7 +1612,8 @@ export function App() {
   const selectedItem = liveSelected || (selectedId && lastSelectedRef.current?.id === selectedId ? lastSelectedRef.current : null);
   const selectedGone = Boolean(selectedItem && !liveSelected);
 
-  // 訪客的衣櫃跟站主的分開:自己加的是「我的衣櫃」,站主那批的一小份樣本是「示範衣櫃」,推薦只在同一個衣櫃裡配。
+  // 訪客的衣櫃跟站主的分開:自己加的是「我的衣櫃」,站主那批的一小份樣本是「示範衣櫃」,推薦只在同一個衣櫃裡配;
+  // 例外是自己的不夠一套時,缺的那幾類跟示範衣櫃借(recommendOutfitWithBorrow,2026-10-25)。
   // 站主(?edit)照舊看全部;?public 只看示範。訪客一進來就是自己的衣櫃(還沒有衣服就是歡迎畫面),示範要自己點
   // (2026-10-05 本人:給朋友試用,入口不要都是站主的衣服;舊版沒有衣服的訪客直接落在示範衣櫃)。
   const mineCount = useMemo(() => items.filter((item) => item.isLocal && !item.wishlist).length, [items]);
@@ -1623,6 +1624,8 @@ export function App() {
     [items, closet],
   );
   const demoItems = useMemo(() => items.filter((item) => !item.isLocal), [items]);   // 歡迎畫面的示範穿搭用
+  // 搭配頁借衣服用(還原借來的那幾件、自己的衣服不夠一套時借):跟 firstLook 一樣補上保暖度,引擎才挑得到
+  const borrowPool = useMemo(() => demoItems.filter((item) => !item.wishlist).map((item) => (item.warmth === undefined ? { ...item, warmth: guessWarmth(item) } : item)), [demoItems]);
   const demoCount = demoItems.length;
 
   // 自己加、按了「已經買了」的衣服沒有保暖度,推薦引擎會整件跳過;從品名補一個。想買的不補,免得被當成已經有的拿去配
@@ -2042,6 +2045,7 @@ export function App() {
             onEnter={setView}
             onAdd={CAN_ADD ? requestAdd : null}
             onWearOutfit={(outfit, daily) => { wearOutfit(outfit, daily); setView("styling"); }}
+            borrowPool={closet === "mine" ? borrowPool : null}
             feedback={!CAN_EDIT ? <Feedback where="入口" className="in-brand" /> : null}
           />
         )}
@@ -2214,7 +2218,7 @@ export function App() {
           ) : (
             <p className="status empty">
               {/* 不講方位:iPhone 上新增在左上,桌機在右上(審查 F53)。直接給一顆按鈕 */}
-              {CAN_ADD ? "你的衣櫃還是空的。貼 GU、UNIQLO 的商品連結,或拍一張平放的衣服。" : "這個衣櫃還沒有單品。"}
+              {CAN_ADD ? "你的衣櫃還是空的。貼網購的商品連結,或拍一張平放的衣服。" : "這個衣櫃還沒有單品。"}
               {CAN_ADD && (
                 <>
                   <br />
@@ -2228,7 +2232,7 @@ export function App() {
         )}
 
         {view === "styling" && !loading && !!ownedItems.length && (
-          <OutfitStudio key={closet} closet={closet} items={wearItems} initialOutfit={pendingOutfit} initialDaily={pendingDaily} onOpenItem={setSelectedId} itemMatches={itemMatchesQuery} borrowPool={closet === "mine" ? demoItems : null} />
+          <OutfitStudio key={closet} closet={closet} items={wearItems} initialOutfit={pendingOutfit} initialDaily={pendingDaily} onOpenItem={setSelectedId} itemMatches={itemMatchesQuery} borrowPool={closet === "mine" ? borrowPool : null} />
         )}
 
         {/* 示範衣櫃的眼鏡、手錶這幾類是 0 件,點下去整頁空白(審查 F52) */}

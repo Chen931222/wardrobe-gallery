@@ -1,7 +1,7 @@
 // [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sparkle, X } from "@phosphor-icons/react";
-import { fetchWeather, readWearLog, recommendOutfit } from "./recommend.js";
+import { fetchWeather, readWearLog, recommendOutfitWithBorrow } from "./recommend.js";
 import { CitySelect, useCity } from "./CitySelect.jsx";
 import { readTaste } from "./taste.js";
 import { Logo } from "./Brand.jsx";
@@ -75,7 +75,8 @@ const ROW_MAX = 3;
  * @param syncAlert    同步有狀況(停掉、上次失敗):「同步」旁亮一個點
  */
 /** @param feedback 回報鈕(App 給,站主模式是 null):放在左上標誌右邊那一欄 */
-export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = null, onAdd = null, syncAlert = false, onUpdates = null, updatesUnseen = false, title = "我的衣櫃", note = null, feedback = null }) {
+/** @param borrowPool 借得到的衣服(訪客「我的衣櫃」= 示範衣櫃):自己的不夠一套時,今日推薦缺的先借(跟搭配頁同一個做法) */
+export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = null, onAdd = null, syncAlert = false, onUpdates = null, updatesUnseen = false, title = "我的衣櫃", note = null, feedback = null, borrowPool = null }) {
   // 手機(<640)重排:少放幾件圓環卡才夠大可點,今日推薦從環心移到環下方長條,不再壓卡片
   const [phone, setPhone] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches);
   useEffect(() => {
@@ -180,7 +181,8 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
     (async () => {
       try {
         const weather = await fetchWeather();
-        const result = recommendOutfit(items, weather, readWearLog(), null, {}, null, readTaste());
+        // 自己的不夠一套就借(2026-10-25 驗收:搭配頁會借,入口這裡還寫「還差下身 1 件就能配」,兩邊打架)
+        const result = recommendOutfitWithBorrow(items, borrowPool, weather, readWearLog(), null, {}, null, readTaste());
         if (alive) setDaily(result.error ? { error: result.error, missing: result.missing } : { weather, ...result });
       } catch {
         if (alive) setDaily({ error: "抓不到天氣" });
@@ -376,7 +378,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
   // 今日推薦算出來那一刻的物件可能已經舊了(別台改名、換圖):顯示和「穿這套」都換成最新的,不見了或分類改了就拿掉
   const freshDaily = daily?.outfit
     ? Object.fromEntries(Object.entries(daily.outfit)
-      .map(([slot, piece]) => [slot, piece && byId.get(piece.id)])
+      .map(([slot, piece]) => [slot, piece && (piece.borrowed ? piece : byId.get(piece.id))])   // 借來的不在這個衣櫃裡,照原樣留著
       .filter(([slot, piece]) => piece && piece.part === slot))
     : null;
   const dailyOutfit = freshDaily && Object.keys(freshDaily).length ? freshDaily : null;   // 全部拿掉了就不顯示空的「穿這套」
@@ -448,7 +450,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
                 <ul className="landing-daily-list">
                   {Object.entries(dailyOutfit).map(([slot, item]) => (
                     <li key={slot}>
-                      <span>{SLOT_LABEL[slot]}</span>{item.name}
+                      <span>{SLOT_LABEL[slot]}</span>{item.borrowed && <small className="landing-daily-lent">示範</small>}{item.name}
                     </li>
                   ))}
                 </ul>
@@ -511,7 +513,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
               <p className="landing-strip-head">今日推薦</p>
               <ul className="landing-strip-pieces">
                 {["wholebody_up", "upperbody", "lowerbody", "shoes"].filter((slot) => dailyOutfit[slot]).slice(0, 4).map((slot) => (
-                  <li key={slot}><b>{SLOT_LABEL[slot]}</b>{dailyOutfit[slot].name}</li>
+                  <li key={slot}><b>{SLOT_LABEL[slot]}</b>{dailyOutfit[slot].borrowed && <small className="landing-daily-lent">示範</small>}{dailyOutfit[slot].name}</li>
                 ))}
               </ul>
               <button type="button" className="landing-daily-go" onClick={wearDaily}>

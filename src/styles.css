@@ -2847,6 +2847,8 @@ h1, h2, h3 {
 }
 
 .landing-daily-list li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 今日推薦裡借示範衣櫃的那幾件(2026-10-25):品名前一個小字「示範」,放前面才不會被省略號吃掉 */
+.landing-daily-lent { margin-right: 4px; font-size: 11px; color: var(--muted); }
 
 .landing-daily-list span {
   display: inline-block;
