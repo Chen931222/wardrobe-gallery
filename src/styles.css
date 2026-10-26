@@ -3095,8 +3095,12 @@ h1, h2, h3 {
    整塊置中:寬螢幕(2000px)以前全擠在左半邊,右邊空一大片。
    2026-10-24:「第一步」那三句拿掉(下面章節講過);手機改成 標題 → 示範(米紙帶)→ 按鈕,見 max-width 760 那段 */
 .welcome {
+  /* 右欄寬:第一屏的人台和底下 01 章的影片共用這一個寬度,兩格左右邊對齊成同一條欄(2026-10-26 本人「上面那個欄位跟下面那個對齊」;
+     以前人台 270、影片照視窗高度算,1760 寬時兩格左邊差 150px)。照視窗高度算,所以人台加三條理由也還在第一屏。
+     34vw:平板直放(768×1024)36vh 比欄寬,標題被擠出去(驗收) */
+  --media-w: min(420px, 36vh, 34vw);
   display: grid;
-  grid-template-columns: minmax(0, 32rem) clamp(240px, 24vw, 270px);
+  grid-template-columns: minmax(0, 32rem) var(--media-w);
   /* 示範從標題那一列開始(2026-10-24 本人「右邊的圖片放太上面了」):以前從標誌那列開始,是因為直式標誌 153 高、
      標題被推得太低,人台加三條理由在 1280×800 會出第一屏;標誌換成橫的(53 高)之後放得下 */
   grid-template-areas: "logo ." "lede look" "start look" "copy look" "story story" "foot foot";
@@ -3129,8 +3133,7 @@ h1, h2, h3 {
 .story-step, .story-intro { padding: clamp(80px, 11vh, 136px) 0; }
 .story-weather { background: var(--band); }
 .story-inner {
-  --media-w: min(420px, 36vh, 34vw);   /* 34vw:平板直放(768×1024)36vh 比欄寬,標題被擠出去(驗收) */
-  width: min(1200px, 100% - 112px); margin: 0 auto;
+  width: min(1200px, 100% - 112px); margin: 0 auto;   /* 影片寬 --media-w 定在 .welcome,跟第一屏的人台同一個 */
   display: grid; column-gap: clamp(56px, 8vw, 128px); align-items: start;
   border-top: 2px solid var(--ink); padding-top: 22px;
 }
@@ -3272,11 +3275,10 @@ h1, h2, h3 {
 .welcome-look-why { margin: 8px 0 0; padding: 0; list-style: none; font-size: 14px; line-height: 1.7; color: var(--ink); }
 .welcome-look-why li { text-wrap: pretty; }   /* 「防風外／套」這種只剩一個字的行不要 */
 .welcome-look-why li + li { margin-top: 6px; }
-/* 第一屏在寬螢幕(≥1320;要排在 .welcome-look 的基底規則後面,同權重才蓋得過,驗收抓到):右欄放寬到 560,人台和理由並排,不再是一根細欄配一大片空白 */
+/* 第一屏在寬螢幕(≥1320;要排在 .welcome-look 的基底規則後面,同權重才蓋得過,驗收抓到):理由的字大一號。
+   2026-10-24 到 10-26 這裡是右欄 560、人台和理由並排;10-26 改成人台跟 01 章影片同寬(見 .welcome),理由回到人台下面 */
 @media (min-width: 1320px) {
-  .welcome { grid-template-columns: minmax(0, 34rem) 560px; }
-  .welcome-look { display: grid; grid-template-columns: 270px minmax(0, 1fr); column-gap: 28px; align-items: start; }
-  .welcome-look figcaption { margin-top: 4px; font-size: 14px; }
+  .welcome-look figcaption { font-size: 14px; }
   .welcome-look-why { font-size: 15px; }
 }
 /* 訪客加了衣服之後的一次性提醒:留備份 */

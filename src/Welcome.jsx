@@ -27,7 +27,7 @@ function MiniLook({ outfit }) {
       <Silhouette />
       {Object.entries(outfit).map(([slot, item]) => {
         if (!item || !SLOT_STYLE[slot] || slot === "socks") return null;
-        const src = item.thumbnail || item.image;   // 人台只有 128–240px 寬,縮圖(長邊 460px)就夠;原圖一張 ~150KB,新訪客第一眼要下載四張
+        const src = item.thumbnail || item.image;   // 人台手機 100–136px、桌機跟 01 章影片同寬(最多 420px),縮圖(長邊 460px)就夠,高解析螢幕的大桌機會略放大;原圖一張 ~150KB,新訪客第一眼要下載四張
         const shape = cachedShape(slot, src);
         const p = placeGarment(slot, shape ?? null, typeof nats[item.id] === "object" ? nats[item.id] : undefined, null);
         const ready = nats[item.id] === "broken" || (Boolean(nats[item.id]) && (!MEASURED_SLOTS.includes(slot) || shape !== undefined));
