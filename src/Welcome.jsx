@@ -60,22 +60,23 @@ function MiniLook({ outfit }) {
 
 /* 往下捲的「怎麼用」三列(2026-10-23 本人:「像 Apple 官網那樣…隨著慢慢往下滾動,會帶出越來越多內容」)。
    借的是節奏(一列一件事、捲到才出現),不借特效:不鎖捲動、不用滾輪刷影片。
-   影片是 _video-lab/films/pairthis-intro 錄的真實畫面(訪客從空衣櫃開始那條路),變速和示範衣櫃的標籤燒在畫面裡。
-   每句都對過程式:城市是 city.js 的 CITIES;「缺的先借」是 App.jsx 的 firstLook 和 recommend.js 的 recommendOutfitWithBorrow。
-   2026-10-24 收短:每章只留「能得到什麼＋一個例子」,錄影那天的天氣、借了幾件、完整理由交給影片和圖。
-   2026-10-25 起自己的衣服不夠一套時,搭配頁的推薦和打一句話也先借(OutfitStudio runRecommend),不只第一件 */
+   01 章影片是 _video-lab/films/pairthis-intro 錄的真實畫面(訪客從空衣櫃開始那條路),變速的標籤燒在畫面裡。
+   每句都對過程式:城市是 city.js 的 CITIES。
+   2026-10-24 收短:每章只留「能得到什麼＋一個例子」,完整理由交給圖。
+   2026-10-26 02 章的影片換成示範衣櫃的截圖:那支錄的是「加完第一件、跟示範衣櫃借來湊一套」,借衣服拿掉了(本人:「我的衣櫃」只用自己的) */
 // title 拆成幾段,只在段和段之間換行(手機窄欄會斷成「貼／商品連結」「打／一句話」,2026-10-23 截圖)
 // 2026-10-24 本人「下面不知道怎麼區分」:三章各一種版式,不是同一個模子換左右。編號 01–03 是有理由的:三章是有順序的三步
 const STEPS = [
   { key: "add", no: "01", title: ["網購過的，", "貼商品連結就好"], body: "挑一張商品圖就好。讀不到圖的網站用截圖；沒有連結的，拍一張平放的。" },
-  { key: "weather", no: "02", title: ["照你那邊的天氣", "配一套，說為什麼"], body: "天氣照你選的城市。衣服還不夠一套時，缺的先跟示範衣櫃借。" },
+  { key: "weather", no: "02", title: ["照你那邊的天氣", "配一套，說為什麼"], body: "天氣照你選的城市。圖是示範衣櫃；你的衣櫃有一件上衣、一件下身，就配得出來。" },
   { key: "talk", no: "03", title: ["不喜歡，", "打一句話就換"], body: "說個場合，整套照著重挑；只說不要哪一件，就只動那一件。" },
 ];
-// 第二章旁邊的理由:影片裡那一格寫的(films/pairthis-intro/rec/marks.json 的 add_reason,錄影 2026-10-23),字照原文、標點換全形。
-// 原本六條全列,2026-10-24 收成三條:溫度、下雨、顏色各一,看得出它在講為什麼就夠
+// 第二章:示範衣櫃實際配出來的一套(work/preview-2026-10-26-own-only/scripts/capture-weather.mjs,2026-10-26)。
+// 城市選基隆:那天毛毛雨、降雨 80%,看得到「下雨」那幾條判斷。理由照原文、標點換全形,收三條:溫度、下雨、顏色各一
+const WEATHER_SHOT = { src: "/media/weather-demo.jpg", when: "基隆，24°、毛毛雨、降雨 80%，2026 年 10 月 26 日" };
 const RECORDED_REASONS = [
-  "體感 23°，薄長袖或短袖都行",
-  "降雨 100%，記得帶傘",
+  "體感 26°，薄長袖或短袖都行",
+  "會下雨，加件「深藍連帽防風外套」",
   "只有「深藍連帽防風外套」有顏色，其他低調色襯著它",
 ];
 // 第三章前後對照:示範衣櫃實際配出來的兩套(work/preview-2026-10-23-brand/scripts/capture-talk.mjs,2026-10-24)。
@@ -242,8 +243,8 @@ export function Welcome({ demoItems, onAdd, onDemo, onImportFile, trashCount = 0
 
       {/* 按鈕(2026-10-23 本人「讓入門者知道他們在做什麼」)。
           標題下原本有三句「加第一件就會配出一套…／網購過的貼商品連結，不用拍／沒有連結的，拍一張平放的」,
-          2026-10-24 本人「下面已經有介紹了,上面是不是就不需要」拿掉。意思都在下面:缺的先借在 02 章,貼連結是 01 章標題,
-          拍平放的在 01 章內文(一字不差)。「不用拍」三個字這頁沒有了,在新增那頁的第一句;「加一件就配一套」加完第一件時 App 會講(firstLook 那條理由) */}
+          2026-10-24 本人「下面已經有介紹了,上面是不是就不需要」拿掉。意思都在下面:貼連結是 01 章標題,
+          拍平放的在 01 章內文(一字不差)。「不用拍」三個字這頁沒有了,在新增那頁的第一句;加完第一件時 App 會講還差什麼才配得成一套(firstLook 那條理由) */}
       <div className="welcome-start">
         {app && (
           <p className="welcome-tip is-warning" role="note">
@@ -316,14 +317,19 @@ export function Welcome({ demoItems, onAdd, onDemo, onImportFile, trashCount = 0
                 <h3>{step.title.map((part) => <span key={part} className="nowrap">{part}</span>)}</h3>
                 <p>{step.body}</p>
               </div>
-              {step.key !== "talk" && (
+              {step.key === "add" && (
                 <div className="story-media">
                   <StoryLoop name={step.key} label={`示範畫面：${step.title.join("")}`} />
                 </div>
               )}
               {step.key === "weather" && (
+                <div className="story-media">
+                  <img className="story-video" src={WEATHER_SHOT.src} alt="示範衣櫃的搭配頁：人台穿著深藍連帽防風外套、白 T、深色短褲、球鞋，背黑色後背包" loading="lazy" />
+                </div>
+              )}
+              {step.key === "weather" && (
                 <figure className="story-notes">
-                  <figcaption>影片裡它寫的理由（節錄）：</figcaption>
+                  <figcaption>這套它寫的理由（節錄；{WEATHER_SHOT.when}）：</figcaption>
                   <ul>{RECORDED_REASONS.map((reason) => <li key={reason}>{keepQuotes(reason)}</li>)}</ul>
                 </figure>
               )}

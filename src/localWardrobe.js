@@ -559,11 +559,73 @@ export async function shrinkImage(blob, limit = SYNC_IMAGE_LIMIT) {
   return smallest;
 }
 
-/** 依長寬比猜分類 —— 只是預設值,使用者可以在對話框改。 */
-export function guessPart(width, height) {
-  const ratio = width / height;
-  if (ratio > 1.25) return "lowerbody";   // 橫躺的多半是褲子
-  if (ratio > 0.95) return "shoes";
-  if (ratio > 0.78) return "upperbody";
-  return "lowerbody";
+/** 沒選分類時,看去背後的形狀猜一個 —— 只是預設值,衣櫃格子會標「分類是猜的」,點開改。
+ *  2026-10-26 改(本人:吊著拍的帽 T 被猜成下身):舊版只看長寬比,「高的當褲子、方的當鞋子」,
+ *  拿站主衣櫃 104 件實測,上衣 52 件錯 36 件(直長的帽 T、長袖猜成下身,平放的短袖 T 猜成鞋子),短褲 11 件錯 9 件。
+ *  新的門檻是拿同一批調的(上衣、下身、鞋、外套 98 件對 95 件),沒有另外一批驗過;站主衣櫃沒有裙子,裙子那條只對過畫出來的剪影。
+ *  現在把透明度縮成 64 寬的遮罩,量衣服本身(不含透明邊)的形狀:
+ *  - 下半截中間有一道縫:褲管,或一雙鞋;鞋的縫一路通到最上面,褲子上面是褲頭連著。
+ *    不過寬高差不多的(0.75–0.97)是外套敞開的前襟,不算褲管
+ *  - 裙子:腰頭是平的(最上面就有一半寬、到 10% 高度幾乎不變),往下慢慢變寬,下襬最寬;
+ *    上衣在肩膀、袖子那段(10%–30%)會一下子寬很多
+ *  - 很窄(寬不到高的 0.52):長褲
+ *  - 寬的(平放的短袖 T、短褲):最寬那一列在下半截是褲管,在上半截是袖子
+ *  - 寬的而且上面那段偏一邊:側拍的一隻鞋(鞋口在腳跟那側);短褲的褲頭、T 恤的領口在正中間。
+ *    靴子、高筒鞋寬高差不多,最寬的是鞋底,不先擋掉會被下一條當成短褲(2026-10-26 驗收)
+ *    (推論:104 件裡沒有側拍單隻鞋的照片,只對過畫出來的剪影;衣服偏離中線最多 0.07,畫的鞋 0.28)。
+ *    不用「很扁就是鞋」:橫著拍的衣服(整件轉 90 度)也很扁,站主的灰帽 T 照片就被這樣猜成鞋
+ *  - 其他當上衣;外套也落在這裡(形狀分不出外套,上衣最接近)
+ *  讀不到圖回 null,呼叫的那邊當上衣 */
+export function guessPart(bitmap) {
+  const W = 64;
+  const H = Math.max(8, Math.round((bitmap.height / bitmap.width) * W));
+  const canvas = Object.assign(document.createElement("canvas"), { width: W, height: H });   // 不用 OffscreenCanvas:iOS 16.4 以前沒有
+  const context = canvas.getContext("2d");
+  context.drawImage(bitmap, 0, 0, W, H);
+  const alpha = context.getImageData(0, 0, W, H).data;
+  return guessPartFromMask((x, y) => alpha[(y * W + x) * 4 + 3] > 128, W, H);
+}
+
+/** guessPart 的判斷本身:on(x, y) = 那一格有沒有衣服。分開寫,實測腳本才能直接拿遮罩跑 */
+export function guessPartFromMask(on, W, H) {
+  let x0 = W, x1 = -1, y0 = H, y1 = -1;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (on(x, y)) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  if (x1 < 0) return null;
+  const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+  const ratio = bw / bh;
+  const rowAt = (f) => y0 + Math.min(bh - 1, Math.round(f * (bh - 1)));
+  const span = (y) => { let l = -1, r = -1; for (let x = x0; x <= x1; x++) if (on(x, y)) { if (l < 0) l = x; r = x; } return l < 0 ? 0 : r - l + 1; };
+  // 這一列中間(30%–70%)有沒有一段空的,而且左右兩邊都有東西
+  const L = x0 + Math.round(bw * 0.3), R = x0 + Math.round(bw * 0.7);
+  const centerGap = (y) => {
+    let left = false, right = false, gap = false;
+    for (let x = x0; x < L; x++) if (on(x, y)) left = true;
+    for (let x = R + 1; x <= x1; x++) if (on(x, y)) right = true;
+    for (let x = L; x <= R; x++) if (!on(x, y)) gap = true;
+    return left && right && gap;
+  };
+  const gapShare = (from, to, step) => { let hit = 0, n = 0; for (let f = from; f <= to + 1e-9; f += step) { n += 1; if (centerGap(rowAt(f))) hit += 1; } return hit / n; };
+  const lowGap = gapShare(0.7, 0.96, 0.02);    // 下半截:褲管、兩隻鞋
+  const topGap = gapShare(0.05, 0.3, 0.025);   // 上面:鞋才有縫,褲子是褲頭
+  const widthAt = (f) => span(rowAt(f)) / bw;
+  const [w3, w10, w30, w50, w95] = [0.03, 0.1, 0.3, 0.5, 0.95].map(widthAt);
+  const skirt = w3 >= 0.5 && w10 - w3 <= 0.12 && w30 - w10 <= 0.14 && w95 >= w50 + 0.05 && w95 >= 0.9;
+  // 上面那段(10%–25% 高度)的中點偏離整件中線多少,對寬
+  let drift = 0;
+  for (const f of [0.1, 0.15, 0.2, 0.25]) {
+    const y = rowAt(f);
+    let l = -1, r = -1;
+    for (let x = x0; x <= x1; x++) if (on(x, y)) { if (l < 0) l = x; r = x; }
+    if (l >= 0) drift += Math.abs((l + r) / 2 - (x0 + x1) / 2) / bw / 4;
+  }
+  let widest = 0, widestAt = 0;
+  for (let f = 0; f <= 1 + 1e-9; f += 0.02) { const w = span(rowAt(f)); if (w > widest) { widest = w; widestAt = f; } }
+
+  if (lowGap >= 0.6 && topGap >= 0.5) return "shoes";
+  if (lowGap >= 0.5 && (ratio < 0.75 || ratio > 0.97)) return "lowerbody";
+  if (skirt) return "lowerbody";
+  if (ratio < 0.52) return "lowerbody";
+  if (ratio > 0.97 && drift >= 0.18) return "shoes";
+  if (ratio > 0.97 && widestAt >= 0.6) return "lowerbody";
+  return "upperbody";
 }

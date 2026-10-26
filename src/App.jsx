@@ -10,7 +10,7 @@ import { deleteLocalItem, findUrl, loadLocalItems, productUrlProblem, putLocalRe
 import { CAN_ADD, CAN_EDIT, canEditItem } from "./ownerMode.js";
 import { hasLocalChanges, lastSyncError, noteDeliberateDelete, scheduleSync, syncCode, syncNotice, syncNow } from "./sync.js";
 import { findSameStyle, findSimilar, fitOf, guessWarmth, kindLabel, wishOutfits } from "./wishCheck.js";
-import { colorLabel, colorName, colorRole, colorScore, fetchWeather, isNeutral, recommendOutfit } from "./recommend.js";
+import { colorLabel, colorName, colorRole, colorScore, isNeutral } from "./recommend.js";
 import { Feedback } from "./Feedback.jsx";
 import { Logo } from "./Brand.jsx";
 import { track } from "./analytics.js";
@@ -1612,8 +1612,8 @@ export function App() {
   const selectedItem = liveSelected || (selectedId && lastSelectedRef.current?.id === selectedId ? lastSelectedRef.current : null);
   const selectedGone = Boolean(selectedItem && !liveSelected);
 
-  // 訪客的衣櫃跟站主的分開:自己加的是「我的衣櫃」,站主那批的一小份樣本是「示範衣櫃」,推薦只在同一個衣櫃裡配;
-  // 例外是自己的不夠一套時,缺的那幾類跟示範衣櫃借(recommendOutfitWithBorrow,2026-10-25)。
+  // 訪客的衣櫃跟站主的分開:自己加的是「我的衣櫃」,站主那批的一小份樣本是「示範衣櫃」,推薦只在同一個衣櫃裡配。
+  // 2026-10-25 曾經在自己的不夠一套時跟示範衣櫃借;10-26 拿掉(本人:「我的衣櫃」應該只有我的衣服,借來的看起來像別人的衣服混進來)。
   // 站主(?edit)照舊看全部;?public 只看示範。訪客一進來就是自己的衣櫃(還沒有衣服就是歡迎畫面),示範要自己點
   // (2026-10-05 本人:給朋友試用,入口不要都是站主的衣服;舊版沒有衣服的訪客直接落在示範衣櫃)。
   const mineCount = useMemo(() => items.filter((item) => item.isLocal && !item.wishlist).length, [items]);
@@ -1624,8 +1624,6 @@ export function App() {
     [items, closet],
   );
   const demoItems = useMemo(() => items.filter((item) => !item.isLocal), [items]);   // 歡迎畫面的示範穿搭用
-  // 搭配頁借衣服用(還原借來的那幾件、自己的衣服不夠一套時借):跟 firstLook 一樣補上保暖度,引擎才挑得到
-  const borrowPool = useMemo(() => demoItems.filter((item) => !item.wishlist).map((item) => (item.warmth === undefined ? { ...item, warmth: guessWarmth(item) } : item)), [demoItems]);
   const demoCount = demoItems.length;
 
   // 自己加、按了「已經買了」的衣服沒有保暖度,推薦引擎會整件跳過;從品名補一個。想買的不補,免得被當成已經有的拿去配
@@ -1686,34 +1684,30 @@ export function App() {
   // 帶一套進搭配頁:先記成「身上這套」,進去後手動重新整理也穿得回來。daily = 入口今日推薦的天氣和理由
   const wearOutfit = (outfit, daily = null) => {
     if (daily) noteRecommendation(outfit);   // 入口的今日推薦按「穿上看看」:算看過一套推薦(taste.js)
-    if (daily) track("用過推薦", { 來源: daily.first ? "第一件" : "入口" });
+    if (daily) track("用過推薦", { 來源: "入口" });
     rememberWearing(outfit, closet);
     setPendingOutfit(outfit);
     setPendingDaily(daily);
   };
 
-  /* 第一件加完立刻給推薦(2026-10-21):這件鎖在自己的格子,其他格子從示範衣櫃挑,照現在的天氣配一套帶進搭配頁。
-     示範衣櫃沒載到、天氣抓不到、引擎配不出來,就回 false,照舊只說「加進衣櫃了」。 */
+  /* 第一件加完(2026-10-21):不只說「加進衣櫃了」,直接穿上人台、帶進搭配頁,講還差什麼才配得成一套。
+     2026-10-26 起只穿這一件,不再拿示範衣櫃的來湊(本人:「我的衣櫃」只用自己的衣服)。缺的照引擎的說法:上衣、下身各要 1 件。
+     讀不到這件就回 false,照舊只說「加進衣櫃了」。不算一次推薦(不記 noteRecommendation、不送「用過推薦」) */
   const firstLook = async (id, name) => {
     try {
       const mine = (await loadLocalItems())?.find((item) => item.id === id);
-      const demo = itemsRef.current.filter((item) => !item.isLocal && !item.wishlist);
-      if (!mine || !demo.length) return false;
-      const weather = await fetchWeather();
-      const pool = [...demo.filter((item) => item.part !== mine.part), mine]
-        .map((item) => (item.warmth === undefined ? { ...item, warmth: guessWarmth(item) } : item));
-      const result = recommendOutfit(pool, weather, {}, null, { [mine.part]: mine });
-      if (result.error || result.outfit?.[mine.part]?.id !== mine.id) return false;
-      // 借來的標 borrowed:搭配頁重讀衣櫃時會把不在櫃裡的脫掉,這幾件要留著(OutfitStudio remap)
-      for (const [slot, item] of Object.entries(result.outfit)) if (item && item.id !== mine.id) result.outfit[slot] = { ...item, borrowed: true };
-      const borrowed = Object.values(result.outfit).filter((item) => item && item.id !== mine.id).length;
-      const reasons = [
-        `第一件進櫃了。這套是你的「${mine.name || name}」配示範衣櫃的 ${borrowed} 件挑的;再加幾件自己的,就能整套都用自己的。`,
-        ...(result.reasons || []),
-      ];
-      wearOutfit(result.outfit, { weather, reasons, details: result.details || [], first: true });
+      if (!mine) return false;
+      const need = [mine.part !== "upperbody" && "上衣 1 件", mine.part !== "lowerbody" && "下身 1 件"].filter(Boolean).join("、");
+      const extras = [mine.part !== "shoes" && "鞋子", mine.part !== "bag" && "包包"].filter(Boolean).join("、");
+      // 分類是猜的:「還差下身」是照猜的那一類算的,猜錯就整句不對,講出來(2026-10-26 驗收)
+      const guessed = mine.partGuessed ? `(分類是猜的,當成${PARTS[mine.part]?.label || "上衣"};不對的話到衣櫃點開那件改)` : "";
+      const outfit = { [mine.part]: mine };
+      rememberWearing(outfit, "mine");
+      setPendingOutfit(outfit);
+      // first:搭配頁靠這個分得出這不是推薦(主鈕照舊叫「今日推薦」),衣服變多時也把這句清掉
+      setPendingDaily({ first: true, reasons: [`第一件進櫃了,先穿在人台上${guessed}。還差${need}就能配一整套;${extras}有的話也加進來。`] });
       setView("styling");
-      say(`「${mine.name || name}」加進衣櫃了,先配示範衣櫃給你一套。`);
+      say(`「${mine.name || name}」加進衣櫃了,先穿上人台。`);
       return true;
     } catch {
       return false;
@@ -2045,7 +2039,6 @@ export function App() {
             onEnter={setView}
             onAdd={CAN_ADD ? requestAdd : null}
             onWearOutfit={(outfit, daily) => { wearOutfit(outfit, daily); setView("styling"); }}
-            borrowPool={closet === "mine" ? borrowPool : null}
             feedback={!CAN_EDIT ? <Feedback where="入口" className="in-brand" /> : null}
           />
         )}
@@ -2098,7 +2091,7 @@ export function App() {
                   openRequest={addRequest}
                   onOpenHandled={() => setAddRequest(0)}
                   onAdded={async (wishlist, name, dream = false, id = null) => {
-                    // 第一件(2026-10-21,行銷企劃第 0 週):加完不只說「加進衣櫃了」,拿這件配示範衣櫃立刻給一套,先看到這東西能幹嘛
+                    // 第一件(2026-10-21,行銷企劃第 0 週):加完不只說「加進衣櫃了」,直接穿上人台(firstLook)
                     const firstOwned = !wishlist && !CAN_EDIT && id && !itemsRef.current.some((item) => item.isLocal && !item.wishlist && !item.trashedAt);
                     if (!CAN_EDIT) { setClosetChoice("mine"); setPendingOutfit(null); }   // 換到我的衣櫃:示範衣櫃帶進來的那套不要跟過去
                     await refresh();
@@ -2232,7 +2225,7 @@ export function App() {
         )}
 
         {view === "styling" && !loading && !!ownedItems.length && (
-          <OutfitStudio key={closet} closet={closet} items={wearItems} initialOutfit={pendingOutfit} initialDaily={pendingDaily} onOpenItem={setSelectedId} itemMatches={itemMatchesQuery} borrowPool={closet === "mine" ? borrowPool : null} />
+          <OutfitStudio key={closet} closet={closet} items={wearItems} initialOutfit={pendingOutfit} initialDaily={pendingDaily} onOpenItem={setSelectedId} itemMatches={itemMatchesQuery} />
         )}
 
         {/* 示範衣櫃的眼鏡、手錶這幾類是 0 件,點下去整頁空白(審查 F52) */}

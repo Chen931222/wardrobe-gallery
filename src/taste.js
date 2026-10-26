@@ -30,9 +30,8 @@ function writeList(key, list) {
 }
 const notify = () => { if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change")); };   // 開了同步的話 5 秒後推
 /** 一套的核心(上衣、下身、外套、鞋)排好的 id:拿來比「穿的是不是推薦的那套」。配件、襪子、包不算,換了也還是同一套。 */
-// 借示範衣櫃的那幾件(borrowed)不算:不是自己的衣服,穿不到,記進來只會把示範衣櫃的 id 算進自己的口味(2026-10-25)
-const ownPieces = (outfit) => Object.values(outfit || {}).filter((item) => item && !item.borrowed);
-const coreIds = (outfit) => CORE.map((slot) => outfit?.[slot]).filter((item) => item && !item.borrowed).map((item) => item.id).sort();
+const ownPieces = (outfit) => Object.values(outfit || {}).filter(Boolean);
+const coreIds = (outfit) => CORE.map((slot) => outfit?.[slot]).filter(Boolean).map((item) => item.id).sort();
 const sameSet = (a, b) => a.length === b.length && a.every((id, index) => id === b[index]);
 
 /** 畫面上出現了一套推薦(今日推薦、再推薦、照這句挑、換一件、入口的「穿上看看」)。
@@ -54,7 +53,7 @@ export function noteWear(outfit) {
   const recs = readList(TODAY_KEY).filter((entry) => entry.day === day);
   const hit = recs.findIndex((entry) => sameSet(entry.ids, ids));
   const all = ownPieces(outfit).map((item) => item.id);
-  // 自己的核心不到兩件(其他是借示範衣櫃的):noteRecommendation 沒記這套,「照不照推薦穿」比不出來,不算進準不準的統計(rec 留空,recoStats 會跳過)
+  // 核心不到兩件(衣櫃還不夠一套,身上只有一兩件):noteRecommendation 沒記這套,「照不照推薦穿」比不出來,不算進準不準的統計(rec 留空,recoStats 會跳過)
   const rec = ids.length < 2 ? null : { seen: recs.length, match: hit < 0 ? null : hit + 1, ...(recs[hit]?.recalled ? { recalled: true } : {}) };
   const entry = { id: `wear-${Date.now()}`, t: "wear", day, ids: [...new Set(all)], rec };
   // 同一天改穿別套:換掉當天那筆,一天只算一次

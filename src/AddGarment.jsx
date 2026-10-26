@@ -651,12 +651,13 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     const name = draft.name.trim() || (draft.wishlist ? "想買的單品" : "新單品");
     setError("");
     // 分類改選填(2026-10-21,行銷企劃第 0 週:MYMIKA 加一件零欄位,我們要人選分類才能存)。
-    // 沒選就猜:先看品名(「襯衫」「牛仔褲」),再看去背後的長寬比;猜的標 partGuessed,衣櫃格子會提醒點一下改
+    // 沒選就猜:先看品名(「襯衫」「牛仔褲」),再看去背後的形狀(localWardrobe guessPart);猜的標 partGuessed,衣櫃格子會提醒點一下改
     let partGuessed = false;
     if (!draft.part) {
       let guessed = partFromName(name);
       if (!guessed && draft.blob) {
-        try { const bitmap = await createImageBitmap(draft.blob); guessed = guessPart(bitmap.width, bitmap.height); bitmap.close?.(); } catch { /* 讀不到就當上衣 */ }
+        let bitmap = null;
+        try { bitmap = await createImageBitmap(draft.blob); guessed = guessPart(bitmap); } catch { /* 讀不到就當上衣 */ } finally { bitmap?.close?.(); }
       }
       draft.part = guessed || "upperbody";
       partGuessed = true;
