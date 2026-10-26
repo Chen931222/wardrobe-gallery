@@ -7,6 +7,8 @@
  * 這一層只管「使用者自己加的」衣物;離線流程匯入的那批仍然來自 data/library.json,
  * 兩者在 App 裡合併顯示。線上唯讀版也能用這條路新增,因為完全不碰伺服器。 */
 
+import { cleanItem } from "./cleanFields.js";
+
 const DB_NAME = "open-wardrobe-local";
 const STORE = "items";
 const VERSION = 1;
@@ -220,7 +222,8 @@ function scheduleThumbs(records) {
 export async function loadLocalItems() {
   if (typeof indexedDB === "undefined") return [];
   try {
-    const [records, thumbs] = await Promise.all([tx("readonly", (store) => store.getAll()).then((list) => (list || []).map(decode)), readThumbs()]);
+    // 備份、同步帶進來的紀錄型別可能不對(2026-10-26 破壞測試):id 不是字的讀不到也刪不掉,略過;其他欄位整理過再給畫面
+    const [records, thumbs] = await Promise.all([tx("readonly", (store) => store.getAll()).then((list) => (list || []).map(decode).filter((record) => typeof record?.id === "string").map(cleanItem)), readThumbs()]);
     const ids = new Set(records.map((record) => record.id));
     for (const cache of [urlCache, thumbCache]) {
       for (const [id, hit] of cache) {

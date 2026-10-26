@@ -13,6 +13,12 @@ export function useCity() {
   return city;
 }
 
+/* 天氣資料的出處(2026-10-26 授權盤點):Open-Meteo 的資料是 CC BY 4.0,顯示天氣的地方旁邊要寫來源、連過去。
+   放在天氣那一行的最後,字跟那行一樣小 */
+export function WeatherCredit() {
+  return <><span aria-hidden="true">· </span><a className="weather-credit" href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer" title="天氣資料:Open-Meteo(CC BY 4.0)">Open-Meteo</a></>;
+}
+
 export function CitySelect() {
   const city = useCity();
   return (

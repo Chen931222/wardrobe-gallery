@@ -15,7 +15,9 @@ import { cp, mkdir, rm, readdir, readFile, copyFile, writeFile } from "node:fs/p
 import { join } from "node:path";
 import { createHmac, randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { demoCloset, isDemoItem } from "../src/demoCloset.js";
+import { buildLicenses, writeLicenses } from "./build-licenses.mjs";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -52,6 +54,9 @@ if (broken.length) {
   process.exit(1);
 }
 
+// 授權頁也先產生一次再清空(2026-10-26 驗收):套件升級後少了 LICENSE、路徑變了,停在這裡,上一份可用的輸出還在
+await buildLicenses();
+
 // 清空內容、不刪資料夾本身:Windows 上只要有終端機或檔案總管停在這個資料夾,rmdir 就會 EBUSY。
 // .vercel 留著,部署時才不用重新連結專案。
 await mkdir(OUT, { recursive: true });
@@ -59,6 +64,8 @@ for (const entry of await readdir(OUT)) {
   if (entry !== ".vercel") await rm(join(OUT, entry), { recursive: true, force: true });
 }
 await cp(join(ROOT, "dist"), OUT, { recursive: true });
+// 授權頁照這次裝的套件重寫一次(2026-10-26):public/ 裡那份可能是升級套件前產生的
+await writeLicenses(OUT);
 // 貼 GU／UNIQLO 連結時查品名(瀏覽器被對方 CORS 擋,只能從伺服器問)
 await mkdir(join(OUT, "api"), { recursive: true });
 await copyFile(join(ROOT, "functions", "brand-product.mjs"), join(OUT, "api", "brand-product.mjs"));
@@ -173,3 +180,16 @@ export const CLOSET = ${JSON.stringify(closet)};
 `);
 
 console.log(`匯出完成:wardrobe-gallery/(公開示範 ${demo.length} 件、${demoFiles.size} 個圖檔;站主衣櫃 ${closet.length} 件只走 /api/closet,另外 ${hidden.size} 個圖檔換成不公開檔名)→ cd wardrobe-gallery && vercel deploy --prod --yes`);
+
+/* 原始碼跟線上同一版了沒(2026-10-26 授權盤點):去背套件是 AGPL-3.0,網站整體依 AGPL 提供,用的人要拿得到「線上這一版」的原始碼。
+   授權頁連到 GitHub,所以 GitHub 落後就是沒給到。只提醒、不擋:平常是先上線給本人看、點頭才 commit,這時本來就還沒 push。
+   origin/main 是上次 fetch 的位置,沒先 fetch 可能算多,寧可多提醒。沒 add 的新檔也算(git commit -am 不會帶到它們,驗收抓到) */
+try {
+  const git = (...args) => execFileSync("git", args, { cwd: ROOT, encoding: "utf8" }).trim();
+  const dirty = git("status", "--porcelain").split("\n").filter(Boolean).length;
+  const ahead = Number(git("rev-list", "--count", "origin/main..HEAD"));
+  if (dirty || ahead) {
+    console.warn(`\n⚠ 這次上線的版本還不在 GitHub:${dirty ? `${dirty} 個檔案還沒 commit` : ""}${dirty && ahead ? "、" : ""}${ahead ? `${ahead} 個 commit 還沒 push` : ""}。`);
+    console.warn("  去背套件是 AGPL-3.0:上線之後把這一版 commit 並 push,授權頁連到的原始碼才跟線上一致。");
+  }
+} catch { /* 不是 git 目錄、沒有 origin:不檢查 */ }

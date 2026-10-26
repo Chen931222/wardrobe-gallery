@@ -20,7 +20,8 @@ const today = () => new Date().toLocaleDateString("sv");
 function readList(key) {
   try {
     const value = JSON.parse(localStorage.getItem(key) || "[]");
-    return Array.isArray(value) ? value : [];
+    // 每一筆都要是物件:[null]、[5] 這種(備份、同步帶進來的)讀到 entry.day 會丟錯,推薦算完卻不顯示(2026-10-26 驗收)
+    return Array.isArray(value) ? value.filter((entry) => entry !== null && typeof entry === "object" && !Array.isArray(entry)) : [];
   } catch {
     return [];
   }
@@ -32,7 +33,7 @@ const notify = () => { if (typeof window !== "undefined") window.dispatchEvent(n
 /** 一套的核心(上衣、下身、外套、鞋)排好的 id:拿來比「穿的是不是推薦的那套」。配件、襪子、包不算,換了也還是同一套。 */
 const ownPieces = (outfit) => Object.values(outfit || {}).filter(Boolean);
 const coreIds = (outfit) => CORE.map((slot) => outfit?.[slot]).filter(Boolean).map((item) => item.id).sort();
-const sameSet = (a, b) => a.length === b.length && a.every((id, index) => id === b[index]);
+const sameSet = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((id, index) => id === b[index]);
 
 /** 畫面上出現了一套推薦(今日推薦、再推薦、照這句挑、換一件、入口的「穿上看看」)。
  *  recalled = 這套是回味穿過、收藏過的組合;記下來,之後分得出「推舊的」和「推新的」各被接受幾次 */
@@ -83,7 +84,7 @@ const pairKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 export function readTaste() {
   const pairs = new Map();
   const add = (ids, weight) => {
-    const list = [...new Set(ids || [])].filter(Boolean);
+    const list = [...new Set(Array.isArray(ids) ? ids : [])].filter((id) => typeof id === "string" && id);   // 收藏、紀錄可能從備份帶進壞形狀
     for (let i = 0; i < list.length; i += 1) {
       for (let j = i + 1; j < list.length; j += 1) {
         const key = pairKey(list[i], list[j]);
@@ -93,7 +94,7 @@ export function readTaste() {
   };
   for (const entry of readList(TASTE_KEY)) {
     if (entry?.t === "wear") add(entry.ids, 1);
-    else if (entry?.t === "dislike") for (const id of entry.kept || []) add([entry.removed, id], -2);
+    else if (entry?.t === "dislike") for (const id of Array.isArray(entry.kept) ? entry.kept : []) add([entry.removed, id], -2);
   }
   for (const look of readList(LOOKS_KEY)) add(look?.itemIds, 1);
   return pairs;

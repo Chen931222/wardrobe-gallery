@@ -2215,6 +2215,17 @@ h1, h2, h3 {
   text-align: center;
 }
 .studio-daily-weather { margin: 0; font-size: 13px; color: var(--ink); letter-spacing: .03em; }
+/* 天氣資料出處(CC BY 4.0 要的顯名):跟那一行同字級、淡一階,底線細 */
+.weather-credit {
+  color: var(--muted);
+  text-transform: none;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line);
+  white-space: nowrap;
+}
+.weather-credit:hover { color: var(--ink); }
 /* 理由一句一行(舊版全「·」串成一坨,手機七行擠一起難讀) */
 .studio-daily-reasons {
   list-style: none;
@@ -3852,3 +3863,27 @@ h1, h2, h3 {
   pointer-events: none;
 }
 
+
+/* 出錯畫面(ErrorBoundary,2026-10-26):整頁白的替代。跟入口同一張紙,一個標誌、一句實話、兩個出口 */
+.crash {
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: clamp(48px, 14vh, 140px) 20px 64px;
+  color: var(--body);
+}
+.crash .crash-logo { width: 180px; margin: 0 0 40px; }
+.crash h1 { margin: 0 0 12px; font-family: var(--font-body); font-size: 26px; font-weight: 500; color: var(--ink); letter-spacing: .02em; }
+.crash p { margin: 0 0 28px; font-size: 16px; line-height: 1.8; text-wrap: pretty; }
+.crash-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
+.crash-reload {
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  padding: 10px 22px;
+  font: inherit;
+  font-size: 15px;
+  letter-spacing: .06em;
+  cursor: pointer;
+}
+.crash-reload:hover { opacity: .85; }
+.crash-reload:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }

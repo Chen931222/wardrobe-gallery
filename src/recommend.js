@@ -962,8 +962,11 @@ const TEE_SHORT = /(白|黑|灰|藍|綠|紅|素|短|長|米|厚|薄)\s?t(?![a-z�
 const REROLL_RE = /(再|另|換|下).{0,3}套|不要這套|這套不|換別的|別的|還有嗎/;
 
 /** 把一句話分成幾種請求:換單品 / 脫一件 / 整套(場合) / 微調 / 留著 / 復原 / 聽不懂。 */
+// 一句指令最多讀前 200 字:貼一整篇進來,一串正則掃下去主執行緒會卡兩秒多(2026-10-26 破壞測試,2000 字 2.3 秒)
+const MAX_REQUEST = 200;
+
 export function parseRequest(text) {
-  const raw = (text || "").trim();
+  const raw = String(text || "").slice(0, MAX_REQUEST).trim();
   if (!raw) return null;
   const intent = parseIntent(raw);
   const exclusions = parseExclusions(raw);

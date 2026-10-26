@@ -381,6 +381,9 @@ export function Welcome({ demoItems, onAdd, onDemo, onImportFile, trashCount = 0
         <a href="/privacy.html">隱私與使用說明</a>
         <span aria-hidden="true"> · </span>
         <Feedback where="歡迎" label="意見回饋" />
+        <span aria-hidden="true"> · </span>
+        {/* 授權聲明和原始碼(2026-10-26):AGPL 要讓用的人拿得到原始碼,MIT、OFL 要附聲明;入口的天氣也在這頁寫出處 */}
+        <a href="/licenses.html">授權與原始碼</a>
       </footer>
     </section>
   );

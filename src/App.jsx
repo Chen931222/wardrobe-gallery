@@ -26,6 +26,7 @@ import { useIndexIndicator } from "./useIndexIndicator.js";
 import { hasUnseenUpdates } from "./updates.js";
 import { demoCloset } from "./demoCloset.js";
 import { PART_GROUPS, PART_ORDER, PARTS } from "./parts.js";
+import { cleanEdits, isPart } from "./cleanFields.js";
 import { FAVORITES_KEY, readFavorites, toggleFavorite } from "./favorites.js";
 import { useFullImage } from "./useFullImage.js";
 import { brandOf, brandSuggestions, canonicalBrand } from "./brands.js";
@@ -185,7 +186,8 @@ const TYPE_ORDER = Object.fromEntries(TYPES.slice(1).map((type, index) => [type.
 
 function readEdits() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    // JSON 合法但形狀不對(null、tags 是數字、name 是物件)也要擋:不然整頁白(2026-10-26 破壞測試)
+    return cleanEdits(JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"));
   } catch {
     return {};
   }
@@ -1534,7 +1536,11 @@ export function App() {
       return override ? { ...item, image: override.image, thumbnail: override.thumbnail || override.image, fullImageId: override.fullImageId, overridden: true } : item;
     });
     const mine = localAll.filter((record) => !record.overrideFor);
-    const withEdits = (item) => ({ ...item, ...(edits[item.id] || {}) });
+    // 編輯紀錄裡不認得的分類(以後加了新分類、這台還是舊版)不套用,也不刪:刪了會寫回去、同步到每一台
+    const withEdits = (item) => {
+      const { part, ...patch } = edits[item.id] || {};
+      return { ...item, ...patch, ...(isPart(part) ? { part } : {}) };
+    };
     // 垃圾桶:自己加的標了 trashedAt、站主衣櫃的在隱藏名單裡;都不出現在衣櫃,另外列
     const merged = [...servedList, ...mine.filter((item) => !item.trashedAt)].filter((item) => !deleted.has(item.id));
     setItems(merged.map(withEdits));

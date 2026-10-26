@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sparkle, X } from "@phosphor-icons/react";
 import { fetchWeather, readWearLog, recommendOutfit } from "./recommend.js";
-import { CitySelect, useCity } from "./CitySelect.jsx";
+import { CitySelect, useCity, WeatherCredit } from "./CitySelect.jsx";
 import { readTaste } from "./taste.js";
 import { Logo } from "./Brand.jsx";
 
@@ -443,7 +443,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
             {dailyOutfit && (
               <>
                 <p className="landing-daily-weather">
-                  <CitySelect /> {daily.weather.temp}° · 體感 {daily.weather.feelsLike}° · 降雨 {daily.weather.rainProb}%
+                  <CitySelect /> {daily.weather.temp}° · 體感 {daily.weather.feelsLike}° · 降雨 {daily.weather.rainProb}% <WeatherCredit />
                 </p>
                 <h2>今日推薦</h2>
                 <ul className="landing-daily-list">
@@ -507,7 +507,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
           {dailyOutfit && (
             <>
               <p className="landing-daily-weather">
-                <CitySelect /> {daily.weather.temp}° · 體感 {daily.weather.feelsLike}° · 降雨 {daily.weather.rainProb}%
+                <CitySelect /> {daily.weather.temp}° · 體感 {daily.weather.feelsLike}° · 降雨 {daily.weather.rainProb}% <WeatherCredit />
               </p>
               <p className="landing-strip-head">今日推薦</p>
               <ul className="landing-strip-pieces">

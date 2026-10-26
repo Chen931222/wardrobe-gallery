@@ -7,6 +7,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node tools/build-licenses.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "check": "npm run build"

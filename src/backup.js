@@ -7,6 +7,7 @@
 import { dumpLocalRecords, putLocalRecord } from "./localWardrobe.js";
 import { createZip, isZip, readZip } from "./zip.js";
 import { markBackedUp } from "./keepSafe.js";
+import { isObject } from "./cleanFields.js";
 
 const FORMAT = "open-wardrobe-backup";
 const LS_PREFIX = "open-wardrobe-";
@@ -144,11 +145,15 @@ export async function restoreBackup(backup, files = null) {
       if (key.startsWith(LS_PREFIX) && !key.startsWith(SYNC_PREFIX) && !DEVICE_ONLY.has(key) && typeof value === "string") localStorage.setItem(key, value);
     }
   }
-  for (const item of backup.items || []) {
+  // 備份檔是別人也傳得過來的檔案(2026-10-26 破壞測試:tags 是數字、name 是物件的檔,匯入後整頁白、重新整理也白):
+  // 這裡只擋 id 不是字的(讀不到也刪不掉);欄位照原樣寫,畫面讀的時候才整理(loadLocalItems、readEdits、readLooks、readFits),
+  // 不然整理過的值會被永久寫回、再同步到每一台(驗收:站主換過圖的紀錄被補上 name、part)
+  for (const item of Array.isArray(backup.items) ? backup.items : []) {
+    if (!isObject(item) || typeof item.id !== "string" || !item.id) continue;
     const { blobDataUrl, imageFile, ...rest } = item;
     let blob = null;
-    if (imageFile && files?.has(imageFile)) blob = new Blob([files.get(imageFile)], { type: "image/png" });
-    else if (blobDataUrl) blob = await (await fetch(blobDataUrl)).blob();   // 舊的 .json 備份
+    if (typeof imageFile === "string" && files?.has(imageFile)) blob = new Blob([files.get(imageFile)], { type: "image/png" });
+    else if (typeof blobDataUrl === "string" && blobDataUrl.startsWith("data:")) blob = await (await fetch(blobDataUrl)).blob();   // 舊的 .json 備份
     if (!blob) continue;
     await putLocalRecord({ ...rest, blob });
   }

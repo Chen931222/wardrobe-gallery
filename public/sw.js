@@ -6,7 +6,7 @@
    ② /data/ 的衣服圖:先給存著的那張,背景再問一次有沒有換過(下次打開才看得到新的)
    ③ 開頁面:照舊先問網路,拿到最新版;2.5 秒還沒回(訊號差)先給上次存的那份,網路回來了背景更新
    存的東西都有上限,超過從最舊的丟。 */
-const SHELL_CACHE = "open-wardrobe-shell-v1";
+const SHELL_CACHE = "open-wardrobe-shell-v2";   // v2(2026-10-26):v1 可能把隱私頁存成了首頁,換名字整份丟掉重存
 const ASSET_CACHE = "open-wardrobe-assets-v1";
 const IMAGE_CACHE = "wardrobe-images-v1";
 const ACTIVE_CACHES = new Set([SHELL_CACHE, ASSET_CACHE, IMAGE_CACHE]);
@@ -82,6 +82,10 @@ self.addEventListener("fetch", (event) => {
     staleWhileRevalidate(event, IMAGE_CACHE, MAX_IMAGE_ENTRIES, isImage);
     return;
   }
+
+  // 隱私、授權這幾頁是另外的 .html:照一般網頁讓瀏覽器自己載,不能存成首頁那份
+  // (2026-10-26 驗收:看過授權頁、網路慢時打開首頁,出來的是授權頁)
+  if (request.mode === "navigate" && url.pathname.endsWith(".html") && url.pathname !== "/index.html") return;
 
   if (request.mode === "navigate") {
     // 只有一頁(SPA):不管網址帶什麼參數,存的都是同一份 index.html

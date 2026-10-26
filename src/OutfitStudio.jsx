@@ -2,13 +2,14 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useIndexIndicator } from "./useIndexIndicator.js";
 import { ArrowCounterClockwise, ArrowsClockwise, CalendarCheck, Export, FloppyDisk, ImageSquare, Lock, LockOpen, MagnifyingGlass, Microphone, Sparkle, Trash, X } from "@phosphor-icons/react";
-import { CitySelect } from "./CitySelect.jsx";
+import { CitySelect, WeatherCredit } from "./CitySelect.jsx";
 import { adjustIntent, fetchWeather, findItemForSwap, parseRequest, randomOutfit, readWearLog, recommendOutfit, recordWear, unrecordWear } from "./recommend.js";
 import { syncCode } from "./sync.js";
 import { track } from "./analytics.js";
 import { downloadBackupZip, importBackupFile } from "./backup.js";
 import { LookCard } from "./LookCard.jsx";
 import { PART_ORDER, PARTS } from "./parts.js";
+import { isObject } from "./cleanFields.js";
 import { noteDislike, noteRecommendation, noteWear, readTaste, recoStats, unnoteWear } from "./taste.js";
 import { useFullImages } from "./useFullImage.js";
 import { DOLL, DOLL_SHAPES, DEFAULT_FIT, FIT_VERSION, MEASURED_SLOTS, SLOT_STYLE, anchorOf, cachedShape, effectiveFit, placeGarment, shapeFromImage } from "./dollLayout.js";
@@ -69,19 +70,42 @@ function toEngineLocks(locked) {
 // 衣架的分類、理由裡的名稱:跟衣櫃同一份(src/parts.js),順序也一樣
 const SLOT_LABEL = Object.fromEntries(PART_ORDER.flatMap((part) => (part === "upperbody" ? [[part, PARTS[part].label], ["shirt", "襯衫"]] : [[part, PARTS[part].label]])));
 
+/* 收藏和微調可能從備份、同步、別台舊版進來,JSON 合法但形狀不對(2026-10-26 破壞測試:[{}]、itemIds 是數字、
+   scale 塞 1e308),只檢查是不是陣列/物件的話,到畫面上才炸成整頁白。壞的那筆當沒有,其他照用 */
 function readLooks() {
   try {
     const value = JSON.parse(localStorage.getItem(LOOKS_KEY) || "[]");
-    return Array.isArray(value) ? value : [];
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter((look) => isObject(look) && Array.isArray(look.itemIds))
+      .map((look) => ({ ...look, id: String(look.id ?? ""), itemIds: look.itemIds.filter((id) => typeof id === "string") }))
+      .filter((look) => look.itemIds.length);
   } catch {
     return [];
   }
 }
 
+// 微調:不是有限數字的那欄拿掉(用預設),數字夾在不會算出天文數字的範圍(1e308 會讓畫布大到 getImageData 丟錯)。
+// 範圍放寬到遠超過畫面拉得到的:縮放存的是照當時底框換算過的值,可能超過 SCALE_MAX;層次每往前一層 +0.5,會一直往上加(驗收實測 20.5)
+const finite = (value) => typeof value === "number" && Number.isFinite(value);
+const clampTo = (value, min, max) => Math.min(max, Math.max(min, value));
+function cleanFit(fit) {
+  if (!isObject(fit)) return null;
+  const out = { ...fit };
+  for (const key of ["dx", "dy"]) if (key in out) { if (finite(out[key])) out[key] = clampTo(out[key], -400, 400); else delete out[key]; }
+  if ("scale" in out) { if (finite(out.scale) && out.scale > 0) out.scale = Math.min(out.scale, 50); else delete out.scale; }
+  if ("rot" in out) { if (finite(out.rot)) out.rot = ((out.rot % 360) + 540) % 360 - 180; else delete out.rot; }
+  if ("z" in out && out.z !== null && !(finite(out.z) && Math.abs(out.z) <= 10000)) delete out.z;
+  if ("at" in out && !(isObject(out.at) && finite(out.at.cx) && finite(out.at.cy) && finite(out.at.w)
+    && Math.abs(out.at.cx) <= DOLL.w * 5 && Math.abs(out.at.cy) <= DOLL.h * 5 && out.at.w > 0 && out.at.w <= DOLL.w * 5)) delete out.at;
+  return out;
+}
+
 function readFits() {
   try {
     const value = JSON.parse(localStorage.getItem(FIT_KEY) || "{}");
-    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    if (!isObject(value)) return {};
+    return Object.fromEntries(Object.entries(value).map(([id, fit]) => [id, cleanFit(fit)]).filter(([, fit]) => fit));
   } catch {
     return {};
   }
@@ -307,7 +331,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   const rackLineRef = useRef(null);
 
   const wardrobeByType = useMemo(() => {
-    const groups = {};
+    const groups = Object.create(null);   // 沒有原型:分類寫成 constructor 這種字也不會撞到 Object 的方法(破壞測試)
     for (const slot of Object.keys(SLOT_STYLE)) groups[slot] = [];
     for (const item of items) groups[slotOf(item)]?.push(item);
     for (const slot of Object.keys(groups)) groups[slot].sort((a, b) => Number(Boolean(b.wishlist)) - Number(Boolean(a.wishlist)));
@@ -1108,7 +1132,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       <>
         {daily.weather && (
           <p className="studio-daily-weather">
-            <CitySelect /> {daily.weather.temp}°(體感 {daily.weather.feelsLike}°)· {daily.weather.desc} · 降雨 {daily.weather.rainProb}%
+            <CitySelect /> {daily.weather.temp}°(體感 {daily.weather.feelsLike}°)· {daily.weather.desc} · 降雨 {daily.weather.rainProb}% <WeatherCredit />
           </p>
         )}
         {!!main.length && (
@@ -1347,6 +1371,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
             onBlur={blurOccasion}
             placeholder="說個場合,或要換哪一件"
             aria-label="輸入場合或指定要換的單品"
+            maxLength={200}
           />
           {/* 語音:手機拿掉(2026-10-08 本人:畫面太雜;手機鍵盤本來就有麥克風聽寫),電腦照舊 */}
           {!phone && (SpeechAPI || isIOS) && (

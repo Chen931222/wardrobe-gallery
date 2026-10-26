@@ -79,8 +79,12 @@
 - 去背模型約 100MB。手機訊號弱時第一次下載可能失敗，會提示改連 Wi-Fi。
 - 朋友的衣服沒有雲端備份。iPhone 的 Safari 約一週沒開這個網站，可能清掉資料（加到主畫面的不會）。
   靠的是備份提醒和 ZIP；同步目前只開放給站主。
-- 去背套件 `@imgly/background-removal` 是 **AGPL-3.0**。這個 repo 公開，所以目前沒有問題；
+- 去背套件 `@imgly/background-removal` 是 **AGPL-3.0**，網站整體因此依 AGPL-3.0 提供：
+  用的人要拿得到線上那一版的原始碼，所以**每次上線後要把那一版 push 上來**（`tools/export-static.mjs` 匯出時會提醒）。
   要做成不公開原始碼的收費服務，得換掉去背方案或另外取得授權。
+- 天氣用 Open-Meteo 的免費 API：資料是 CC BY 4.0（天氣那行有出處連結），**免費版只准非商業用途**，
+  開始收費或放廣告之前要換付費方案或換資料來源。
+- 網站上的授權清單 `/licenses.html` 由 `node tools/build-licenses.mjs` 從 node_modules 產生，匯出時會再產生一次。
 
 ## 跑起來
 
@@ -179,4 +183,5 @@ git grep -l "\[本 fork 修改\]"    # 7 個：上游檔案，改動寫在該行
 移除的 11 個：`src/import-flow.jsx`、`src/import-flow.css`、`scripts/import-job-api.mjs`、
 `.env.example`、`.agents/skills/` 底下 5 個、`docs/screenshots/` 底下 2 個。
 
-自己寫的部分授權同為 MIT，見 [LICENSE](LICENSE)；依賴套件各自的授權見上面「限制」。
+自己寫的部分授權同為 MIT，見 [LICENSE](LICENSE)。網站整體因為含 AGPL-3.0 的去背套件，依 AGPL-3.0 提供；
+每個套件的授權見上面「限制」和網站上的 `/licenses.html`。
