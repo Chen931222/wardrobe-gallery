@@ -3101,21 +3101,21 @@ h1, h2, h3 {
   --media-w: min(420px, 36vh, 34vw);
   display: grid;
   grid-template-columns: minmax(0, 32rem) var(--media-w);
-  /* 示範從標題那一列開始(2026-10-24 本人「右邊的圖片放太上面了」):以前從標誌那列開始,是因為直式標誌 153 高、
-     標題被推得太低,人台加三條理由在 1280×800 會出第一屏;標誌換成橫的(53 高)之後放得下 */
-  grid-template-areas: "logo ." "lede look" "start look" "copy look" "story story" "foot foot";
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;   /* 右欄人台比左欄高時,多出來的高度給「先講清楚的事」那列,標題和按鈕不會被撐開 */
+  /* 左邊一整組(字標、標題、按鈕、小字)對齊右邊的人台,上下置中(2026-10-26 本人「Logo 跟字對齊右邊的圖片,現在太偏左上角」;
+     以前字標在最上面、人台從標題那列開始,左邊整組擠在左上角,人台底下一大片空)。
+     人台跨過左邊每一列;左邊那組上下各一列 1fr 把它夾在中間。最後那列 6.5rem 是人台底下理由的高度(約 100px):
+     置中對的是人台那一格,不是人台加理由,不然左邊那組會偏低半個理由。
+     人台的位置不動(2026-10-24 本人「右邊的圖片放太上面了」):上面留 8vh,跟以前從標題那列開始差不多高 */
+  grid-template-areas: ". look" "logo look" "lede look" "start look" "copy look" ". look" ". look" "story story" "foot foot";
+  grid-template-rows: 1fr auto auto auto auto 1fr 6.5rem auto auto;
+  padding-top: clamp(24px, 8vh, 96px);
   justify-content: space-between;
   column-gap: clamp(48px, 7vw, 96px);
   align-items: start;
   width: min(1200px, 100% - 112px);   /* 2026-10-24 960→1200:1920 寬時左右各空 480,一半畫面是空的(本人「太空白」) */
   margin: 0 auto 56px;
 }
-/* 矮的筆電(寬 761–1319、高 ≤720):人台從標題那列開始,三條理由會掉出第一屏(1280×650 掉 70px,驗收抓到)。
-   這種畫面照舊從標誌那列開始排,先保住「看得到為什麼」;≥1320 理由排在人台旁邊,不受影響 */
-@media (min-width: 761px) and (max-width: 1319px) and (max-height: 720px) {
-  .welcome { grid-template-areas: "logo look" "lede look" "start look" "copy look" "story story" "foot foot"; }
-}
+/* 矮的筆電(1280×650 這種)以前另有一段讓人台從字標那列開始;2026-10-26 人台改成從最上面開始、上面的空白照視窗高度算,那段拿掉 */
 .welcome-logo { grid-area: logo; }
 .welcome-lede { grid-area: lede; }
 .welcome-start { grid-area: start; }
@@ -3310,7 +3310,7 @@ h1, h2, h3 {
 @media (max-width: 760px) {
   /* 手機:示範穿搭緊接在標題下面,再來才是按鈕(2026-10-24 本人「看起來只是文字排版」:原本第一屏是五塊字,人台到 552 才開始、下半截切掉)。
      LINE／IG 裡開的照舊先放按鈕那塊:「用瀏覽器開啟」要在第一屏 */
-  .welcome { grid-template-columns: minmax(0, 1fr); grid-template-areas: "logo" "lede" "look" "start" "copy" "story" "foot"; width: auto; margin: 0 18px 40px; }
+  .welcome { grid-template-columns: minmax(0, 1fr); grid-template-areas: "logo" "lede" "look" "start" "copy" "story" "foot"; grid-template-rows: none; width: auto; margin: 0 18px 40px; padding-top: 0; }
   .welcome.is-inapp { grid-template-areas: "logo" "lede" "start" "look" "copy" "story" "foot"; }
   /* 手機:一章一章疊:編號 → 字 → 影片(寬 220 置中)→ 理由／前後對照;粗線和米紙帶照舊 */
   .welcome-story { margin-top: 48px; }
