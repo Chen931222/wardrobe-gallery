@@ -269,7 +269,8 @@ export function Welcome({ demoItems, onAdd, onDemo, onImportFile, trashCount = 0
             iPhone 建議先從分享鈕「加入主畫面」，再從主畫面打開來加。只放在 Safari 久沒開，資料可能被系統清掉。
           </p>
         )}
-        <p className="welcome-free">不用註冊，衣櫃存在這個瀏覽器裡。</p>
+        {/* 2026-10-26 本人要的:把「只在這台」講成交易,不是缺點。入口只留一句＋連結,四句的全文在隱私說明「儲存與備份」(入口第一屏放不下) */}
+        <p className="welcome-free">不用註冊，衣櫃存在這個瀏覽器裡；換手機它不會自己跟過去，<a href="/privacy.html#storage">怎麼帶走</a>。</p>
       </div>
 
       {!demoFirst && demo}

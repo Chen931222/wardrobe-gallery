@@ -3245,6 +3245,7 @@ h1, h2, h3 {
 }
 /* 按鈕下一行小字(2026-10-24 取捨):入口只留「不用註冊」這件跟開始有關的事,其他說明搬去隱私說明 */
 .welcome .welcome-free { margin-top: 14px; font-size: 13px; color: var(--muted); }
+.welcome .welcome-free a { color: var(--accent); text-underline-offset: 3px; }   /* 「怎麼帶走」→ 隱私說明的儲存與備份(2026-10-26) */
 .welcome .welcome-tip { margin-top: 20px; padding-left: 12px; border-left: 1px solid var(--line); font-size: 13px; color: var(--muted); }
 /* 用過的人的入口(備份、垃圾桶):不畫細線,不然像頁尾,訪客以為整頁結束了(2026-10-24 試用者)。頁尾在最下面 .welcome-foot,
    更新紀錄、隱私說明、意見回饋三個連結 */
