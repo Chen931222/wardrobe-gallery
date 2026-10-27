@@ -1791,6 +1791,16 @@ h1, h2, h3 {
 .eraser-sizes button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 .eraser-sizes button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .eraser-tools .secondary-button:disabled { opacity: .45; cursor: default; }
+/* 點一下修正(CutoutPicker.jsx):跟擦除共用版面;點的不是塗的,游標用十字。
+   擦除要整張畫布接手指(touch-action: none),這裡只收點一下,捲動、縮放照常交給瀏覽器 */
+.picker-canvas { cursor: crosshair; touch-action: manipulation; }
+.picker-history { display: inline-flex; gap: 8px; }
+.eraser-sizes button:disabled { opacity: .45; cursor: default; }
+.picker-busy {
+  position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
+  padding: 4px 10px; background: var(--paper); border: 1px solid var(--line);
+  color: var(--ink); font-size: 13px; line-height: 1.4;
+}
 
 /* ===== 想買 ===== */
 .add-owned { display: flex; flex-wrap: wrap; column-gap: 18px; row-gap: 0; margin: 0; padding: 0; border: 0; font-size: 14px; color: var(--ink); }   /* 三個選項(多了夢想),窄螢幕可以換行 */

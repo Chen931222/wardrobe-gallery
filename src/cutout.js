@@ -1,74 +1,55 @@
 // [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 /* 去背:載模型、排隊、在哪裡算。2026-10-07 從 AddGarment.jsx 搬出來。
  *
- * 搬出來的原因(2026-10-07 本人回報「在等待去背時不能寫入細節,例如產品價格」):表單在等去背時本來就開著,
- * 但去背套件只有 WebGPU 能用時才會把運算丟到 Worker(它的 proxyToWorker 只認 WebGPU),iPhone 走 CPU,
- * 推論直接在主執行緒跑 —— 那 10–20 秒整頁凍住,欄位看得到卻打不了字、鍵盤也叫不出來。
- * 現在整個去背在自己的 Worker(cutoutWorker.js)裡算,主執行緒只收進度和結果。
- * 舊 Safari 開不了 module Worker、或 Worker 裡沒有 OffscreenCanvas 2D(Safari 16.4 以前)的,照舊在主執行緒算。 */
+ * 2026-10-27 換引擎:@imgly 的 isnet(AGPL、第一次下載約 100MB、訓練資料說不清能不能商用)
+ * → Google MediaPipe 的 MagicTouch v2(model card 寫 Apache-2.0;模型 30.5MB＋運算程式 13MB,都放在這個網站的 /cutout/)。
+ * 實測 20 張站主照片(work/cutout-compare-2026-10-27/):點框的正中央,多數一次就乾淨;成雙的鞋只選到一隻、
+ * 沙發床單偶爾滲進來,點一下「這也是」「這不是」就修好(正、負筆觸;舊版 v1 點背景再扣掉會連衣服一起扣光,不用)。
+ * 怎麼算見 cutoutEngine.js。
+ *
+ * 在 Worker 裡算(2026-10-07 本人回報「在等待去背時不能寫入細節」:主執行緒算的那幾秒整頁凍住,欄位打不了字);
+ * 舊 Safari 開不了 module Worker、或 Worker 裡沒有 OffscreenCanvas、載不了 MediaPipe 的,照舊在主執行緒算。 */
+import { MODEL_BYTES, WASM_BYTES } from "./cutoutAssets.js";
 
-/* 去背第一次要下載約 100MB(模型 isnet_fp16 88MB＋運算程式 12MB;staticimgly.com 的 resources.json,2026-10-25。沒設 device,套件預設 cpu,不抓 WebGPU 版)。
-   動態 import / Worker 讓它不進主 bundle,
-   沒按「新增」的人完全不會付這個成本。 */
-import { meterModelDownload, resetModelMeter } from "./cutoutDownload.js";
-
-const MODEL_READY_KEY = "open-wardrobe-bgmodel-v1";   // 這台成功去背過一次 = 模型已經在瀏覽器快取裡
+const MODEL_READY_KEY = "open-wardrobe-bgmodel-v2";   // v2(2026-10-27):換了模型,舊的「下載過」不算數
 export const modelReady = () => { try { return localStorage.getItem(MODEL_READY_KEY) === "1"; } catch { return false; } };
 
-/* 進度回呼要是同一個函式:去背套件把設定(連 progress 一起)照第一次呼叫的樣子快取起來,之後每次都叫第一次那個。
-   每次給新的回呼的話,第二件開始進度文字不動、下載看門狗也收不到進度,算到一半就被當成卡住(2026-10-03 審查抓到)。
-   所以回呼固定一個,真正要通知誰放在 currentProgress。Worker 那邊也是固定一個,進度用訊息傳回來再交給這裡。 */
-let currentProgress = null;
-let downloading = false;
-let metered = false;   // 收到過實際位元組的進度(cutoutDownload.js):套件自己那個整段才跳的百分比就不用了
 const mb = (bytes) => Math.round(bytes / 1e6);
-// 字一秒最多換一次(進度每 250ms 來一筆;狀態行是 aria-live,一直換讀屏會一直念,驗收);中間那幾筆照樣讓看門狗重新計時
+export const MODEL_MB = mb(MODEL_BYTES + WASM_BYTES);   // 新增視窗的提示「第一次要下載約 N MB」
+
+/* 進度:currentProgress 是正在等的那一件的回呼 (文字, 是否在下載)。字一秒最多換一次
+   (狀態行是 aria-live,一直換讀屏會一直念);AddGarment 的看門狗只看「是否在下載」重新計時 */
+let currentProgress = null;
 let shownText = "";
 let shownAt = 0;
-const onModelProgress = (key, current, total) => {
-  if (key === "download") {
-    metered = true;
-    if (!currentProgress || !total) return;
-    downloading = true;
-    if (current >= total) {
-      // 到齊了、還沒開始算(手機要等運算環境建好):先講下一步,看門狗也停(第二個參數 false)
-      currentProgress("模型下載好了,準備去背…", false);
-      return;
-    }
-    // 「已經下載過」的記號不可靠:Safari 會把這麼大的快取清掉,隔天又要重抓。下載中就講明下載了多少、建議 Wi-Fi
-    const now = Date.now();
-    if (!shownText || now - shownAt >= 1000) {
-      shownText = `下載去背模型 ${Math.floor((current / total) * 100)}%(${mb(current)} / ${mb(total)} MB,建議用 Wi-\u2060Fi)`;   // \u2060 接在「Wi-」後面:「Wi-」「Fi」不要拆成兩行(手機截圖)
-      shownAt = now;
-    }
-    currentProgress(shownText, true);
-    return;
-  }
+const reportDownload = (loaded, total) => {
   if (!currentProgress) return;
-  if (key === "retry") {   // 對比太低,拉開再算一次(cutoutFix.js 的 retryLowContrast)
-    currentProgress("衣服跟背景太像,拉高對比再算一次…", false);
-    return;
+  if (loaded >= total) { currentProgress("模型下載好了,去背中…", false); return; }
+  const now = Date.now();
+  if (!shownText || now - shownAt >= 1000) {
+    shownText = `下載去背模型 ${Math.floor((loaded / total) * 100)}%(${mb(loaded)} / ${mb(total)} MB,建議用 Wi-⁠Fi)`;   // ⁠:「Wi-」「Fi」不要拆成兩行
+    shownAt = now;
   }
-  if (key.startsWith("fetch")) {
-    if (metered) return;
-    // 退路(包不了 fetch 的瀏覽器):照套件的進度,一份資源的分段到齊一段跳一次
-    if (current < total) {
-      downloading = true;
-      currentProgress(`下載去背模型 ${Math.round((current / total) * 100)}%(約 100MB,建議用 Wi-Fi)`, true);
-    }
-    return;
-  }
-  // 開始算了(compute:decode → inference → mask → encode 會連著來好幾次)。下載完之後要算 7–9 秒,先講清楚接下來在做什麼(審查 F33);
-  // downloading 在 removeBg 開頭歸零,下一件不會再說「下載好了」
-  currentProgress(downloading ? "模型下載好了,開始去背,約 10–20 秒…" : "去背中,約 10–20 秒…", false);
+  currentProgress(shownText, true);
 };
 
-/* 去背套件把「初始化」照設定內容記起來,失敗的也記:模型下載斷過一次,同一頁之後怎麼按都立刻失敗,
-   網路恢復了也一樣,只能重新整理(2026-10-05 實測;本人 iPhone 4G 去背一直失敗多半就是這個)。
-   它記的鍵是設定轉成的字串,所以失敗後把設定改一個不影響結果的小數(PNG 不看 quality),下一次就會重新初始化。 */
-let modelAttempt = 0;
-const quality = () => 0.9 + modelAttempt * 1e-6;
-const modelConfig = () => ({ output: { format: "image/png", quality: quality() }, progress: onModelProgress });
+// 模型載好了(Worker 或主執行緒):看門狗停掉、狀態改「去背中」。點選修正時沒有人在等(currentProgress 是空的),不報
+const reportLoaded = () => { currentProgress?.("去背中…", false); };
+
+/** 筆觸:kind "add" = 這也是衣服(正)、"remove" = 這不是(負);x、y 是照片的比例 0–1 */
+export const strokeAt = (kind, x, y) => ({ brushMode: kind === "remove" ? 2 : 1, point: [{ x, y }], isCompleted: true });
+export const CENTER = strokeAt("add", 0.5, 0.5);
+
+/* ---------- 主執行緒的退路 ---------- */
+
+let engine = null;
+const mainEngine = async () => {
+  if (!engine) {
+    engine = await import("./cutoutEngine.js");
+    engine.onDownload(reportDownload);
+  }
+  return engine;
+};
 
 /* ---------- Worker ---------- */
 
@@ -92,7 +73,7 @@ function dropWorker(reason) {
   for (const job of waiting) job.reject(new WorkerUnavailable(reason));
 }
 
-function inWorker(type, payload = {}) {
+function inWorker(payload) {
   if (!worker) {
     try {
       worker = new Worker(new URL("./cutoutWorker.js", import.meta.url), { type: "module" });
@@ -101,12 +82,13 @@ function inWorker(type, payload = {}) {
       return Promise.reject(new WorkerUnavailable("Worker 開不起來"));
     }
     worker.onmessage = ({ data }) => {
-      if (data.type === "progress") { onModelProgress(data.key, data.current, data.total); return; }
+      if (data.type === "progress") { reportDownload(data.loaded, data.total); return; }
+      if (data.type === "loaded") { reportLoaded(); return; }
       const job = jobs.get(data.id);
       if (!job) return;
       jobs.delete(data.id);
       if (data.type === "done") job.resolve(data.blob);
-      else if (data.unsupported) { job.reject(new WorkerUnavailable(data.message)); dropWorker(data.message); }   // Worker 裡缺東西(畫布之類):這次和之後都回主執行緒
+      else if (data.unsupported) { job.reject(new WorkerUnavailable(data.message)); dropWorker(data.message); }   // Worker 裡缺東西:這次和之後都回主執行緒
       else job.reject(new Error(data.message));
     };
     // 連 Worker 都起不來(舊 Safari 不支援 module Worker 之類):之後都回主執行緒算
@@ -115,17 +97,27 @@ function inWorker(type, payload = {}) {
   const id = ++jobSeq;
   return new Promise((resolve, reject) => {
     jobs.set(id, { resolve, reject });
-    worker.postMessage({ id, type, quality: quality(), ...payload });
+    worker.postMessage({ id, ...payload });
   });
 }
 
+/** Worker 能用就在 Worker 算,不能用(這次或之前)就在主執行緒算 */
+async function run(payload, onMain) {
+  if (!workerBroken) {
+    try {
+      return await inWorker(payload);
+    } catch (error) {
+      if (!(error instanceof WorkerUnavailable)) throw error;
+    }
+  }
+  return onMain();
+}
+
 /** 下載停住、看門狗把去背停掉之後叫(AddGarment):把 Worker 整個砍掉,正在等它的工作全部回「停住了」。
- *  不砍的話,那個卡住的分段 fetch 還掛在 Worker 裡,去背一次只算一張(previousRun),再按「再試一次」就卡在
- *  「上一張還在算,等它結束…」直到那段自己逾時(2026-10-25 驗收)。下一次會開新的 Worker、重新初始化;
- *  已經下載完的分段在瀏覽器快取裡,不用重抓。主執行緒算的那條退路停不下來,照舊只能等。 */
+ *  不砍的話,卡住的下載還掛在 Worker 裡,去背一次只算一張(previousRun),再按「再試一次」就卡在
+ *  「上一張還在算,等它結束…」(2026-10-25 驗收)。下一次開新的 Worker、從頭載;已經下載完的在瀏覽器快取裡。 */
 export function abandonCutout() {
-  modelAttempt += 1;
-  resetModelMeter();
+  engine?.abandonLoad();
   if (!worker) return;
   const waiting = [...jobs.values()];
   jobs.clear();
@@ -140,24 +132,34 @@ export function preloadsEarly() {
   return !(connection?.saveData || /2g/.test(connection?.effectiveType || ""));
 }
 
-/** 一打開新增視窗就在背景先載模型(2026-10-05 本人要的:朋友第一次用,選照片、框衣服的這段時間就載完了),
- *  選好照片時再叫一次(前一次斷了會重來,載好了的話什麼都不做)。開了省流量模式、或網路是 2G 等級就不先載。 */
+/** 一打開新增視窗就在背景先載模型(2026-10-05 本人要的:選照片、框衣服的這段時間就載完了)。省流量、2G 不先載 */
 export function preloadModel() {
   if (!preloadsEarly()) return;
-  const attempt = modelAttempt;
-  const onMain = () => { meterModelDownload((loaded, total) => onModelProgress("download", loaded, total)); return import("@imgly/background-removal").then(({ preload }) => preload(modelConfig())); };
-  const run = workerBroken ? onMain() : inWorker("preload").catch((error) => {
-    if (error instanceof WorkerUnavailable) return onMain();
-    throw error;
-  });
-  run.catch(() => { if (attempt === modelAttempt) { modelAttempt += 1; resetModelMeter(); } });   // 主執行緒那份的已下載量;Worker 那份看 quality 換了自己清
+  run({ type: "preload" }, async () => (await mainEngine()).loadSegmenter()).catch(() => { /* 真的去背時會再試、再報錯 */ });
 }
 
-// 一次只算一張:取消只是不看結果,模型那邊停不下來;馬上再按一次去背,兩張一起算,iPad 的記憶體會撐不住
+/* ---------- 去背與點選修正 ---------- */
+
+// 每張送去背的照片一個編號:傳進 Worker 的 Blob 每次都是新複製的,Worker 靠編號認出是同一張、不用重新解碼
+const keys = new WeakMap();
+let keySeq = 0;
+const keyOf = (file) => { if (!keys.has(file)) keys.set(file, ++keySeq); return keys.get(file); };
+
+const select = (file, strokes) => {
+  const key = keyOf(file);
+  return run({ type: "cut", file, key, strokes }, async () => {
+    const main = await mainEngine();
+    await main.loadSegmenter();
+    reportLoaded();
+    return main.segment(file, strokes, key);
+  });
+};
+
+// 一次只算一張:馬上再按一次去背,兩張一起算,iPad 的記憶體會撐不住
 let previousRun = Promise.resolve();
 let pending = 0;   // 排隊中加上正在算的張數
 
-/** 去背,回傳模型給的 PNG Blob(還沒補洞,補洞用 fixCutout)。@param onProgress (文字, 是否在下載) */
+/** 去背,回傳 PNG Blob(還沒補洞,補洞用 fixCutout)。點框的正中央。@param onProgress (文字, 是否在下載) */
 export async function removeBg(file, onProgress) {
   const waitFor = previousRun;
   let release;
@@ -166,32 +168,14 @@ export async function removeBg(file, onProgress) {
   try {
     if (pending > 1) onProgress("上一張還在算,等它結束…", false);
     await waitFor;
-    downloading = false;
     shownText = "";
     currentProgress = onProgress;
-    const attempt = modelAttempt;
-    try {
-      let result;
-      if (!workerBroken) {
-        try {
-          result = await inWorker("cut", { file });
-        } catch (error) {
-          if (!(error instanceof WorkerUnavailable)) throw error;
-        }
-      }
-      if (!result) {
-        meterModelDownload((loaded, total) => onModelProgress("download", loaded, total));   // 主執行緒算的也照實際位元組報進度
-        const { removeBackground } = await import("@imgly/background-removal");
-        result = await removeBackground(file, modelConfig());
-        const { retryLowContrast } = await import("./cutoutFix.js");
-        result = await retryLowContrast(file, result, (leveled) => { onModelProgress("retry", 0, 1); return removeBackground(leveled, modelConfig()); });
-      }
-      try { localStorage.setItem(MODEL_READY_KEY, "1"); } catch { /* 存不了就每次都顯示第一次的提示 */ }
-      return result;
-    } catch (error) {
-      if (attempt === modelAttempt) { modelAttempt += 1; resetModelMeter(); }   // 下一次重新初始化,不沿用失敗的那次;已下載量從 0 算
-      throw error;
-    }
+    // 「是否在下載」給 true:模型還沒載好前看門狗照樣計時(給 false 會把它停掉,下載一開始就卡住的話永遠停在這句,
+    // 2026-10-27 審查抓到);載好了 reportLoaded 才停
+    onProgress("準備去背…", true);
+    const result = await select(file, [CENTER]);
+    try { localStorage.setItem(MODEL_READY_KEY, "1"); } catch { /* 存不了就每次都顯示第一次的提示 */ }
+    return result;
   } finally {
     if (currentProgress === onProgress) currentProgress = null;
     pending -= 1;
@@ -199,18 +183,15 @@ export async function removeBg(file, onProgress) {
   }
 }
 
+/** 點選修正:同一張照片(file 是送去背的那張)照 strokes 重新選。回傳新的 PNG Blob */
+export const refineCutout = (file, strokes) => select(file, strokes);
+
 /** 白衣服白底被模型吃掉的補回來(規則見 cutoutFix.js)。input 是送去背的那張、cut 是 removeBg 的結果。
- *  strong = 人按了「補滿」。也在 Worker 裡算(大圖要掃好幾遍),不行就在這裡算。 */
-export async function fixCutout(input, cut, { part = "", strong = false } = {}) {
-  if (!workerBroken) {
-    try {
-      return await inWorker("fix", { file: input, cut, part, strong });
-    } catch (error) {
-      if (!(error instanceof WorkerUnavailable)) throw error;
-    }
-  }
-  return (await import("./cutoutFix.js")).solidifyCutout(input, cut, { part, strong });
-}
+ *  strong = 人按了「補滿」。 */
+export const fixCutout = (input, cut, { part = "", strong = false } = {}) => run(
+  { type: "fix", file: input, cut, part, strong },
+  async () => (await import("./cutoutFix.js")).solidifyCutout(input, cut, { part, strong }),
+);
 
 /** 測試用:現在是不是在 Worker 裡算 */
 export const cutoutInWorker = () => !workerBroken;

@@ -76,12 +76,15 @@
 
 ## 限制
 
-- 去背模型約 100MB。手機訊號弱時第一次下載可能失敗，會提示改連 Wi-Fi。
+- 去背用 Google MediaPipe 的 MagicTouch v2（model card 寫 Apache-2.0），第一次要下載約 44MB（模型 30.5MB＋運算程式 13MB），
+  從這個網站自己的 `/cutout/` 下載，不連到別人的服務。這兩個檔不進 git：`node tools/prepare-cutout.mjs` 會下載固定版本（下載時核對大小和 sha256，之後只比大小）
+  （`npm run dev`、`npm run build` 之前自動跑）。手機訊號弱時第一次下載可能失敗，會提示改連 Wi-Fi。
+  去背會點框的正中央；成雙的鞋只選到一隻、床單沙發被留下來時，用「點一下修」加進來或拿掉。
 - 朋友的衣服沒有雲端備份。iPhone 的 Safari 約一週沒開這個網站，可能清掉資料（加到主畫面的不會）。
   靠的是備份提醒和 ZIP；同步目前只開放給站主。
-- 去背套件 `@imgly/background-removal` 是 **AGPL-3.0**，網站整體因此依 AGPL-3.0 提供：
-  用的人要拿得到線上那一版的原始碼，所以**每次上線後要把那一版 push 上來**（`tools/export-static.mjs` 匯出時會提醒）。
-  要做成不公開原始碼的收費服務，得換掉去背方案或另外取得授權。
+- 2026-10-27 以前去背用 `@imgly/background-removal`（**AGPL-3.0**），那些版本整體依 AGPL-3.0 提供，原始碼在這個 repo 的歷史裡。
+  換成 MediaPipe 之後送到瀏覽器的程式不再含 AGPL；每次上線後照樣把那一版 push 上來，授權頁寫的原始碼才跟線上一致
+  （`tools/export-static.mjs` 匯出時會提醒）。本機工具（`tools/` 底下的批次去背）還用 `@imgly/background-removal-node`，不上線。
 - 天氣用 Open-Meteo 的免費 API：資料是 CC BY 4.0（天氣那行有出處連結），**免費版只准非商業用途**，
   開始收費或放廣告之前要換付費方案或換資料來源。
 - 網站上的授權清單 `/licenses.html` 由 `node tools/build-licenses.mjs` 從 node_modules 產生，匯出時會再產生一次。
@@ -183,5 +186,5 @@ git grep -l "\[本 fork 修改\]"    # 7 個：上游檔案，改動寫在該行
 移除的 11 個：`src/import-flow.jsx`、`src/import-flow.css`、`scripts/import-job-api.mjs`、
 `.env.example`、`.agents/skills/` 底下 5 個、`docs/screenshots/` 底下 2 個。
 
-自己寫的部分授權同為 MIT，見 [LICENSE](LICENSE)。網站整體因為含 AGPL-3.0 的去背套件，依 AGPL-3.0 提供；
+自己寫的部分授權同為 MIT，見 [LICENSE](LICENSE)。2026-10-27 以前的版本因為含 AGPL-3.0 的去背套件，整體依 AGPL-3.0 提供；
 每個套件的授權見上面「限制」和網站上的 `/licenses.html`。

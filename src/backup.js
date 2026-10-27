@@ -12,10 +12,10 @@ import { isObject } from "./cleanFields.js";
 const FORMAT = "open-wardrobe-backup";
 const LS_PREFIX = "open-wardrobe-";
 const SYNC_PREFIX = "open-wardrobe-sync-";
-// 「這台的去背模型已經下載過」只對這台成立;帶到新裝置會把「第一次要下載約 100MB」的提示藏掉
+// 「這台的去背模型已經下載過」只對這台成立;帶到新裝置會把「第一次要下載約 N MB」的提示藏掉(v2 是 2026-10-27 換的新模型)
 // 「備份過沒」也只對這台成立(open-wardrobe-backup-mark-v1)
 // 站主衣櫃存在這台的那份(App.jsx 的 CLOSET_CACHE_KEY)只是快取,也不進備份
-const DEVICE_ONLY = new Set(["open-wardrobe-bgmodel-v1", "open-wardrobe-keep-hint-v1", "open-wardrobe-backup-mark-v1", "open-wardrobe-closet-cache-v1"]);
+const DEVICE_ONLY = new Set(["open-wardrobe-bgmodel-v1", "open-wardrobe-bgmodel-v2", "open-wardrobe-keep-hint-v1", "open-wardrobe-backup-mark-v1", "open-wardrobe-closet-cache-v1"]);
 const JSON_NAME = "衣櫃備份.json";
 
 /* 加密備份(2026-10-06 資安盤點:備份 ZIP 裡有每件衣服的圖和紀錄,沒加密)。可選的:一般的 ZIP 照舊,

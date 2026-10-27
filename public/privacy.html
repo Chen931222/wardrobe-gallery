@@ -17,7 +17,7 @@
       </header>
 
       <h1>隱私與使用說明</h1>
-      <p class="updated">最後更新：2026 年 10 月 26 日</p>
+      <p class="updated">最後更新：2026 年 10 月 27 日</p>
 
       <p class="lede">你加的衣服存在你自己的瀏覽器裡。沒有帳號、沒有 cookie、沒有廣告。網站只記一份不記名的使用統計；用到某些功能時會連到別人的服務，下面都寫了。</p>
 
@@ -34,7 +34,7 @@
         <h3>會連到別人的服務的時候</h3>
         <ul>
           <li><b>天氣</b>：今日推薦會向 open-meteo.com 查你選的城市的天氣，送出的是城市的經緯度。</li>
-          <li><b>去背</b>：第一次新增衣服或用「店裡比一下」時，瀏覽器會從 staticimgly.com 下載去背模型和運算程式（約 100 MB）。照片本身不會送出，去背在你的裝置上做。</li>
+          <li><b>去背</b>：第一次新增衣服或用「店裡比一下」時，瀏覽器會從這個網站下載去背模型和運算程式（約 44 MB，Google MediaPipe 的 MagicTouch）。照片本身不會送出，去背在你的裝置上做，不連到別人的服務。MediaPipe 本身會想把使用統計（不含照片）送給 Google，這個網站把它擋掉了，不送。</li>
           <li><b>貼 GU、UNIQLO 的連結</b>：品名和價錢由這個網站的伺服器代查；商品圖是你的瀏覽器直接從 gu-global.com、uniqlo.com 下載的，所以它們看得到你的網路位址。</li>
           <li><b>貼其他品牌的連結</b>：商品頁和商品圖都由這個網站的伺服器代讀，品牌那邊看到的是這個網站的伺服器。</li>
           <li><b>電腦上的語音輸入</b>：按麥克風時，語音會送到瀏覽器內建的辨識服務（Chrome 是 Google、Safari 是 Apple）。手機版沒有這顆按鈕。</li>
@@ -108,7 +108,7 @@
 
       <footer class="foot">
         <p><b>重要修訂</b>：2026 年 10 月 24 日。舊版寫「開了同步，雲端也只存加密過的一份」，其實同步沒有開放給訪客，這段拿掉了；舊版寫貼 GU、UNIQLO 連結時品牌只看得到這個網站的伺服器，其實商品圖是你的瀏覽器直接下載的，改正了。</p>
-        <p>原始碼公開在 <a href="https://github.com/Chen931222/wardrobe-gallery" rel="noopener">GitHub</a>，改自 MIT 授權的 Open Wardrobe；去背元件 <a href="https://github.com/imgly/background-removal-js" rel="noopener">@imgly/background-removal</a> 是 AGPL-3.0 授權，所以網站整體依 AGPL-3.0 提供；用到的每個套件、字型和天氣資料的授權列在<a href="/licenses.html">授權與原始碼</a>。有問題到 <a href="https://github.com/Chen931222/wardrobe-gallery/issues" rel="noopener">GitHub 的 Issues</a> 留言。</p>
+        <p>原始碼公開在 <a href="https://github.com/Chen931222/wardrobe-gallery" rel="noopener">GitHub</a>，改自 MIT 授權的 Open Wardrobe，自己寫的部分也是 MIT；用到的每個套件、字型、去背模型和天氣資料的授權列在<a href="/licenses.html">授權與原始碼</a>。有問題到 <a href="https://github.com/Chen931222/wardrobe-gallery/issues" rel="noopener">GitHub 的 Issues</a> 留言。</p>
       </footer>
     </main>
   </body>

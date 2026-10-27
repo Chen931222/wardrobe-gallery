@@ -1,14 +1,15 @@
 // [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Eraser, Plus, SpinnerGap, Storefront, X } from "@phosphor-icons/react";
+import { Eraser, HandTap, Plus, SpinnerGap, Storefront, X } from "@phosphor-icons/react";
 import { cropBlob, deleteLocalItem, findUrl, garmentColors, guessPart, productUrlProblem, refillGaps, saveLocalItem, shrinkImage, trimTransparent } from "./localWardrobe.js";
 import { PART_GROUPS, PART_ORDER, PARTS } from "./parts.js";
 import { fetchBrandProduct, fetchProductPage, parseBrandLink, partFromName, partFromProduct, sameProduct } from "./brandLink.js";
 import { findSameStyle, findSimilar, fitChoices, kindChoices, kindLabel } from "./wishCheck.js";
 import { useDialog } from "./useDialog.js";
 import { ScrollRail } from "./ScrollRail.jsx";
-import { abandonCutout, fixCutout, modelReady, preloadModel, preloadsEarly, removeBg } from "./cutout.js";
+import { abandonCutout, CENTER, fixCutout, MODEL_MB, modelReady, preloadModel, preloadsEarly, removeBg } from "./cutout.js";
 import { CutoutEraser } from "./CutoutEraser.jsx";
+import { CutoutPicker } from "./CutoutPicker.jsx";
 import { CURRENCIES, parsePrice } from "./price.js";
 import { brandInUrl, brandOf, brandSuggestions, canonicalBrand } from "./brands.js";
 import { track } from "./analytics.js";
@@ -174,7 +175,7 @@ function cutoutErrorText(cause) {
     return `這張圖對手機來說太大,記憶體不夠。框小一點、或關掉其他分頁再試。(${raw.slice(0, 80)})`;
   }
   if (/load failed|failed to fetch|networkerror|network|fetch|timeout|aborterror/i.test(raw)) {
-    return `去背模型沒下載完(約 100MB,手機訊號弱時常斷掉)。連上 Wi-Fi 再按一次。(${raw.slice(0, 80)})`;
+    return `去背模型沒下載完(約 ${MODEL_MB}MB,手機訊號弱時常斷掉)。連上 Wi-Fi 再按一次。(${raw.slice(0, 80)})`;
   }
   return `去背失敗,再按一次試試;還是不行就換一張。(${raw.slice(0, 80) || "沒有錯誤訊息"})`;
 }
@@ -261,6 +262,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     setReplacing(null);
     setStore(false);
     setErasing(false);   // 擦到一半關掉:下一件去背好不能直接跳進擦除(驗收抓到)
+    setPicking(false);
     retakeRef.current = false;
   };
   const reset = () => {
@@ -424,7 +426,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     preloadModel();
   };
 
-  /* 去背:先把表單打開,去背在背景算(2026-10-05)。第一次要下載約 100MB 的模型,4G 上要等好一陣子,
+  /* 去背:先把表單打開,去背在背景算(2026-10-05)。第一次要下載約 44MB 的模型,4G 上要等好一陣子,
      舊版這段只有一個轉圈,等完才開始填名稱、分類;現在等的同時就能填,去背好了預覽換成去背圖、存檔鈕才亮。
      失敗了表單和填好的字都留著,可以「再試一次」或回去重新框。 */
   const cutout = async (region) => {
@@ -491,7 +493,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
       if (!alive()) return;
       clearTimeout(watchdogRef.current);
       setStatus("修邊…");
-      cutRef.current = { input, raw, outer, region };
+      cutRef.current = { input, raw, outer, region, strokes: [CENTER] };   // 去背點的是框的正中央(cutout.js),點一下修從這一點接著加
       const { blob, color, secondaryColor } = await finishCutout(cutRef.current, false);
       if (!alive()) return;
       setDraft((current) => {
@@ -554,6 +556,43 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
       <small className="add-hint">
         {draft.filled ? "包包背帶、手把圈起來的空隙也一起補上了;不對就還原。" : "衣服跟背景都很白時用。包包背帶圈起來的空隙也會被補上,看預覽決定。"}
       </small>
+    </div>
+  );
+
+  /* 點一下修正(2026-10-27,換成 MagicTouch 之後):漏掉的加進來、多的拿掉(CutoutPicker.jsx)。
+     改的是模型那份結果(cutRef 的 raw),所以改完照樣走補洞、裁框、抓顏色,「補滿」也還能按。擦過的圖不是模型那份了,不給點選 */
+  const [picking, setPicking] = useState(false);
+  const applyPick = async (raw, strokes) => {
+    const saved = cutRef.current;
+    const run = runRef.current;
+    setPicking(false);
+    if (!saved) return;
+    // 後半段(補洞、裁框、抓顏色)算完之前,補滿、擦掉、存都先鎖住:不然後寫回來的會蓋掉前一個(審查抓到)
+    setRefilling(true);
+    setError("");
+    try {
+      const next = { ...saved, raw, strokes };
+      const { blob, color, secondaryColor } = await finishCutout(next, false);
+      if (run !== runRef.current) return;
+      cutRef.current = next;   // 成功了才換;失敗的話照舊是上一份
+      setDraft((current) => {
+        if (!current) return current;
+        if (current.preview) URL.revokeObjectURL(current.preview);
+        return { ...current, blob, preview: URL.createObjectURL(blob), color, secondaryColor, filled: false };
+      });
+    } catch (cause) {
+      console.error(cause);
+      if (run === runRef.current) setError(`沒有改成功:${cause?.message || cause}`);
+    } finally {
+      setRefilling(false);
+    }
+  };
+  const pickButton = () => draft?.blob && !draft.pending && cutRef.current && (
+    <div className="add-fill add-erase">
+      <button type="button" className="add-fill-button" onClick={() => { setError(""); setPicking(true); }} disabled={refilling}>
+        <HandTap size={15} aria-hidden="true" /> 少了一塊、多了一塊?點一下修
+      </button>
+      <small className="add-hint">成雙的鞋只留下一隻、床單沙發被留下來的時候用。</small>
     </div>
   );
 
@@ -752,8 +791,8 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
               {modelReady()
                 ? "照片在這台裝置上處理,不會上傳。"
                 : preloadsEarly()
-                  ? "第一次要下載約 100MB 的去背模型,打開這一頁就開始下載了;建議先在家用 Wi-Fi 打開這一頁一次。照片在這台裝置上處理,不會上傳。"
-                  : "第一次要下載約 100MB 的去背模型,去背時才開始下載;建議先在家用 Wi-Fi 試一次。照片在這台裝置上處理,不會上傳。"}
+                  ? `第一次要下載約 ${MODEL_MB}MB 的去背模型,打開這一頁就開始下載了;建議先在家用 Wi-Fi 打開這一頁一次。照片在這台裝置上處理,不會上傳。`
+                  : `第一次要下載約 ${MODEL_MB}MB 的去背模型,去背時才開始下載;建議先在家用 Wi-Fi 試一次。照片在這台裝置上處理,不會上傳。`}
             </small>
             <div className="add-actions">
               <button type="button" className="secondary-button" onClick={() => inputRef.current?.click()}>從相簿選</button>
@@ -809,15 +848,15 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
                 這件加過了:「{linkDupe.name}」{linkDupe.wishlist ? ",在想買的裡" : ",已經在衣櫃裡"}。還是可以再加一次。
               </small>
             )}
-            {/* 打開這頁(open)就開始下載去背模型,所以 100MB 要在這頁講,不是等到去背中才講(2026-10-24 取捨)。
+            {/* 打開這頁(open)就開始下載去背模型,所以模型大小要在這頁講,不是等到去背中才講(2026-10-24 取捨)。
                 原本這裡是拍照前的皺摺提醒:還沒選要拍照就先講,太早;拍完、框衣服那一步有,附「重拍一張」 */}
             {/* 照實講什麼時候開始下載:一般是打開這頁就先載(2026-10-05 本人要的,選照片、框衣服時就載完);
                 開了省流量或 2G 不先載(cutout.js 的 preloadsEarly),去背時才下載 */}
             {!modelReady() && (
               <small className="add-hint">
                 {preloadsEarly()
-                  ? "第一次去背要下載約 100MB 的模型,打開這一頁就開始下載了。"
-                  : "第一次去背要下載約 100MB 的模型,去背時才開始下載;用行動網路的話,建議連上 Wi-Fi 再選照片。"}
+                  ? `第一次去背要下載約 ${MODEL_MB}MB 的模型,打開這一頁就開始下載了。`
+                  : `第一次去背要下載約 ${MODEL_MB}MB 的模型,去背時才開始下載;用行動網路的話,建議連上 Wi-Fi 再選照片。`}
                 照片在這台裝置上處理,不會上傳。
               </small>
             )}
@@ -894,7 +933,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
             <SpinnerGap size={30} className="add-spinner" aria-hidden="true" />
             <p role="status" aria-live="polite">{status}</p>
             <small>
-              {modelReady() ? "" : "第一次使用要下載約 100MB 的去背模型,之後會快很多。"}
+              {modelReady() ? "" : `第一次使用要下載約 ${MODEL_MB}MB 的去背模型,之後會快很多。`}
               照片在這台裝置上處理,不會上傳。
             </small>
             <button type="button" className="secondary-button add-cancel" onClick={cancelWork}>取消</button>
@@ -1055,6 +1094,8 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
             {closeButton()}
             {erasing && draft.blob ? (
               <CutoutEraser src={draft.preview} onDone={applyErase} onCancel={() => setErasing(false)} />
+            ) : picking && draft.blob && cutRef.current ? (
+              <CutoutPicker input={cutRef.current.input} cut={cutRef.current.raw} strokes={cutRef.current.strokes} onDone={applyPick} onCancel={() => setPicking(false)} />
             ) : (<>
             <div className={draft.blob ? "add-preview-wrap" : "add-preview-wrap is-pending"}>
               <img className="add-preview" src={draft.preview} alt={draft.blob ? "去背結果預覽" : "框起來的照片,還沒去背"} />
@@ -1065,6 +1106,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
               )}
             </div>
             {fillToggle()}
+            {pickButton()}
             {eraseButton()}
             {ownPhoto && draft.blob && (
               <small className="add-hint add-retake">
@@ -1074,7 +1116,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
             )}
             {draft.pending && (
               <small className="add-hint">
-                {modelReady() ? "去背中,趁這段時間先填名稱和分類。" : "第一次要下載約 100MB 的去背模型,趁這段時間先填名稱和分類。"}
+                {modelReady() ? "去背中,趁這段時間先填名稱和分類。" : `第一次要下載約 ${MODEL_MB}MB 的去背模型,趁這段時間先填名稱和分類。`}
                 照片在這台裝置上處理,不會上傳。
               </small>
             )}
@@ -1215,7 +1257,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
             {/* 釘在視窗底(2026-10-25 新訪客實測:表單比手機一屏長,「加入衣櫃」要捲到底才看得到) */}
             <div className="add-actions add-actions-sticky">
               <button type="button" className="secondary-button" onClick={requestClose}>取消</button>
-              <button type="button" className="primary-button" onClick={() => save()} disabled={urlInvalid || !draft.blob}>
+              <button type="button" className="primary-button" onClick={() => save()} disabled={urlInvalid || !draft.blob || refilling}>
                 {!draft.blob ? "去背好就能存" : dupes.length ? "還是要存" : draft.wishlist ? (draft.dream ? "放進夢幻逸品" : "放進想買的") : "加入衣櫃"}
               </button>
             </div>

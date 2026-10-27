@@ -14,7 +14,7 @@
 import { cp, mkdir, rm, readdir, readFile, copyFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createHmac, randomBytes } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { demoCloset, isDemoItem } from "../src/demoCloset.js";
 import { buildLicenses, writeLicenses } from "./build-licenses.mjs";
@@ -57,6 +57,18 @@ if (broken.length) {
 // 授權頁也先產生一次再清空(2026-10-26 驗收):套件升級後少了 LICENSE、路徑變了,停在這裡,上一份可用的輸出還在
 await buildLicenses();
 
+// 去背模型與運算程式(2026-10-27):dist 裡沒有的話線上去背會 404。`npx vite build` 不會跑 prebuild,
+// 換一台新 clone 的電腦直接匯出就會少,這裡先停下來(審查抓到)
+{
+  const { MODEL_BYTES, MODEL_PATH, WASM_DIR } = await import("../src/cutoutAssets.js");
+  const need = [[MODEL_PATH, MODEL_BYTES], ...["vision_wasm_internal", "vision_wasm_nosimd_internal", "vision_wasm_module_internal"].flatMap((name) => [[`${WASM_DIR}/${name}.js`], [`${WASM_DIR}/${name}.wasm`]])];
+  const missing = need.filter(([path, bytes]) => {
+    const file = join(ROOT, "dist", ...path.split("/").filter(Boolean));
+    return !existsSync(file) || (bytes && statSync(file).size !== bytes);
+  });
+  if (missing.length) throw new Error(`dist 少了去背檔案:${missing.map(([path]) => path).join("、")}。先跑 node tools/prepare-cutout.mjs 再 npx vite build`);
+}
+
 // 清空內容、不刪資料夾本身:Windows 上只要有終端機或檔案總管停在這個資料夾,rmdir 就會 EBUSY。
 // .vercel 留著,部署時才不用重新連結專案。
 await mkdir(OUT, { recursive: true });
@@ -91,20 +103,18 @@ await writeFile(join(OUT, "package.json"), JSON.stringify({ private: true, type:
 // 安全標頭(2026-10-03,審查報告的資安項)。同步碼存在瀏覽器裡,萬一哪天被塞進一段腳本,
 // CSP 讓它只能連到下面這幾個地方,碼送不出去。每一條都對得到用途,加新的外部服務要記得補:
 //   api.open-meteo.com           今日推薦的天氣
-//   staticimgly.com              去背模型與它的 WASM 執行檔(第一次共約 100MB)
 //   www.gu-global.com/uniqlo.com 貼連結挑圖:縮圖要顯示、大圖要下載回來去背
 //   cloud.umami.is / gateway.umami.is 使用統計的腳本與送出位址(2026-10-09;src/analytics.js,擁有者模式不載入)
 //   blob: / data:                自己加的衣服(IndexedDB 的圖)、去背中間結果、匯入備份檔裡的圖;
 //                                字型的 data: 是 Vite 把小於 4KB 的字型檔直接內嵌進 CSS
-//   'wasm-unsafe-eval' + blob:   去背的 WASM 執行檔是先下載成 blob 再載入的(onnxruntime-web)
-//   'unsafe-eval'                去背套件裡的 ndarray 用 new Function 產生建構函式;不給的話去背直接失敗
-//                                (2026-10-03 本機掛同一組標頭實測)。網站自己的程式沒有 eval;
-//                                主要的防線(不准內嵌 <script>、不准從別的網域載程式、只能連上面這幾個地方)都還在
+//   'wasm-unsafe-eval' + blob:   去背的 WASM 執行檔是先下載成 blob 再載入的(MediaPipe,2026-10-27 起放在這個網站的 /cutout/)
+//   (2026-10-27 拿掉 'unsafe-eval':以前給舊去背套件裡的 ndarray 用;換成 MediaPipe 後,本機掛同一組標頭、
+//    不給 'unsafe-eval' 實測去背、點一下修都正常。網站自己的程式沒有 eval)
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://cloud.umami.is",
+  "script-src 'self' 'wasm-unsafe-eval' blob: https://cloud.umami.is",
   "worker-src 'self' blob:",
-  "connect-src 'self' blob: data: https://api.open-meteo.com https://staticimgly.com https://www.gu-global.com https://www.uniqlo.com https://gateway.umami.is",
+  "connect-src 'self' blob: data: https://api.open-meteo.com https://www.gu-global.com https://www.uniqlo.com https://gateway.umami.is",
   "img-src 'self' blob: data: https://www.gu-global.com https://www.uniqlo.com",
   "style-src 'self'",
   "font-src 'self' data:",
@@ -136,6 +146,7 @@ await writeFile(join(OUT, "vercel.json"), JSON.stringify({
   headers: [
     { source: "/(.*)", headers: SECURITY_HEADERS },
     { source: "/assets/(.*)", headers: IMMUTABLE },
+    { source: "/cutout/(.*)", headers: IMMUTABLE },   // 去背模型與運算程式:檔名帶版本(src/cutoutAssets.js),換版本就換檔名
     { source: "/data/(.*)", headers: NO_INDEX },
     { source: "/api/(.*)", headers: NO_INDEX },
   ],
@@ -181,8 +192,8 @@ export const CLOSET = ${JSON.stringify(closet)};
 
 console.log(`匯出完成:wardrobe-gallery/(公開示範 ${demo.length} 件、${demoFiles.size} 個圖檔;站主衣櫃 ${closet.length} 件只走 /api/closet,另外 ${hidden.size} 個圖檔換成不公開檔名)→ cd wardrobe-gallery && vercel deploy --prod --yes`);
 
-/* 原始碼跟線上同一版了沒(2026-10-26 授權盤點):去背套件是 AGPL-3.0,網站整體依 AGPL 提供,用的人要拿得到「線上這一版」的原始碼。
-   授權頁連到 GitHub,所以 GitHub 落後就是沒給到。只提醒、不擋:平常是先上線給本人看、點頭才 commit,這時本來就還沒 push。
+/* 原始碼跟線上同一版了沒(2026-10-26 授權盤點):授權頁寫原始碼在 GitHub,GitHub 落後就是線上那一版拿不到。
+   2026-10-27 去背換成 MediaPipe(Apache-2.0)以前,去背套件是 AGPL-3.0,這是授權義務;之後不是了,照樣保持一致。只提醒、不擋:平常是先上線給本人看、點頭才 commit,這時本來就還沒 push。
    origin/main 是上次 fetch 的位置,沒先 fetch 可能算多,寧可多提醒。沒 add 的新檔也算(git commit -am 不會帶到它們,驗收抓到) */
 try {
   const git = (...args) => execFileSync("git", args, { cwd: ROOT, encoding: "utf8" }).trim();
@@ -190,6 +201,6 @@ try {
   const ahead = Number(git("rev-list", "--count", "origin/main..HEAD"));
   if (dirty || ahead) {
     console.warn(`\n⚠ 這次上線的版本還不在 GitHub:${dirty ? `${dirty} 個檔案還沒 commit` : ""}${dirty && ahead ? "、" : ""}${ahead ? `${ahead} 個 commit 還沒 push` : ""}。`);
-    console.warn("  去背套件是 AGPL-3.0:上線之後把這一版 commit 並 push,授權頁連到的原始碼才跟線上一致。");
+    console.warn("  上線之後把這一版 commit 並 push,授權頁連到的原始碼才跟線上一致。");
   }
 } catch { /* 不是 git 目錄、沒有 origin:不檢查 */ }

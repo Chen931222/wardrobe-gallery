@@ -20,3 +20,6 @@ _insp.mjs
 
 # 同步的開發用假雲端(scripts/sync-api.mjs)
 .sync-dev/
+
+# 去背模型與 MediaPipe 運算程式(tools/prepare-cutout.mjs 準備,不進版控)
+public/cutout/

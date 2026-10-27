@@ -23,8 +23,8 @@
 
       <section id="source" aria-labelledby="source-title">
         <h2 id="source-title">原始碼</h2>
-        <p>送到你瀏覽器的程式裡有去背套件 <b class="nowrap">@imgly/background-removal</b>，它是 <a class="nowrap" href="/licenses/AGPL-3.0.txt">AGPL-3.0</a>。所以這個網站整體依 AGPL-3.0 提供：你可以取得、修改、再散布它的原始碼，條件寫在授權全文裡。</p>
-        <p>原始碼在 <a href="https://github.com/Chen931222/wardrobe-gallery" rel="noopener">GitHub</a>。各檔案原本的授權照舊：上游 Open Wardrobe 和本站自己寫的部分是 MIT。</p>
+        <p>原始碼在 <a href="https://github.com/Chen931222/wardrobe-gallery" rel="noopener">GitHub</a>。上游 Open Wardrobe 和本站自己寫的部分是 MIT；用到的別人的程式和字型列在下面，各照各的授權。</p>
+        <p>2026 年 10 月 27 日以前的版本，去背用的是 <span class="nowrap">@imgly/background-removal</span>（<a class="nowrap" href="https://www.gnu.org/licenses/agpl-3.0.html" rel="noopener">AGPL-3.0</a>），那些版本整體依 AGPL-3.0 提供，原始碼在 GitHub 的歷史紀錄裡。之後換成 Google 的 MediaPipe，網站不再含 AGPL 的程式。</p>
       </section>
 
       <section id="parts" aria-labelledby="parts-title">
@@ -41,14 +41,7 @@
             <tr><td>@unpic/react <span class="ver">1.0.2</span></td><td>圖片縮放</td><td>MIT</td></tr>
             <tr><td>@unpic/core <span class="ver">1.0.3</span></td><td>圖片縮放</td><td>MIT</td></tr>
             <tr><td>unpic <span class="ver">4.2.2</span></td><td>圖片縮放</td><td>MIT</td></tr>
-            <tr><td>@imgly/background-removal <span class="ver">1.7.0</span></td><td>去背</td><td><a href="/licenses/AGPL-3.0.txt">AGPL-3.0</a></td></tr>
-            <tr><td>onnxruntime-web <span class="ver">1.21.0</span></td><td>去背(模型執行)</td><td>MIT</td></tr>
-            <tr><td>onnxruntime-common <span class="ver">1.21.0</span></td><td>去背(模型執行)</td><td>MIT</td></tr>
-            <tr><td>lodash-es <span class="ver">4.17.21</span></td><td>去背(工具函式)</td><td>MIT</td></tr>
-            <tr><td>ndarray <span class="ver">1.0.19</span></td><td>去背(陣列)</td><td>MIT</td></tr>
-            <tr><td>iota-array <span class="ver">1.0.0</span></td><td>去背(陣列)</td><td>MIT</td></tr>
-            <tr><td>is-buffer <span class="ver">1.1.6</span></td><td>去背(陣列)</td><td>MIT</td></tr>
-            <tr><td>zod <span class="ver">3.24.2</span></td><td>去背(設定檢查)</td><td>MIT</td></tr>
+            <tr><td>@mediapipe/tasks-vision <span class="ver">1.1.0</span></td><td>去背(MagicTouch 模型的執行程式)</td><td>Apache-2.0</td></tr>
             <tr><td>Cormorant(字型) <span class="ver">5.3.0</span></td><td>字型(英文、數字)</td><td>OFL-1.1</td></tr>
             <tr><td>Noto Serif TC(字型) <span class="ver">5.3.0</span></td><td>字型(中文)</td><td>OFL-1.1</td></tr>
           </tbody>
@@ -60,14 +53,14 @@
         <h2 id="data-title">資料</h2>
         <ul>
           <li><b>天氣</b>：<a href="https://open-meteo.com/" rel="noopener">Open-Meteo</a>，依 <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a> 使用。今日推薦用到的氣溫、體感、降雨機率都是它的資料。</li>
-          <li><b>去背模型</b>：ISNet，第一次去背時從 IMG.LY 的 staticimgly.com 下載。去背套件附的第三方授權清單把它列為 MIT。</li>
+          <li><b>去背模型</b>：Google MediaPipe 的 MagicTouch（Interactive Segmenter v2），<a href="https://storage.googleapis.com/mediapipe-assets/Model%20Card%20MagicTouch.pdf" rel="noopener">model card</a> 寫 Apache License 2.0。第一次去背時從這個網站下載，不連到別人的服務。</li>
           <li><b>示範衣櫃</b>：20 件都是站主自己的衣服、自己拍的照片。</li>
         </ul>
       </section>
 
       <section id="texts" aria-labelledby="texts-title">
         <h2 id="texts-title">授權全文</h2>
-        <p>AGPL-3.0 很長，另外放在 <a href="/licenses/AGPL-3.0.txt">AGPL-3.0.txt</a>。其他的照原文列在下面，點開看。</p>
+        <p>照原文列在下面，點開看。</p>
         <details class="license-text">
           <summary>Open Wardrobe(上游專案)</summary>
           <pre>MIT License
@@ -241,198 +234,198 @@ SOFTWARE.</pre>
           <pre>MIT(這個套件的 npm 版和 repo 都沒有附授權全文,只在 package.json 寫 MIT;見 https://github.com/ascorbic/unpic)</pre>
         </details>
         <details class="license-text">
-          <summary>onnxruntime-web 1.21.0</summary>
-          <pre>MIT License
+          <summary>@mediapipe/tasks-vision 1.1.0</summary>
+          <pre>Apache License
+Version 2.0, January 2004
+http://www.apache.org/licenses/
 
-Copyright (c) Microsoft Corporation
+TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the &quot;Software&quot;), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. Definitions.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+&quot;License&quot; shall mean the terms and conditions for use, reproduction, and
+distribution as defined by Sections 1 through 9 of this document.
 
-THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.</pre>
-        </details>
-        <details class="license-text">
-          <summary>onnxruntime-common 1.21.0</summary>
-          <pre>MIT License
+&quot;Licensor&quot; shall mean the copyright owner or entity authorized by the copyright
+owner that is granting the License.
 
-Copyright (c) Microsoft Corporation
+&quot;Legal Entity&quot; shall mean the union of the acting entity and all other entities
+that control, are controlled by, or are under common control with that entity.
+For the purposes of this definition, &quot;control&quot; means (i) the power, direct or
+indirect, to cause the direction or management of such entity, whether by
+contract or otherwise, or (ii) ownership of fifty percent (50%) or more of the
+outstanding shares, or (iii) beneficial ownership of such entity.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the &quot;Software&quot;), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+&quot;You&quot; (or &quot;Your&quot;) shall mean an individual or Legal Entity exercising
+permissions granted by this License.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+&quot;Source&quot; form shall mean the preferred form for making modifications, including
+but not limited to software source code, documentation source, and configuration
+files.
 
-THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.</pre>
-        </details>
-        <details class="license-text">
-          <summary>lodash-es 4.17.21</summary>
-          <pre>Copyright OpenJS Foundation and other contributors &lt;https://openjsf.org/&gt;
+&quot;Object&quot; form shall mean any form resulting from mechanical transformation or
+translation of a Source form, including but not limited to compiled object code,
+generated documentation, and conversions to other media types.
 
-Based on Underscore.js, copyright Jeremy Ashkenas,
-DocumentCloud and Investigative Reporters &amp; Editors &lt;http://underscorejs.org/&gt;
+&quot;Work&quot; shall mean the work of authorship, whether in Source or Object form, made
+available under the License, as indicated by a copyright notice that is included
+in or attached to the work (an example is provided in the Appendix below).
 
-This software consists of voluntary contributions made by many
-individuals. For exact contribution history, see the revision history
-available at https://github.com/lodash/lodash
+&quot;Derivative Works&quot; shall mean any work, whether in Source or Object form, that
+is based on (or derived from) the Work and for which the editorial revisions,
+annotations, elaborations, or other modifications represent, as a whole, an
+original work of authorship. For the purposes of this License, Derivative Works
+shall not include works that remain separable from, or merely link (or bind by
+name) to the interfaces of, the Work and Derivative Works thereof.
 
-The following license applies to all parts of this software except as
-documented below:
+&quot;Contribution&quot; shall mean any work of authorship, including the original version
+of the Work and any modifications or additions to that Work or Derivative Works
+thereof, that is intentionally submitted to Licensor for inclusion in the Work
+by the copyright owner or by an individual or Legal Entity authorized to submit
+on behalf of the copyright owner. For the purposes of this definition,
+&quot;submitted&quot; means any form of electronic, verbal, or written communication sent
+to the Licensor or its representatives, including but not limited to
+communication on electronic mailing lists, source code control systems, and
+issue tracking systems that are managed by, or on behalf of, the Licensor for
+the purpose of discussing and improving the Work, but excluding communication
+that is conspicuously marked or otherwise designated in writing by the copyright
+owner as &quot;Not a Contribution.&quot;
 
-====
+&quot;Contributor&quot; shall mean Licensor and any individual or Legal Entity on behalf
+of whom a Contribution has been received by Licensor and subsequently
+incorporated within the Work.
 
-Permission is hereby granted, free of charge, to any person obtaining
-a copy of this software and associated documentation files (the
-&quot;Software&quot;), to deal in the Software without restriction, including
-without limitation the rights to use, copy, modify, merge, publish,
-distribute, sublicense, and/or sell copies of the Software, and to
-permit persons to whom the Software is furnished to do so, subject to
-the following conditions:
+2. Grant of Copyright License.
 
-The above copyright notice and this permission notice shall be
-included in all copies or substantial portions of the Software.
+Subject to the terms and conditions of this License, each Contributor hereby
+grants to You a perpetual, worldwide, non-exclusive, no-charge, royalty-free,
+irrevocable copyright license to reproduce, prepare Derivative Works of,
+publicly display, publicly perform, sublicense, and distribute the Work and such
+Derivative Works in Source or Object form.
 
-THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
-LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
-WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+3. Grant of Patent License.
 
-====
+Subject to the terms and conditions of this License, each Contributor hereby
+grants to You a perpetual, worldwide, non-exclusive, no-charge, royalty-free,
+irrevocable (except as stated in this section) patent license to make, have
+made, use, offer to sell, sell, import, and otherwise transfer the Work, where
+such license applies only to those patent claims licensable by such Contributor
+that are necessarily infringed by their Contribution(s) alone or by combination
+of their Contribution(s) with the Work to which such Contribution(s) was
+submitted. If You institute patent litigation against any entity (including a
+cross-claim or counterclaim in a lawsuit) alleging that the Work or a
+Contribution incorporated within the Work constitutes direct or contributory
+patent infringement, then any patent licenses granted to You under this License
+for that Work shall terminate as of the date such litigation is filed.
 
-Copyright and related rights for sample code are waived via CC0. Sample
-code is defined as all source code displayed within the prose of the
-documentation.
+4. Redistribution.
 
-CC0: http://creativecommons.org/publicdomain/zero/1.0/
+You may reproduce and distribute copies of the Work or Derivative Works thereof
+in any medium, with or without modifications, and in Source or Object form,
+provided that You meet the following conditions:
 
-====
+You must give any other recipients of the Work or Derivative Works a copy of
+this License; and
+You must cause any modified files to carry prominent notices stating that You
+changed the files; and
+You must retain, in the Source form of any Derivative Works that You distribute,
+all copyright, patent, trademark, and attribution notices from the Source form
+of the Work, excluding those notices that do not pertain to any part of the
+Derivative Works; and
+If the Work includes a &quot;NOTICE&quot; text file as part of its distribution, then any
+Derivative Works that You distribute must include a readable copy of the
+attribution notices contained within such NOTICE file, excluding those notices
+that do not pertain to any part of the Derivative Works, in at least one of the
+following places: within a NOTICE text file distributed as part of the
+Derivative Works; within the Source form or documentation, if provided along
+with the Derivative Works; or, within a display generated by the Derivative
+Works, if and wherever such third-party notices normally appear. The contents of
+the NOTICE file are for informational purposes only and do not modify the
+License. You may add Your own attribution notices within Derivative Works that
+You distribute, alongside or as an addendum to the NOTICE text from the Work,
+provided that such additional attribution notices cannot be construed as
+modifying the License.
+You may add Your own copyright statement to Your modifications and may provide
+additional or different license terms and conditions for use, reproduction, or
+distribution of Your modifications, or for any such Derivative Works as a whole,
+provided Your use, reproduction, and distribution of the Work otherwise complies
+with the conditions stated in this License.
 
-Files located in the node_modules and vendor directories are externally
-maintained libraries used by this software which have their own
-licenses; we recommend you read them, as their terms may differ from the
-terms above.</pre>
-        </details>
-        <details class="license-text">
-          <summary>ndarray 1.0.19</summary>
-          <pre>The MIT License (MIT)
+5. Submission of Contributions.
 
-Copyright (c) 2013-2016 Mikola Lysenko
+Unless You explicitly state otherwise, any Contribution intentionally submitted
+for inclusion in the Work by You to the Licensor shall be under the terms and
+conditions of this License, without any additional terms or conditions.
+Notwithstanding the above, nothing herein shall supersede or modify the terms of
+any separate license agreement you may have executed with Licensor regarding
+such Contributions.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the &quot;Software&quot;), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+6. Trademarks.
 
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
+This License does not grant permission to use the trade names, trademarks,
+service marks, or product names of the Licensor, except as required for
+reasonable and customary use in describing the origin of the Work and
+reproducing the content of the NOTICE file.
 
-THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.</pre>
-        </details>
-        <details class="license-text">
-          <summary>iota-array 1.0.0</summary>
-          <pre>The MIT License (MIT)
+7. Disclaimer of Warranty.
 
-Copyright (c) 2013 Mikola Lysenko
+Unless required by applicable law or agreed to in writing, Licensor provides the
+Work (and each Contributor provides its Contributions) on an &quot;AS IS&quot; BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied,
+including, without limitation, any warranties or conditions of TITLE,
+NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. You are
+solely responsible for determining the appropriateness of using or
+redistributing the Work and assume any risks associated with Your exercise of
+permissions under this License.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the &quot;Software&quot;), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+8. Limitation of Liability.
 
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
+In no event and under no legal theory, whether in tort (including negligence),
+contract, or otherwise, unless required by applicable law (such as deliberate
+and grossly negligent acts) or agreed to in writing, shall any Contributor be
+liable to You for damages, including any direct, indirect, special, incidental,
+or consequential damages of any character arising as a result of this License or
+out of the use or inability to use the Work (including but not limited to
+damages for loss of goodwill, work stoppage, computer failure or malfunction, or
+any and all other commercial damages or losses), even if such Contributor has
+been advised of the possibility of such damages.
 
-THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.</pre>
-        </details>
-        <details class="license-text">
-          <summary>is-buffer 1.1.6</summary>
-          <pre>The MIT License (MIT)
+9. Accepting Warranty or Additional Liability.
 
-Copyright (c) Feross Aboukhadijeh
+While redistributing the Work or Derivative Works thereof, You may choose to
+offer, and charge a fee for, acceptance of support, warranty, indemnity, or
+other liability obligations and/or rights consistent with this License. However,
+in accepting such obligations, You may act only on Your own behalf and on Your
+sole responsibility, not on behalf of any other Contributor, and only if You
+agree to indemnify, defend, and hold each Contributor harmless for any liability
+incurred by, or claims asserted against, such Contributor by reason of your
+accepting any such warranty or additional liability.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the &quot;Software&quot;), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+END OF TERMS AND CONDITIONS
 
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
+APPENDIX: How to apply the Apache License to your work
 
-THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.</pre>
-        </details>
-        <details class="license-text">
-          <summary>zod 3.24.2</summary>
-          <pre>MIT License
+To apply the Apache License to your work, attach the following boilerplate
+notice, with the fields enclosed by brackets &quot;[]&quot; replaced with your own
+identifying information. (Don't include the brackets!) The text should be
+enclosed in the appropriate comment syntax for the file format. We also
+recommend that a file or class name and description of purpose be included on
+the same &quot;printed page&quot; as the copyright notice for easier identification within
+third-party archives.
 
-Copyright (c) 2025 Colin McDonnell
+   Copyright [yyyy] [name of copyright owner]
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the &quot;Software&quot;), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+   Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+     http://www.apache.org/licenses/LICENSE-2.0
 
-THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.</pre>
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.</pre>
         </details>
         <details class="license-text">
           <summary>Cormorant(字型) 5.3.0</summary>

@@ -1,8 +1,9 @@
-// [本 fork 新增] 產生 /licenses.html(授權與原始碼)和 /licenses/AGPL-3.0.txt。
+// [本 fork 新增] 產生 /licenses.html(授權與原始碼)。
 //
-// 為什麼要有(2026-10-26 授權盤點,work/授權盤點-2026-10-26.md):送到瀏覽器的程式裡有 11 個 MIT 套件、兩套 OFL 字型、
-// 一個 AGPL-3.0 的去背套件,MIT 和 OFL 都要求散布時附上版權聲明;打包後的 JS 只留下其中幾個的 @license 註解,
-// 網站上也沒有任何一頁列出來。天氣資料 Open-Meteo 是 CC BY 4.0,要寫出處。
+// 為什麼要有(2026-10-26 授權盤點,work/授權盤點-2026-10-26.md):送到瀏覽器的程式裡有十幾個 MIT 套件、兩套 OFL 字型,
+// MIT 和 OFL 都要求散布時附上版權聲明;打包後的 JS 只留下其中幾個的 @license 註解,網站上也沒有任何一頁列出來。
+// 天氣資料 Open-Meteo 是 CC BY 4.0,要寫出處。
+// 2026-10-27 去背從 @imgly(AGPL-3.0)換成 MediaPipe(Apache-2.0):清單裡不再有 AGPL,AGPL-3.0.txt 不產生了。
 //
 // 內容一律從 node_modules 裡實際裝的版本讀(版本、授權、LICENSE 全文),不手抄。
 // 用法:node tools/build-licenses.mjs → 寫進 public/(跟著 vite build 進 dist);tools/export-static.mjs 匯出時也會再寫一次,
@@ -20,8 +21,6 @@ const SOURCE = "https://github.com/Chen931222/wardrobe-gallery";
 //   at:同名套件有好幾份時,打包用的是哪一份(找不到就用最上層那份,npm 合併了也不會讓匯出停住)
 //   licenseFrom:npm 版沒附 LICENSE,借同一個 repo 另一個套件的
 //   licenseText:npm 版沒附、repo 根目錄有的,抄一份放 tools/licenses/(來源和日期寫在檔頭)
-//   inImgly:去背套件自己預先打包進 dist 的,送出去的版本照它的 sourcemap,不是 node_modules 裝的那份(驗收抓到 lodash-es、zod 版本不同)
-const IMGLY = "@imgly/background-removal";
 const BUNDLED = [
   { name: "react", use: "畫面" },
   { name: "react-dom", use: "畫面" },
@@ -30,28 +29,10 @@ const BUNDLED = [
   { name: "@unpic/react", use: "圖片縮放" },
   { name: "@unpic/core", use: "圖片縮放", licenseFrom: "@unpic/react" },   // 跟 @unpic/react 同一個 repo(unpic-img)
   { name: "unpic", use: "圖片縮放" },   // npm 版和 repo(ascorbic/unpic)都沒有授權全文,只有 package.json 寫 MIT(2026-10-26 查)
-  { name: IMGLY, use: "去背" },
-  { name: "onnxruntime-web", use: "去背(模型執行)", licenseText: "tools/licenses/onnxruntime-LICENSE.txt" },
-  { name: "onnxruntime-common", use: "去背(模型執行)", at: "node_modules/onnxruntime-web/node_modules/onnxruntime-common", licenseText: "tools/licenses/onnxruntime-LICENSE.txt" },
-  { name: "lodash-es", use: "去背(工具函式)", inImgly: true },
-  { name: "ndarray", use: "去背(陣列)", inImgly: true },
-  { name: "iota-array", use: "去背(陣列)", inImgly: true },
-  { name: "is-buffer", use: "去背(陣列)", inImgly: true },
-  { name: "zod", use: "去背(設定檢查)", inImgly: true },
+  { name: "@mediapipe/tasks-vision", use: "去背(MagicTouch 模型的執行程式)", licenseText: "tools/licenses/mediapipe-LICENSE.txt" },
   { name: "@fontsource/cormorant", use: "字型(英文、數字)", label: "Cormorant(字型)" },
   { name: "@fontsource/noto-serif-tc", use: "字型(中文)", label: "Noto Serif TC(字型)" },
 ];
-
-/** 去背套件 dist 裡實際打包的版本:sourcemap 的路徑長這樣 …/.pnpm/lodash-es@4.17.21/node_modules/lodash-es/… */
-async function imglyBundledVersions() {
-  const map = JSON.parse(await readFile(join(ROOT, "node_modules", IMGLY, "dist", "index.mjs.map"), "utf8"));
-  const versions = new Map();
-  for (const source of map.sources || []) {
-    const match = /\.pnpm\/((?:@[^+/]+\+)?[^@/]+)@([^/_]+)/.exec(source);
-    if (match) versions.set(match[1].replace("+", "/"), match[2]);
-  }
-  return versions;
-}
 
 const esc = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -78,21 +59,17 @@ async function readPackage({ name, at, licenseFrom, licenseText }) {
 
 export async function buildLicenses() {
   const rows = [];
-  const inImgly = await imglyBundledVersions();
-  for (const entry of BUNDLED) {
-    const row = { ...entry, ...(await readPackage(entry)) };
-    if (entry.inImgly) row.version = inImgly.get(entry.name) || `${row.version}?`;   // sourcemap 找不到:標問號,不假裝確定
-    rows.push(row);
-  }
+  for (const entry of BUNDLED) rows.push({ ...entry, ...(await readPackage(entry)) });
   const upstream = (await readFile(join(ROOT, "LICENSE"), "utf8")).replace(/\r\n/g, "\n").trim();
-  const agpl = rows.find((row) => row.license === "AGPL-3.0");
-  if (!agpl) throw new Error("清單裡沒有 AGPL 的去背套件了:原始碼那段要跟著改");
+  // 原始碼那段寫「不含 AGPL」;哪天又裝了 GPL 類的套件,這頁要跟著改,先停下來
+  const copyleft = rows.find((row) => /GPL/i.test(row.license));
+  if (copyleft) throw new Error(`${copyleft.name} 是 ${copyleft.license}:原始碼那段要跟著改`);
 
-  // 授權全文:同一份文字(只差版權那行的 MIT)各列一次;AGPL 太長,另放一個 .txt
-  const texts = rows.filter((row) => row.license !== "AGPL-3.0").map((row) => ({ title: `${row.label || row.name} ${row.version}`, text: row.text }));
+  // 授權全文:同一份文字(只差版權那行的 MIT)各列一次
+  const texts = rows.map((row) => ({ title: `${row.label || row.name} ${row.version}`, text: row.text }));
   texts.unshift({ title: "Open Wardrobe(上游專案)", text: upstream });
 
-  const table = rows.map((row) => `            <tr><td>${esc(row.label || row.name)} <span class="ver">${esc(row.version)}</span></td><td>${esc(row.use)}</td><td>${row.license === "AGPL-3.0" ? `<a href="/licenses/AGPL-3.0.txt">AGPL-3.0</a>` : esc(row.license)}</td></tr>`).join("\n");
+  const table = rows.map((row) => `            <tr><td>${esc(row.label || row.name)} <span class="ver">${esc(row.version)}</span></td><td>${esc(row.use)}</td><td>${esc(row.license)}</td></tr>`).join("\n");
 
   const html = `<!doctype html>
 <!-- 由 tools/build-licenses.mjs 產生,不要手改:改那支腳本,重跑一次 -->
@@ -119,8 +96,8 @@ export async function buildLicenses() {
 
       <section id="source" aria-labelledby="source-title">
         <h2 id="source-title">原始碼</h2>
-        <p>送到你瀏覽器的程式裡有去背套件 <b class="nowrap">${esc(agpl.name)}</b>，它是 <a class="nowrap" href="/licenses/AGPL-3.0.txt">AGPL-3.0</a>。所以這個網站整體依 AGPL-3.0 提供：你可以取得、修改、再散布它的原始碼，條件寫在授權全文裡。</p>
-        <p>原始碼在 <a href="${SOURCE}" rel="noopener">GitHub</a>。各檔案原本的授權照舊：上游 Open Wardrobe 和本站自己寫的部分是 MIT。</p>
+        <p>原始碼在 <a href="${SOURCE}" rel="noopener">GitHub</a>。上游 Open Wardrobe 和本站自己寫的部分是 MIT；用到的別人的程式和字型列在下面，各照各的授權。</p>
+        <p>2026 年 10 月 27 日以前的版本，去背用的是 <span class="nowrap">@imgly/background-removal</span>（<a class="nowrap" href="https://www.gnu.org/licenses/agpl-3.0.html" rel="noopener">AGPL-3.0</a>），那些版本整體依 AGPL-3.0 提供，原始碼在 GitHub 的歷史紀錄裡。之後換成 Google 的 MediaPipe，網站不再含 AGPL 的程式。</p>
       </section>
 
       <section id="parts" aria-labelledby="parts-title">
@@ -140,14 +117,14 @@ ${table}
         <h2 id="data-title">資料</h2>
         <ul>
           <li><b>天氣</b>：<a href="https://open-meteo.com/" rel="noopener">Open-Meteo</a>，依 <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a> 使用。今日推薦用到的氣溫、體感、降雨機率都是它的資料。</li>
-          <li><b>去背模型</b>：ISNet，第一次去背時從 IMG.LY 的 staticimgly.com 下載。去背套件附的第三方授權清單把它列為 MIT。</li>
+          <li><b>去背模型</b>：Google MediaPipe 的 MagicTouch（Interactive Segmenter v2），<a href="https://storage.googleapis.com/mediapipe-assets/Model%20Card%20MagicTouch.pdf" rel="noopener">model card</a> 寫 Apache License 2.0。第一次去背時從這個網站下載，不連到別人的服務。</li>
           <li><b>示範衣櫃</b>：20 件都是站主自己的衣服、自己拍的照片。</li>
         </ul>
       </section>
 
       <section id="texts" aria-labelledby="texts-title">
         <h2 id="texts-title">授權全文</h2>
-        <p>AGPL-3.0 很長，另外放在 <a href="/licenses/AGPL-3.0.txt">AGPL-3.0.txt</a>。其他的照原文列在下面，點開看。</p>
+        <p>照原文列在下面，點開看。</p>
 ${texts.map(({ title, text }) => `        <details class="license-text">
           <summary>${esc(title)}</summary>
           <pre>${esc(text)}</pre>
@@ -161,15 +138,14 @@ ${texts.map(({ title, text }) => `        <details class="license-text">
   </body>
 </html>
 `;
-  return { html, agpl: agpl.text, rows };
+  return { html, rows };
 }
 
 /** 寫到 dir(public/ 或匯出的 wardrobe-gallery/) */
 export async function writeLicenses(dir) {
-  const { html, agpl, rows } = await buildLicenses();
-  await mkdir(join(dir, "licenses"), { recursive: true });
+  const { html, rows } = await buildLicenses();
+  await mkdir(dir, { recursive: true });
   await writeFile(join(dir, "licenses.html"), html);
-  await writeFile(join(dir, "licenses", "AGPL-3.0.txt"), agpl + "\n");
   return rows;
 }
 

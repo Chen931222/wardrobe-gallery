@@ -6,8 +6,9 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
+    "predev": "node tools/prepare-cutout.mjs",
     "dev": "vite",
-    "prebuild": "node tools/build-licenses.mjs",
+    "prebuild": "node tools/build-licenses.mjs && node tools/prepare-cutout.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "check": "npm run build"
@@ -15,8 +16,8 @@
   "dependencies": {
     "@fontsource/cormorant": "^5.3.0",
     "@fontsource/noto-serif-tc": "^5.3.0",
-    "@imgly/background-removal": "^1.7.0",
     "@imgly/background-removal-node": "^1.4.5",
+    "@mediapipe/tasks-vision": "1.1.0",
     "@phosphor-icons/react": "^2.1.10",
     "@unpic/react": "^1.0.2",
     "@vercel/blob": "^2.8.0",

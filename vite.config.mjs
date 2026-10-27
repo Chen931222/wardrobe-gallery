@@ -22,8 +22,11 @@ export default defineConfig(() => {
       warmup: {
         clientFiles: ["./src/main.jsx"],
       },
+      // 去背模型與運算程式(tools/prepare-cutout.mjs 放的,幾十 MB、不會改):不監看。
+      // 開發站開著時重跑那支工具,Windows 鎖住正在複製的檔,監看會 EBUSY 整個停掉(2026-10-27)
+      watch: { ignored: ["**/public/cutout/**"] },
     },
-    // 去背的 Worker(src/cutoutWorker.js)裡有動態 import(onnxruntime),要用 ES module 格式打包
+    // 去背的 Worker(src/cutoutWorker.js)裡有動態 import(MediaPipe 和它的 ES module 版載入程式),要用 ES module 格式打包
     worker: { format: "es" },
     preview: {
       host: "127.0.0.1",
