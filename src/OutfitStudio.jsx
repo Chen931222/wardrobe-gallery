@@ -712,7 +712,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
         .map((slot) => SLOT_LABEL[slot]);
       if (lockedLabels.length) result.reasons.push(`鎖住沒動:${lockedLabels.join("、")}`);
       if (unknownRaw) {
-        result.reasons.push(`「${unknownRaw}」我還沒學過,這套是純照天氣挑的;想更準可以說場合(約會、上班、看球賽)、色系(全黑、大地色)或「換成黑色襯衫」`);
+        result.reasons.push(`「${unknownRaw}」我還沒學過,這套是純照天氣挑的;想更準可以說場合(約會、上班、看球賽)、色系(全黑、大地色)或「換成白色襯衫」`);
       }
       if (pin) {
         const found = findSwap(pin, wearLog);
@@ -871,9 +871,32 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       const slot = slotOf(found.item);
       const label = SLOT_LABEL[slot];
       const asked = askedLabel(req, askedSlotLabel);
+      // 指定的顏色或品類櫃裡沒有:不硬換一件(2026-10-28 本人:「換成黑色襯衫」換上白襯衫,「顏色也不對」)。
+      // 身上不動,講清楚缺什麼、最接近的是哪幾件,要換就自己在衣架點
+      if (!req.byText && (!found.colorHit || !found.catHit)) {
+        const worn = (item) => Object.values(wearing).some((piece) => piece?.id === item.id);
+        const alt = found.altColor && !worn(found.altColor) ? found.altColor : null;
+        setDaily({
+          understood: `換${askedSlotLabel}:${asked}`,
+          reasons: [
+            `櫃裡沒有${asked},身上這套先不換`,
+            ...(found.catHit && !worn(found.item) ? [`同一類最接近的是「${found.item.name}」`] : []),
+            ...(alt ? [`顏色對的有「${alt.name}」`] : []),
+            "要換的話,在衣架上點那一件",
+          ],
+        });
+        return;
+      }
       setAdjusting(null);
       pushHistory(wearing); dirtyRef.current = true;
-      setWearing((current) => ({ ...current, [slot]: found.item }));
+      // 上衣和襯衫是同一件「上身」:說「換成襯衫」是要換掉身上那件上衣,不是疊在外面(2026-10-28 本人:「原本的衣服不會被拿掉」)
+      const TOP = ["upperbody", "shirt"];
+      setWearing((current) => {
+        const next = { ...current };
+        if (TOP.includes(slot) && TOP.includes(req.slot)) { next.upperbody = null; next.shirt = null; }
+        next[slot] = found.item;
+        return next;
+      });
       setDaily({
         understood: `換${label}${vague ? "" : `:${req.byText ? req.phrase : asked}`}`,
         reasons: [found.exact ? `換上「${found.item.name}」` : `櫃裡沒有${asked},最接近的是「${found.item.name}」,先換上這件`],
@@ -1132,7 +1155,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       <>
         {daily.weather && (
           <p className="studio-daily-weather">
-            <CitySelect /> {daily.weather.temp}°(體感 {daily.weather.feelsLike}°)· {daily.weather.desc} · 降雨 {daily.weather.rainProb}% <WeatherCredit />
+            <CitySelect /> {daily.weather.temp}°(體感 {daily.weather.feelsLike}°)· {daily.weather.desc} · 降雨 {daily.weather.rainProb}% <WeatherCredit source={daily.weather.source} />
           </p>
         )}
         {!!main.length && (
@@ -1395,7 +1418,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
         {/* 手機(2026-10-08 本人選「點輸入框才出現」):平常藏起來,聚焦指令框才展開,不跟「今日推薦」搶 */}
         <p className={`studio-examples${typing ? " is-open" : ""}`}>
           <span>例如</span>
-          {["約會", "全黑", "帥一點", "換成黑色襯衫", "褲子不好看", "上衣留著其他重挑", "上一步"].map((example) => (
+          {["約會", "全黑", "帥一點", "換成白色襯衫", "褲子不好看", "上衣留著其他重挑", "上一步"].map((example) => (
             <button
               key={example}
               type="button"

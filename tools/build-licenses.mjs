@@ -116,7 +116,8 @@ ${table}
       <section id="data" aria-labelledby="data-title">
         <h2 id="data-title">資料</h2>
         <ul>
-          <li><b>天氣</b>：<a href="https://open-meteo.com/" rel="noopener">Open-Meteo</a>，依 <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a> 使用。今日推薦用到的氣溫、體感、降雨機率都是它的資料。</li>
+          <li><b>天氣</b>：資料來源<a href="https://www.cwa.gov.tw/" rel="noopener">交通部中央氣象署</a>（開放資料「臺灣未來 3 天天氣預報」），依<a href="https://data.gov.tw/license" rel="noopener">政府資料開放授權條款－第 1 版</a>使用。今日推薦用到的氣溫、體感、降雨機率都是它的資料。伺服器連不上氣象署設定時改用 <a href="https://open-meteo.com/" rel="noopener">Open-Meteo</a>（<a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a>），天氣那一行會寫實際用的是哪一家。</li>
+          <li><b>入口第二章的截圖</b>：圖裡的天氣（基隆，2026 年 10 月 26 日）是 Open-Meteo 的資料（CC BY 4.0）。</li>
           <li><b>去背模型</b>：Google MediaPipe 的 MagicTouch（Interactive Segmenter v2），<a href="https://storage.googleapis.com/mediapipe-assets/Model%20Card%20MagicTouch.pdf" rel="noopener">model card</a> 寫 Apache License 2.0。第一次去背時從這個網站下載，不連到別人的服務。</li>
           <li><b>示範衣櫃</b>：20 件都是站主自己的衣服、自己拍的照片。</li>
         </ul>

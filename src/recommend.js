@@ -12,12 +12,6 @@ import { pairScore } from "./taste.js";
 
 const WEARLOG_KEY = "open-wardrobe-wearlog-v1";
 
-const WMO_DESC = {
-  0: "晴朗", 1: "大致晴朗", 2: "多雲", 3: "陰天", 45: "起霧", 48: "起霧",
-  51: "毛毛雨", 53: "毛毛雨", 55: "毛毛雨", 61: "小雨", 63: "中雨", 65: "大雨",
-  80: "陣雨", 81: "陣雨", 82: "強陣雨", 95: "雷雨", 96: "雷雨", 99: "雷雨",
-};
-
 // 同一個城市半小時內只抓一次:入口、搭配頁、歡迎畫面各自要天氣,不用各打一次
 const weatherCache = new Map();
 const WEATHER_TTL = 30 * 60 * 1000;
@@ -32,22 +26,22 @@ export function fetchWeather(city = readCity()) {
   return promise;
 }
 
+/* 問這個網站的伺服器(/api/weather,2026-10-26 起):伺服器去問中央氣象署(還沒設授權碼時問 Open-Meteo),
+   同一個城市半小時只問一次。瀏覽器不再直接連天氣服務,使用者的網路位址不會送過去。
+   source 是資料實際從哪來的,天氣那一行照它寫出處(WeatherCredit) */
 async function loadWeather(city) {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${city.lat}&longitude=${city.lon}`
-    + `&current=temperature_2m,apparent_temperature,weather_code`
-    + `&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max`
-    + `&timezone=Asia%2FTaipei&forecast_days=1`;
-  const response = await fetch(url);
+  const response = await fetch(`/api/weather?city=${encodeURIComponent(city.key)}`);
   if (!response.ok) throw new Error(`weather http ${response.status}`);
   const data = await response.json();
   return {
     city: city.label,
-    temp: Math.round(data.current.temperature_2m),
-    feelsLike: Math.round(data.current.apparent_temperature),
-    desc: WMO_DESC[data.current.weather_code] || "",
-    rainProb: data.daily.precipitation_probability_max[0] ?? 0,
-    tMax: Math.round(data.daily.temperature_2m_max[0]),
-    tMin: Math.round(data.daily.temperature_2m_min[0]),
+    temp: data.temp,
+    feelsLike: data.feelsLike,
+    desc: data.desc || "",
+    rainProb: data.rainProb ?? 0,
+    tMax: data.tMax,
+    tMin: data.tMin,
+    source: data.source,
   };
 }
 
@@ -1109,7 +1103,9 @@ export function findItemForSwap(items, spec, wearLog = {}, excludeId = null) {
   }).sort((a, b) => b.score - a.score);
   const best = scored[0];
   const exact = (!aliases || best.catHit) && (!spec.color || best.colorHit) && best.descHit;
-  return { item: best.it, exact, textHit: best.textHit };
+  // 顏色沒對上時,另外找顏色對、同一格的那件,給「櫃裡沒有黑色襯衫,黑色的有…」用
+  const altColor = spec.color && !best.colorHit ? scored.find((s) => s.colorHit && (!spec.slot || s.it.part === spec.slot))?.it || null : null;
+  return { item: best.it, exact, textHit: best.textHit, catHit: !aliases || best.catHit, colorHit: !spec.color || best.colorHit, altColor };
 }
 
 /* ---------- 主入口 ---------- */

@@ -443,7 +443,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
             {dailyOutfit && (
               <>
                 <p className="landing-daily-weather">
-                  <CitySelect /> {daily.weather.temp}° · 體感 {daily.weather.feelsLike}° · 降雨 {daily.weather.rainProb}% <WeatherCredit />
+                  <CitySelect /> {daily.weather.temp}° · 體感 {daily.weather.feelsLike}° · 降雨 {daily.weather.rainProb}% <WeatherCredit source={daily.weather.source} />
                 </p>
                 <h2>今日推薦</h2>
                 <ul className="landing-daily-list">
@@ -507,7 +507,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
           {dailyOutfit && (
             <>
               <p className="landing-daily-weather">
-                <CitySelect /> {daily.weather.temp}° · 體感 {daily.weather.feelsLike}° · 降雨 {daily.weather.rainProb}% <WeatherCredit />
+                <CitySelect /> {daily.weather.temp}° · 體感 {daily.weather.feelsLike}° · 降雨 {daily.weather.rainProb}% <WeatherCredit source={daily.weather.source} />
               </p>
               <p className="landing-strip-head">今日推薦</p>
               <ul className="landing-strip-pieces">

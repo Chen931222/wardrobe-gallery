@@ -13,10 +13,16 @@ export function useCity() {
   return city;
 }
 
-/* 天氣資料的出處(2026-10-26 授權盤點):Open-Meteo 的資料是 CC BY 4.0,顯示天氣的地方旁邊要寫來源、連過去。
-   放在天氣那一行的最後,字跟那行一樣小 */
-export function WeatherCredit() {
-  return <><span aria-hidden="true">· </span><a className="weather-credit" href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer" title="天氣資料:Open-Meteo(CC BY 4.0)">Open-Meteo</a></>;
+/* 天氣資料的出處(2026-10-26 授權盤點):顯示天氣的地方旁邊寫來源、連過去。照 /api/weather 回的 source 寫實際用的那一家:
+   中央氣象署(政府資料開放授權條款,要寫出處);伺服器還沒設授權碼時是 Open-Meteo(CC BY 4.0)。放在天氣那一行的最後,字跟那行一樣小 */
+const WEATHER_SOURCES = {
+  cwa: { name: "中央氣象署", href: "https://www.cwa.gov.tw/", title: "天氣資料:交通部中央氣象署(政府資料開放授權條款－第1版)" },
+  "open-meteo": { name: "Open-Meteo", href: "https://open-meteo.com/", title: "天氣資料:Open-Meteo(CC BY 4.0)" },
+};
+export function WeatherCredit({ source }) {
+  const credit = WEATHER_SOURCES[source];
+  if (!credit) return null;
+  return <><span aria-hidden="true">· </span><a className="weather-credit" href={credit.href} target="_blank" rel="noopener noreferrer" title={credit.title}>{credit.name}</a></>;
 }
 
 export function CitySelect() {

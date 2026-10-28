@@ -3,27 +3,29 @@
 // 2026-10-05:原本寫死台中(站主住台中);給朋友用之後,住台北、高雄的人看到的是台中的天氣。
 // 做成選單,不跟瀏覽器要定位權限(多一個彈窗、拒絕了還要另外處理,換來的只是縣市級的精度)。
 // 存在這台裝置(open-wardrobe-city-v1),會跟著備份走,不同步。
+// county:中央氣象署縣市預報用的名稱(2026-10-26 天氣改問氣象署;臺用正體,新竹、嘉義是「市」,馬祖是連江縣)。
+// 這份也給伺服器用:tools/export-static.mjs 匯出時複製成 api/_city.mjs,改了城市兩邊一起變
 export const CITIES = [
-  { key: "keelung", label: "基隆", lat: 25.1276, lon: 121.7392 },
-  { key: "taipei", label: "台北", lat: 25.033, lon: 121.5654 },
-  { key: "newtaipei", label: "新北", lat: 25.012, lon: 121.4625 },
-  { key: "taoyuan", label: "桃園", lat: 24.9936, lon: 121.301 },
-  { key: "hsinchu", label: "新竹", lat: 24.8138, lon: 120.9675 },
-  { key: "miaoli", label: "苗栗", lat: 24.5602, lon: 120.8214 },
-  { key: "taichung", label: "台中", lat: 24.1477, lon: 120.6736 },
-  { key: "changhua", label: "彰化", lat: 24.0809, lon: 120.5385 },
-  { key: "nantou", label: "南投", lat: 23.9097, lon: 120.6838 },
-  { key: "yunlin", label: "雲林", lat: 23.7092, lon: 120.5434 },
-  { key: "chiayi", label: "嘉義", lat: 23.4801, lon: 120.4491 },
-  { key: "tainan", label: "台南", lat: 22.9997, lon: 120.227 },
-  { key: "kaohsiung", label: "高雄", lat: 22.6273, lon: 120.3014 },
-  { key: "pingtung", label: "屏東", lat: 22.672, lon: 120.488 },
-  { key: "yilan", label: "宜蘭", lat: 24.757, lon: 121.7533 },
-  { key: "hualien", label: "花蓮", lat: 23.9871, lon: 121.6015 },
-  { key: "taitung", label: "台東", lat: 22.7583, lon: 121.1444 },
-  { key: "penghu", label: "澎湖", lat: 23.5655, lon: 119.5793 },
-  { key: "kinmen", label: "金門", lat: 24.4365, lon: 118.3186 },
-  { key: "matsu", label: "馬祖", lat: 26.1597, lon: 119.9497 },
+  { key: "keelung", label: "基隆", county: "基隆市", lat: 25.1276, lon: 121.7392 },
+  { key: "taipei", label: "台北", county: "臺北市", lat: 25.033, lon: 121.5654 },
+  { key: "newtaipei", label: "新北", county: "新北市", lat: 25.012, lon: 121.4625 },
+  { key: "taoyuan", label: "桃園", county: "桃園市", lat: 24.9936, lon: 121.301 },
+  { key: "hsinchu", label: "新竹", county: "新竹市", lat: 24.8138, lon: 120.9675 },
+  { key: "miaoli", label: "苗栗", county: "苗栗縣", lat: 24.5602, lon: 120.8214 },
+  { key: "taichung", label: "台中", county: "臺中市", lat: 24.1477, lon: 120.6736 },
+  { key: "changhua", label: "彰化", county: "彰化縣", lat: 24.0809, lon: 120.5385 },
+  { key: "nantou", label: "南投", county: "南投縣", lat: 23.9097, lon: 120.6838 },
+  { key: "yunlin", label: "雲林", county: "雲林縣", lat: 23.7092, lon: 120.5434 },
+  { key: "chiayi", label: "嘉義", county: "嘉義市", lat: 23.4801, lon: 120.4491 },
+  { key: "tainan", label: "台南", county: "臺南市", lat: 22.9997, lon: 120.227 },
+  { key: "kaohsiung", label: "高雄", county: "高雄市", lat: 22.6273, lon: 120.3014 },
+  { key: "pingtung", label: "屏東", county: "屏東縣", lat: 22.672, lon: 120.488 },
+  { key: "yilan", label: "宜蘭", county: "宜蘭縣", lat: 24.757, lon: 121.7533 },
+  { key: "hualien", label: "花蓮", county: "花蓮縣", lat: 23.9871, lon: 121.6015 },
+  { key: "taitung", label: "台東", county: "臺東縣", lat: 22.7583, lon: 121.1444 },
+  { key: "penghu", label: "澎湖", county: "澎湖縣", lat: 23.5655, lon: 119.5793 },
+  { key: "kinmen", label: "金門", county: "金門縣", lat: 24.4365, lon: 118.3186 },
+  { key: "matsu", label: "馬祖", county: "連江縣", lat: 26.1597, lon: 119.9497 },
 ];
 const CITY_KEY = "open-wardrobe-city-v1";
 const DEFAULT = CITIES.find((city) => city.key === "taichung");

@@ -96,13 +96,17 @@ await copyFile(join(ROOT, "functions", "product-page.mjs"), join(OUT, "api", "pr
 await copyFile(join(ROOT, "functions", "product-image.mjs"), join(OUT, "api", "product-image.mjs"));
 await copyFile(join(ROOT, "functions", "feedback.mjs"), join(OUT, "api", "feedback.mjs"));             // 回報問題(2026-10-21)
 await copyFile(join(ROOT, "functions", "_feedback-core.mjs"), join(OUT, "api", "_feedback-core.mjs"));
+// 天氣(2026-10-26):伺服器去問中央氣象署,授權碼在 Vercel 環境變數 CWA_API_KEY;城市清單跟畫面上的選單同一份(src/city.js)
+await copyFile(join(ROOT, "functions", "weather.mjs"), join(OUT, "api", "weather.mjs"));
+await copyFile(join(ROOT, "functions", "_weather-core.mjs"), join(OUT, "api", "_weather-core.mjs"));
+await copyFile(join(ROOT, "src", "city.js"), join(OUT, "api", "_city.mjs"));
 await writeFile(join(OUT, "api", "_proxy-secret.mjs"), `export const SECRET = ${JSON.stringify(randomBytes(32).toString("hex"))};\n`);
 const blobVersion = JSON.parse(await readFile(join(ROOT, "node_modules", "@vercel", "blob", "package.json"), "utf8")).version;
 await writeFile(join(OUT, "package.json"), JSON.stringify({ private: true, type: "module", dependencies: { "@vercel/blob": blobVersion } }, null, 2) + "\n");
 
 // 安全標頭(2026-10-03,審查報告的資安項)。同步碼存在瀏覽器裡,萬一哪天被塞進一段腳本,
 // CSP 讓它只能連到下面這幾個地方,碼送不出去。每一條都對得到用途,加新的外部服務要記得補:
-//   api.open-meteo.com           今日推薦的天氣
+//   (天氣 2026-10-26 起經過這個網站的 /api/weather,瀏覽器不再直接連 api.open-meteo.com,拿掉了)
 //   www.gu-global.com/uniqlo.com 貼連結挑圖:縮圖要顯示、大圖要下載回來去背
 //   cloud.umami.is / gateway.umami.is 使用統計的腳本與送出位址(2026-10-09;src/analytics.js,擁有者模式不載入)
 //   blob: / data:                自己加的衣服(IndexedDB 的圖)、去背中間結果、匯入備份檔裡的圖;
@@ -114,7 +118,7 @@ const CSP = [
   "default-src 'self'",
   "script-src 'self' 'wasm-unsafe-eval' blob: https://cloud.umami.is",
   "worker-src 'self' blob:",
-  "connect-src 'self' blob: data: https://api.open-meteo.com https://www.gu-global.com https://www.uniqlo.com https://gateway.umami.is",
+  "connect-src 'self' blob: data: https://www.gu-global.com https://www.uniqlo.com https://gateway.umami.is",
   "img-src 'self' blob: data: https://www.gu-global.com https://www.uniqlo.com",
   "style-src 'self'",
   "font-src 'self' data:",
