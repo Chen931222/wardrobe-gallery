@@ -572,7 +572,10 @@ export async function shrinkImage(blob, limit = SYNC_IMAGE_LIMIT) {
  *  - 裙子:腰頭是平的(最上面就有一半寬、到 10% 高度幾乎不變),往下慢慢變寬,下襬最寬;
  *    上衣在肩膀、袖子那段(10%–30%)會一下子寬很多
  *  - 很窄(寬不到高的 0.52):長褲
- *  - 寬的(平放的短袖 T、短褲):最寬那一列在下半截是褲管,在上半截是袖子
+ *  - 寬的(平放的短袖 T、短褲):最寬那一列在下半截是褲管,在上半截是袖子。
+ *    平放的外套也常是上窄下寬,所以還要有褲子的樣子:下半截有縫,或最上面幾列分成兩塊以上(褲頭兩端、抽繩、腰扣)。
+ *    2026-10-28 本人 iPad 那件外套、站主 13 件外套裡 2 件原本落在這條變下身;外套最上面是一塊領子、下半截縫最多 0.07,
+ *    走到這條的 12 件短褲不是縫 ≥ 0.29 就是最上面分兩塊。同一批調的,門檻離短褲只差一格雜點,沒有另一批驗
  *  - 寬的而且上面那段偏一邊:側拍的一隻鞋(鞋口在腳跟那側);短褲的褲頭、T 恤的領口在正中間。
  *    靴子、高筒鞋寬高差不多,最寬的是鞋底,不先擋掉會被下一條當成短褲(2026-10-26 驗收)
  *    (推論:104 件裡沒有側拍單隻鞋的照片,只對過畫出來的剪影;衣服偏離中線最多 0.07,畫的鞋 0.28)。
@@ -626,6 +629,10 @@ export function guessPartFromMask(on, W, H) {
   }
   let widest = 0, widestAt = 0;
   for (let f = 0; f <= 1 + 1e-9; f += 0.02) { const w = span(rowAt(f)); if (w > widest) { widest = w; widestAt = f; } }
+  // 最上面 4 列最多分成幾塊(空 2 格以上才算斷開,去背邊緣的雜點不算)
+  const pieces = (y) => { let n = 0, inside = false, run = 0; for (let x = x0; x <= x1; x++) { if (on(x, y)) { if (!inside) n += 1; inside = true; run = 0; } else if (++run >= 2) inside = false; } return n; };
+  let topPieces = 0;
+  for (let y = y0; y <= Math.min(y1, y0 + 3); y++) topPieces = Math.max(topPieces, pieces(y));
 
   if (lowGap >= 0.6 && topGap >= 0.5) return "shoes";
   if (ratio >= 2 && drift < 0.18) return "belt";
@@ -633,6 +640,6 @@ export function guessPartFromMask(on, W, H) {
   if (skirt) return "lowerbody";
   if (ratio < 0.52) return "lowerbody";
   if (ratio > 0.97 && drift >= 0.18) return "shoes";
-  if (ratio > 0.97 && widestAt >= 0.6) return "lowerbody";
+  if (ratio > 0.97 && widestAt >= 0.6 && (lowGap >= 0.2 || topPieces >= 2)) return "lowerbody";
   return "upperbody";
 }
