@@ -577,6 +577,9 @@ export async function shrinkImage(blob, limit = SYNC_IMAGE_LIMIT) {
  *    靴子、高筒鞋寬高差不多,最寬的是鞋底,不先擋掉會被下一條當成短褲(2026-10-26 驗收)
  *    (推論:104 件裡沒有側拍單隻鞋的照片,只對過畫出來的剪影;衣服偏離中線最多 0.07,畫的鞋 0.28)。
  *    不用「很扁就是鞋」:橫著拍的衣服(整件轉 90 度)也很扁,站主的灰帽 T 照片就被這樣猜成鞋
+ *  - 很扁(寬是高的 2 倍以上)又不像側拍的鞋:皮帶。2026-10-28 本人 iPad 上一條捲起來的皮帶被猜成下身,
+ *    衣櫃裡就算多了一件「下身」,配出來是拿皮帶當褲子。站主 104 件最扁的是短褲、包 1.43,截圖剪出來的皮帶約 2.9。
+ *    推論:橫著拍的長褲(轉 90 度約 2.2–2.5)、平放的墨鏡也會落在這裡;猜錯也只是配件,不會被當成褲子穿上去
  *  - 其他當上衣;外套也落在這裡(形狀分不出外套,上衣最接近)
  *  讀不到圖回 null,呼叫的那邊當上衣 */
 export function guessPart(bitmap) {
@@ -625,6 +628,7 @@ export function guessPartFromMask(on, W, H) {
   for (let f = 0; f <= 1 + 1e-9; f += 0.02) { const w = span(rowAt(f)); if (w > widest) { widest = w; widestAt = f; } }
 
   if (lowGap >= 0.6 && topGap >= 0.5) return "shoes";
+  if (ratio >= 2 && drift < 0.18) return "belt";
   if (lowGap >= 0.5 && (ratio < 0.75 || ratio > 0.97)) return "lowerbody";
   if (skirt) return "lowerbody";
   if (ratio < 0.52) return "lowerbody";
