@@ -972,7 +972,10 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
                 </div>
               </div>
             )}
-            <small className="add-hint">名稱、分類、顏色都不變;顏色要跟著新圖改的話,換好後在編輯裡按吸色。</small>
+            {/* 代表款換圖會重抓顏色、拿掉品名裡的顏色字(App.jsx replaceImage,2026-10-29) */}
+            <small className="add-hint">{replacing.standIn
+              ? "換上之後就不是代表款了:顏色照這張重抓,品名拿掉顏色字;分類不變。"
+              : "名稱、分類、顏色都不變;顏色要跟著新圖改的話,換好後在編輯裡按吸色。"}</small>
             <div className="add-actions">
               <button type="button" className="secondary-button" onClick={requestClose}>取消</button>
               <button type="button" className="primary-button" onClick={replace} disabled={!draft.blob}>

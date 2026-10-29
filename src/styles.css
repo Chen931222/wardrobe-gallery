@@ -3225,7 +3225,9 @@ h1, h2, h3 {
   font-family: var(--font-display); font-size: 15px; letter-spacing: .08em; text-transform: uppercase; cursor: pointer;
 }
 .story-intro-open:hover, .story-intro-open:focus-visible { opacity: .9; }
-.story-media-intro { border-color: rgba(236, 227, 209, .3); background: transparent; }
+/* 介紹片是 1080×1920(9:16),不是上面操作短片的 720:1558:照那個比例框,cover 會把左右各裁掉約 9%,
+   片頭的網址、字幕的頭一個字都在被裁的那條裡(2026-10-29 換片時量到;10-23 那支也一樣被裁) */
+.story-media-intro { aspect-ratio: 9 / 16; border-color: rgba(236, 227, 209, .3); background: transparent; }
 .story-media-intro img, .story-intro-video { display: block; width: 100%; height: 100%; object-fit: cover; background: transparent; }
 
 /* 標誌(2026-10-24 換成「PAIR 鉤 THIS」:底線折成衣架肩膀、兩字中間長出鉤子、鉤子根部綁蝴蝶結):

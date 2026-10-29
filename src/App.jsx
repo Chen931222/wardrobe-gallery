@@ -6,7 +6,8 @@ import { OutfitStudio, rememberWearing } from "./OutfitStudio.jsx";
 import { LandingRing } from "./LandingRing.jsx";
 import { AddGarment } from "./AddGarment.jsx";
 import { SyncPanel } from "./SyncPanel.jsx";
-import { deleteLocalItem, findUrl, loadLocalItems, productUrlProblem, putLocalRecord, updateLocalItem } from "./localWardrobe.js";
+import { deleteLocalItem, findUrl, garmentColors, loadLocalItems, productUrlProblem, putLocalRecord, updateLocalItem } from "./localWardrobe.js";
+import { STAND_INS, STAND_IN_COLORS, standInName } from "./standIns.js";
 import { CAN_ADD, CAN_EDIT, canEditItem } from "./ownerMode.js";
 import { hasLocalChanges, lastSyncError, noteDeliberateDelete, scheduleSync, syncCode, syncNotice, syncNow } from "./sync.js";
 import { findSameStyle, findSimilar, fitOf, guessWarmth, kindLabel, wishOutfits } from "./wishCheck.js";
@@ -2043,10 +2044,25 @@ export function App() {
   // 換一張圖(2026-10-06):自己加的直接換掉那件的圖;站主衣櫃的另存一張 override-<id>(跟著同步),可以換回原圖
   const [replaceRequest, setReplaceRequest] = useState(null);
   const replaceImage = async (item, blob) => {
-    if (item.isLocal) await updateLocalItem(item.id, { blob, ...(item.standIn ? { standIn: false } : {}) });   // 換成自己的圖,就不是代表款了
-    else await putLocalRecord({ id: `override-${item.id}`, overrideFor: item.id, blob, createdAt: new Date().toISOString() });
+    let name = item.name;
+    if (item.isLocal) {
+      // 代表款換成自己的圖,就不是代表款了(2026-10-29)。品名「白色短袖T恤」和色碼是當初點的顏色:
+      // 換成黑 T 的照片後還被當白色(colorLabel 先看品名,驗收抓到)→ 顏色照新圖重抓;品名還是自動取的就拿掉顏色字,只留「短袖T恤」
+      let fix = {};
+      if (item.standIn) {
+        const kind = STAND_INS.find((k) => Object.keys(STAND_IN_COLORS).some((c) => standInName(k, c) === item.name));
+        if (kind) name = kind.noun;
+        const colors = await garmentColors(blob).catch(() => null);
+        fix = { standIn: false, ...(colors || {}), ...(kind ? { name } : {}) };
+      }
+      await updateLocalItem(item.id, { blob, ...fix });
+      // 「第 1 件／第 5 件」只算新增(AddGarment),換圖不算;代表款換成自己的要另外記,才看得出點代表款的人會不會換
+      if (item.standIn) track("代表款換成自己的");
+    } else await putLocalRecord({ id: `override-${item.id}`, overrideFor: item.id, blob, createdAt: new Date().toISOString() });
     await settleRefresh();
-    say(`「${item.name || "這件"}」換好新圖了。`);
+    say(item.standIn
+      ? `「${name || "這件"}」換成你的圖了,顏色照新圖重抓;不對的話點開那件改。`
+      : `「${name || "這件"}」換好新圖了。`);
   };
   const restoreOriginalImage = async (item) => {
     noteDeliberateDelete(`override-${item.id}`);

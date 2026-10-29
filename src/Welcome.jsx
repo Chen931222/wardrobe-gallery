@@ -195,7 +195,7 @@ export function Welcome({ demoItems, onAdd, onDemo, onImportFile, trashCount = 0
     root.querySelectorAll(".story-step, .story-intro").forEach((el) => observer.observe(el));
     return () => observer.disconnect();
   }, []);
-  // 25 秒介紹:點了才載入、才播(有聲音;按鈕本身就是使用者的手勢,瀏覽器准有聲自動播)。
+  // 介紹片(26 秒):點了才載入、才播(有聲音;按鈕本身就是使用者的手勢,瀏覽器准有聲自動播)。
   // 按鈕換成播放器之後焦點移到播放器上,不然鍵盤使用者的焦點掉回 body(驗收)
   const [intro, setIntro] = useState(false);
   const introRef = useRef(null);
@@ -358,15 +358,16 @@ export function Welcome({ demoItems, onAdd, onDemo, onImportFile, trashCount = 0
         <div className="story-intro">
           <div className="story-inner">
             <div className="story-text">
-              <h3><span className="nowrap">25 秒，</span><span className="nowrap">從放進來到配好</span></h3>
+              {/* 2026-10-29 影片換成 _video-lab/films/pairthis-quick:不拍照、點代表款 → 配一套 → 換圖那條路(舊的那支講「缺的跟示範衣櫃借」,10-26 拿掉了) */}
+              <h3><span className="nowrap">26 秒，</span><span className="nowrap">不拍照也能配好</span></h3>
               {/* 載入大小、怎麼錄的不寫(2026-10-24 取捨):要知道的只有「會出聲」 */}
               {!intro && (
-                <button type="button" className="story-intro-open" onClick={() => { setIntro(true); track("看介紹影片", { 頁: "入口" }); }}>看 25 秒介紹（有聲音）</button>
+                <button type="button" className="story-intro-open" onClick={() => { setIntro(true); track("看介紹影片", { 頁: "入口" }); }}>看 26 秒介紹（有聲音）</button>
               )}
             </div>
             <div className="story-media story-media-intro">
               {intro ? (
-                <video ref={introRef} className="story-intro-video" src="/media/intro.mp4" poster="/media/intro.jpg" controls autoPlay playsInline aria-label="PairThis 搭這件 25 秒介紹" />
+                <video ref={introRef} className="story-intro-video" src="/media/intro.mp4" poster="/media/intro.jpg" controls autoPlay playsInline aria-label="PairThis 搭這件 26 秒介紹" />
               ) : (
                 <img src="/media/intro.jpg" alt="" loading="lazy" />
               )}
