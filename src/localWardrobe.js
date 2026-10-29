@@ -269,7 +269,7 @@ export function localFullImage(id) {
   return fullPending.get(id);
 }
 
-export async function saveLocalItem({ id, name, part, color, secondaryColor, tags, blob, wishlist, dream, sourceUrl, price, priceCurrency, brand, partGuessed = false }) {
+export async function saveLocalItem({ id, name, part, color, secondaryColor, tags, blob, wishlist, dream, sourceUrl, price, priceCurrency, brand, partGuessed = false, standIn = false }) {
   await putRecord({
     id, name, part, color, secondaryColor: secondaryColor || null,
     tags: tags || [], blob, createdAt: new Date().toISOString(),
@@ -281,6 +281,8 @@ export async function saveLocalItem({ id, name, part, color, secondaryColor, tag
     ...(brand ? { brand } : {}),
     // 分類是猜的(2026-10-21,分類改選填):衣櫃格子標一下,點開那件改分類就清掉
     ...(partGuessed ? { partGuessed: true } : {}),
+    // 代表款(2026-10-29,src/standIns.js):不是自己拍的,是示範衣櫃同一類換色;衣櫃格子標「代表款」,換圖就清掉
+    ...(standIn ? { standIn: true } : {}),
   });
 }
 

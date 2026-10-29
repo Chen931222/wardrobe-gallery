@@ -139,8 +139,9 @@ function StoryLoop({ name, label }) {
  * @param onAdd / onDemo 兩個出口;onImportFile(file) 匯入備份檔。同步不放這裡:只給站主,歡迎畫面只有訪客看得到
  *   onDemo(demo):demo = { outfit, daily } 是這頁配好的那套(天氣是假的時 daily 為 null);還沒配好時是 null
  */
-/** @param trashCount 垃圾桶裡有幾件(刪光了回到這裡,還要找得到);onOpenTrash 打開垃圾桶 */
-export function Welcome({ demoItems, onAdd, onDemo, onImportFile, trashCount = 0, onOpenTrash = null, onUpdates = null }) {
+/** @param trashCount 垃圾桶裡有幾件(刪光了回到這裡,還要找得到);onOpenTrash 打開垃圾桶
+ *  @param onQuickStart 不拍照、點代表款起步(src/QuickStart.jsx,2026-10-29) */
+export function Welcome({ demoItems, onAdd, onDemo, onImportFile, trashCount = 0, onOpenTrash = null, onUpdates = null, onQuickStart = null }) {
   const fileRef = useRef(null);
   const [weather, setWeather] = useState(null);
   const city = useCity();
@@ -263,6 +264,10 @@ export function Welcome({ demoItems, onAdd, onDemo, onImportFile, trashCount = 0
           {/* 2026-10-24(試用者:「打一句話就能改」藏太深):直接帶這頁那套進搭配,不再先停在衣服環繞的入口 */}
           {!!demoItems.length && <button type="button" className="secondary-button" onClick={() => (look ? onDemo(demoPayload()) : setDemoWanted(true))} disabled={demoWanted} aria-busy={demoWanted}>看看穿搭示範</button>}
         </div>
+        {/* 2026-10-29 本人:用過的人說連拍照都懶。不拍照的那條路接在兩顆按鈕正下方,一行字,不搶「加入第一件」的位置 */}
+        {onQuickStart && !!demoItems.length && (
+          <p className="welcome-quick">不想拍照？<button type="button" onClick={onQuickStart}>點幾件代表款，先配一套</button></p>
+        )}
         {ios && !standalone && !app && (
           // 2026-10-24 縮成兩行(事實不變):手機上它排在示範和按鈕後面,三行時第三行掉出 iPhone 第一屏。
           // 排在「不用註冊」前面:這句要在加衣服之前做,375×548 放後面會被推出第一屏 39px(驗收)

@@ -31,6 +31,7 @@ const FIELDS = {
   wishlist: Boolean,
   dream: Boolean,
   partGuessed: Boolean,
+  standIn: Boolean,
 };
 
 function cleanFields(record) {

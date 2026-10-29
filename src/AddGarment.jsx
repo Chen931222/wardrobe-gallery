@@ -731,7 +731,8 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     track("加衣服", { 種類: draft.wishlist ? (draft.dream ? "夢幻逸品" : "想買") : "已經有" });
     // 漏斗(2026-10-21):自己加的、已經有的,加到第 1 件和第 5 件各記一次(existing 是存之前的清單)
     if (!draft.wishlist) {
-      const owned = existing.filter((item) => item.isLocal && !item.wishlist && !item.trashedAt).length + 1;
+      // 代表款(2026-10-29,src/standIns.js)不算:這兩個數字要量的是自己拍、自己貼連結加的(驗收:4 件代表款＋1 張照片會被記成第 5 件)
+      const owned = existing.filter((item) => item.isLocal && !item.wishlist && !item.trashedAt && !item.standIn).length + 1;
       if (owned === 1) track("第 1 件");
       if (owned === 5) track("第 5 件");
     }

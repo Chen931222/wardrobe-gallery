@@ -3278,6 +3278,13 @@ h1, h2, h3 {
   color: var(--ink); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
 }
 .welcome .welcome-foot button { margin-left: 0; }   /* 頁尾的按鈕不接在問句後面,不用左邊那 6px */
+/* 不拍照的那條路(2026-10-29):兩顆按鈕正下方一行,字跟「不用註冊」那句同級,按的那段用墨色底線 */
+.welcome .welcome-quick { margin: 12px 0 0; font-size: 14px; line-height: 1.6; color: var(--muted); }
+.welcome-quick button {
+  margin-left: 4px; padding: 6px 0; border: 0; background: none;
+  color: var(--ink); font: inherit; text-decoration: underline; text-underline-offset: 4px; cursor: pointer;
+}
+.welcome-quick button:hover, .welcome-quick button:focus-visible { color: var(--accent); }
 .welcome-look { margin: 8px 0 0; }
 .mini-look {
   position: relative;
@@ -3865,6 +3872,68 @@ h1, h2, h3 {
 }
 .feedback-panel { align-items: stretch; text-align: left; gap: 14px; max-width: 440px; }
 .feedback-done { margin: 0; padding: 12px; border: 1px solid var(--line); font-size: 14px; }
+
+/* 代表款起步(2026-10-29,src/QuickStart.jsx)。跟新增視窗同一張面板,寬一點放得下一排五類;
+   底下「你點的」和按鈕黏在視窗底,點到下面的鞋子、包還看得到還差什麼 */
+.quick-panel { width: min(600px, 100%); align-items: stretch; text-align: left; gap: 18px; padding-bottom: 0; }
+/* 視窗底下不留 padding:黏在底的那條才貼得到螢幕最下面,不會在它下面再露出一截後背包(2026-10-29 桌機截圖) */
+.add-overlay.quick-overlay { padding-bottom: 0; }
+.quick-title { margin: 0 40px 0 0; font-family: var(--font-display); font-size: 26px; font-weight: 600; line-height: 1.25; color: var(--ink); text-wrap: balance; }
+.add-panel .quick-lede { margin: -8px 0 0; font-size: 14px; line-height: 1.7; color: var(--body); max-width: 34em; }
+.quick-group h3 { margin: 0 0 8px; font-size: 14px; font-weight: 600; color: var(--ink); }
+.quick-kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.quick-kind {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 8px 6px 10px; border: 1px solid var(--line); background: var(--paper);
+  color: var(--ink); font: inherit; font-size: 13px; cursor: pointer;
+  transition: border-color .16s var(--ease-out), background-color .16s var(--ease-out);
+}
+.quick-kind img { width: 100%; height: 64px; object-fit: contain; pointer-events: none; }
+.quick-kind:hover { background: var(--hover-tint); }
+.quick-kind.is-open { border-color: var(--ink); }
+.quick-kind:focus-visible, .quick-color:focus-visible, .quick-picks button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.quick-kind-count {
+  position: absolute; top: 4px; right: 4px;
+  min-width: 20px; height: 20px; padding: 0 5px; display: grid; place-items: center;
+  background: var(--ink); color: var(--paper); font-size: 12px; font-variant-numeric: tabular-nums;
+}
+.quick-colors { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; scroll-margin-bottom: 190px; }   /* 打開一類時捲到看得見,不被底下那條蓋住 */
+.quick-color {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 44px; padding: 0 14px 0 10px;
+  border: 1px solid var(--line); background: var(--surface);
+  color: var(--ink); font: inherit; font-size: 14px; cursor: pointer;
+}
+.quick-color[aria-pressed="true"] { border-color: var(--ink); background: var(--paper); }
+.quick-dot { width: 18px; height: 18px; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--line); }
+.quick-dock {
+  position: sticky; bottom: 0; z-index: 1;
+  margin: 0 -24px; padding: 12px 24px max(16px, env(safe-area-inset-bottom));
+  background: var(--surface); border-top: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.quick-picks { display: flex; gap: 8px; margin: 0; padding: 0 0 2px; list-style: none; overflow-x: auto; scrollbar-width: thin; }
+.quick-picks li {
+  flex: none; display: flex; align-items: center; gap: 6px;
+  padding-left: 4px; border: 1px solid var(--line); background: var(--paper);
+  font-size: 13px; color: var(--ink); white-space: nowrap;
+}
+.quick-picks img, .quick-picks-blank { width: 36px; height: 36px; object-fit: contain; }
+.quick-picks button { width: 36px; height: 40px; display: grid; place-items: center; border: 0; background: none; color: var(--muted); cursor: pointer; }
+.quick-picks button:hover { color: var(--ink); }
+.quick-dock-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.quick-status { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.quick-dock-row .primary-button { min-height: 48px; padding: 0 22px; font-size: 15px; }
+.quick-dock-row .primary-button:disabled { opacity: .4; cursor: default; background: var(--ink); border-color: var(--ink); }   /* 還差上衣或下身:按不下去要看得出來,旁邊那句講還差什麼 */
+@media (max-width: 520px) {
+  .quick-panel { padding-left: 16px; padding-right: 16px; }
+  .quick-dock { margin: 0 -16px; padding-left: 16px; padding-right: 16px; }
+  .quick-kinds { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .quick-kind { padding: 6px 2px 8px; font-size: 12px; }
+  .quick-kind img { height: 48px; }
+  .quick-dock-row .primary-button { flex: 1 1 100%; }
+}
 /* 分類是猜的(2026-10-21,分類改選填):小字標在格子左下(右上是垃圾桶鈕;想買的標記也在左下,但猜的只標已經有的,不會撞),點開那件改分類就消失 */
 .guess-badge {
   position: absolute; left: 4px; bottom: 4px;
@@ -3872,6 +3941,7 @@ h1, h2, h3 {
   color: var(--muted); background: var(--paper); border: 1px solid var(--line);
   pointer-events: none;
 }
+.guess-badge.is-stand-in { color: var(--ink); }
 
 
 /* 出錯畫面(ErrorBoundary,2026-10-26):整頁白的替代。跟入口同一張紙,一個標誌、一句實話、兩個出口 */

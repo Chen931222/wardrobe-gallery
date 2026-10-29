@@ -10,7 +10,7 @@ import { deleteLocalItem, findUrl, loadLocalItems, productUrlProblem, putLocalRe
 import { CAN_ADD, CAN_EDIT, canEditItem } from "./ownerMode.js";
 import { hasLocalChanges, lastSyncError, noteDeliberateDelete, scheduleSync, syncCode, syncNotice, syncNow } from "./sync.js";
 import { findSameStyle, findSimilar, fitOf, guessWarmth, kindLabel, wishOutfits } from "./wishCheck.js";
-import { colorLabel, colorName, colorRole, colorScore, isNeutral } from "./recommend.js";
+import { colorLabel, colorName, colorRole, colorScore, fetchWeather, isNeutral, readWearLog, recommendOutfit } from "./recommend.js";
 import { Feedback } from "./Feedback.jsx";
 import { Logo } from "./Brand.jsx";
 import { track } from "./analytics.js";
@@ -21,6 +21,7 @@ import { CURRENCIES, formatPrice, parsePrice } from "./price.js";
 import { downloadBackupZip, importBackupFile } from "./backup.js";
 import { backupReminder, inAppBrowser, isIos, isStandalone, requestPersist, snoozeBackupHint } from "./keepSafe.js";
 import { Welcome } from "./Welcome.jsx";
+import { QuickStart } from "./QuickStart.jsx";
 import { UpdatesSheet } from "./Updates.jsx";
 import { useIndexIndicator } from "./useIndexIndicator.js";
 import { hasUnseenUpdates } from "./updates.js";
@@ -31,7 +32,7 @@ import { FAVORITES_KEY, readFavorites, toggleFavorite } from "./favorites.js";
 import { useFullImage } from "./useFullImage.js";
 import { brandOf, brandSuggestions, canonicalBrand } from "./brands.js";
 import { partFromName } from "./brandLink.js";
-import { noteRecommendation } from "./taste.js";
+import { noteRecommendation, readTaste } from "./taste.js";
 
 const STORAGE_KEY = "open-wardrobe-edits-v1";
 const DELETED_STORAGE_KEY = "open-wardrobe-deleted-v1";
@@ -362,7 +363,7 @@ function GalleryItem({ item, selected, onOpen, onDelete, favorite = false, picki
         onClick={() => (pickable ? onPick(item.id) : onOpen(item.id))}
         aria-label={pickable
           ? `${picked ? "取消勾選" : "勾選"}${label}`
-          : `查看${label}${qtyOf(item.quantity) > 1 ? `(${qtyOf(item.quantity)} 件)` : ""}${item.wishlist ? (item.dream ? "(夢幻逸品)" : "(還沒買)") : ""}${favorite ? "(最愛)" : ""}`}
+          : `查看${label}${qtyOf(item.quantity) > 1 ? `(${qtyOf(item.quantity)} 件)` : ""}${item.wishlist ? (item.dream ? "(夢幻逸品)" : "(還沒買)") : ""}${item.standIn ? "(代表款)" : ""}${favorite ? "(最愛)" : ""}`}
         aria-pressed={pickable ? picked : selected}
         data-testid={`wardrobe-item-${item.id}`}
       >
@@ -377,6 +378,8 @@ function GalleryItem({ item, selected, onOpen, onDelete, favorite = false, picki
         {pickable && <span className="pick-mark" aria-hidden="true">{picked && <Check size={14} weight="bold" />}</span>}
         {qtyOf(item.quantity) > 1 && <span className="qty-badge" aria-hidden="true">×{qtyOf(item.quantity)}</span>}
         {item.partGuessed && !item.wishlist && <span className="guess-badge" aria-hidden="true">分類是猜的</span>}
+        {/* 代表款(2026-10-29):不是自己拍的,點開那件按「換圖」換成自己的就消失。跟「分類是猜的」不會同時出現(代表款的分類是點的) */}
+        {item.standIn && <span className="guess-badge is-stand-in" aria-hidden="true">代表款</span>}
       </button>
       {/* 品名一行:只靠圖分不出「灰褐運動長褲」和「灰色打褶西裝褲」(2026-07 本人回報)。按鈕的 aria-label 已經念過品名 */}
       <span className="gallery-name" aria-hidden="true" title={label}>{label}</span>
@@ -1742,6 +1745,36 @@ export function App() {
   const showWelcome = !error && !loading && !ownedItems.length && !unownedCount && view === "landing" && closet === "mine";
 
   // 「加入第一件衣服」「去新增」:換到衣櫃(新增鈕在那裡的標題列),叫新增自己打開
+  /* 代表款起步(2026-10-29,src/QuickStart.jsx):存好就照今天的天氣配一套、帶進搭配頁,理由第一句講這是代表款。
+     天氣抓不到就不配,只進衣櫃(不拿假天氣講體感) */
+  const [quickOpen, setQuickOpen] = useState(false);
+  const quickSaved = async (count) => {
+    setQuickOpen(false);
+    chooseCloset("mine");
+    await settleRefresh();
+    const note = `這 ${count} 件是代表款,照你點的類別和顏色;到衣櫃點開一件按「換圖」,就換成你自己的。`;
+    try {
+      const mine = ((await loadLocalItems()) || [])
+        .filter((item) => !item.wishlist && !item.trashedAt)
+        .map((item) => (item.warmth === undefined ? { ...item, warmth: guessWarmth(item) } : item));
+      // 天氣最多等 4 秒(驗收:天氣卡 12 秒時入口停了快 8 秒,什麼都沒說);等不到就先進衣櫃,講怎麼自己配
+      say(`${count} 件代表款放進衣櫃了,正在照今天的天氣配一套…`);
+      const weather = await Promise.race([fetchWeather(), new Promise((_, reject) => setTimeout(() => reject(new Error("天氣等太久")), 4000))]);
+      const result = recommendOutfit(mine, weather, readWearLog(), null, {}, null, readTaste());
+      if (result.error) throw new Error(result.error);
+      noteRecommendation(result.outfit, result.recalled);
+      rememberWearing(result.outfit, "mine");
+      setPendingOutfit(result.outfit);
+      setPendingDaily({ weather, reasons: [note, ...(result.reasons || [])], details: result.details || [] });
+      setView("styling");
+      window.scrollTo({ top: 0 });
+      say(`${count} 件代表款放進衣櫃了,照今天的天氣配了一套。`);
+    } catch {
+      setView("closet");
+      say(`${count} 件代表款放進衣櫃了。天氣沒抓到,還沒配;到「搭配」按「今日推薦」就會配。`);
+    }
+  };
+
   const requestAdd = () => {
     setView("closet");
     setAddRequest((count) => count + 1);
@@ -2010,7 +2043,7 @@ export function App() {
   // 換一張圖(2026-10-06):自己加的直接換掉那件的圖;站主衣櫃的另存一張 override-<id>(跟著同步),可以換回原圖
   const [replaceRequest, setReplaceRequest] = useState(null);
   const replaceImage = async (item, blob) => {
-    if (item.isLocal) await updateLocalItem(item.id, { blob });
+    if (item.isLocal) await updateLocalItem(item.id, { blob, ...(item.standIn ? { standIn: false } : {}) });   // 換成自己的圖,就不是代表款了
     else await putLocalRecord({ id: `override-${item.id}`, overrideFor: item.id, blob, createdAt: new Date().toISOString() });
     await settleRefresh();
     say(`「${item.name || "這件"}」換好新圖了。`);
@@ -2186,6 +2219,7 @@ export function App() {
           <Welcome
             demoItems={demoItems}
             onAdd={requestAdd}
+            onQuickStart={() => setQuickOpen(true)}
             // 帶著入口配好的那套直接進搭配頁(2026-10-24);那套還沒配好就照舊停在入口。
             // 不走 wearOutfit:它記「身上這套」用的是切換前的衣櫃(mine),這裡要記在 demo
             onDemo={(demo) => {
@@ -2286,6 +2320,7 @@ export function App() {
       {CAN_ADD && (
         <AddGarment hideButton replaceRequest={replaceRequest} onReplaced={replaceImage} onAdded={() => {}} />
       )}
+      {CAN_ADD && quickOpen && <QuickStart demoItems={demoItems} onClose={() => setQuickOpen(false)} onSaved={quickSaved} />}
 
       {selectedItem && (
         <ItemViewer
