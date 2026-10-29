@@ -7,7 +7,7 @@ import { LandingRing } from "./LandingRing.jsx";
 import { AddGarment } from "./AddGarment.jsx";
 import { SyncPanel } from "./SyncPanel.jsx";
 import { deleteLocalItem, findUrl, garmentColors, loadLocalItems, productUrlProblem, putLocalRecord, updateLocalItem } from "./localWardrobe.js";
-import { STAND_INS, STAND_IN_COLORS, standInName } from "./standIns.js";
+import { autoNamedKind } from "./standIns.js";
 import { CAN_ADD, CAN_EDIT, canEditItem } from "./ownerMode.js";
 import { hasLocalChanges, lastSyncError, noteDeliberateDelete, scheduleSync, syncCode, syncNotice, syncNow } from "./sync.js";
 import { findSameStyle, findSimilar, fitOf, guessWarmth, kindLabel, wishOutfits } from "./wishCheck.js";
@@ -228,6 +228,18 @@ function persistEdit(item, original) {
 function removePersistedEdit(id) {
   const edits = readEdits();
   delete edits[id];
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(edits));
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));
+}
+
+/** 只拿掉一件的某幾欄編輯,其他欄留著(代表款換圖重抓顏色:手動改過的顏色是對著代表款那張改的) */
+function dropPersistedFields(id, fields) {
+  const edits = readEdits();
+  const entry = edits[id];
+  if (!entry || !fields.some((field) => field in entry)) return;
+  for (const field of fields) delete entry[field];
+  if (Object.keys(entry).length) edits[id] = entry;
+  else delete edits[id];
   localStorage.setItem(STORAGE_KEY, JSON.stringify(edits));
   if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));
 }
@@ -2045,24 +2057,32 @@ export function App() {
   const [replaceRequest, setReplaceRequest] = useState(null);
   const replaceImage = async (item, blob) => {
     let name = item.name;
+    let nameColor = "";
     if (item.isLocal) {
       // 代表款換成自己的圖,就不是代表款了(2026-10-29)。品名「白色短袖T恤」和色碼是當初點的顏色:
       // 換成黑 T 的照片後還被當白色(colorLabel 先看品名,驗收抓到)→ 顏色照新圖重抓;品名還是自動取的就拿掉顏色字,只留「短袖T恤」
       let fix = {};
       if (item.standIn) {
-        const kind = STAND_INS.find((k) => Object.keys(STAND_IN_COLORS).some((c) => standInName(k, c) === item.name));
+        const kind = autoNamedKind(item.name);
         if (kind) name = kind.noun;
         const colors = await garmentColors(blob).catch(() => null);
         fix = { standIn: false, ...(colors || {}), ...(kind ? { name } : {}) };
+        // 編輯紀錄疊在 IndexedDB 上面:手動改過的顏色留著,新抓的就被蓋掉(驗收抓到)
+        if (colors) dropPersistedFields(item.id, ["color", "secondaryColor"]);
+        // 自己取的品名寫了顏色(「我的白T」)不動,顏色的說法照樣先看品名;跟新照片不同色就照實講,不說「重抓了」
+        const named = kind ? "" : colorLabel(name, null);
+        if (named && colors?.color && named !== colorName(colors.color)) nameColor = named;
       }
       await updateLocalItem(item.id, { blob, ...fix });
       // 「第 1 件／第 5 件」只算新增(AddGarment),換圖不算;代表款換成自己的要另外記,才看得出點代表款的人會不會換
       if (item.standIn) track("代表款換成自己的");
     } else await putLocalRecord({ id: `override-${item.id}`, overrideFor: item.id, blob, createdAt: new Date().toISOString() });
     await settleRefresh();
-    say(item.standIn
-      ? `「${name || "這件"}」換成你的圖了,顏色照新圖重抓;不對的話點開那件改。`
-      : `「${name || "這件"}」換好新圖了。`);
+    say(!item.standIn
+      ? `「${name || "這件"}」換好新圖了。`
+      : nameColor
+        ? `「${name}」換成你的圖了。品名寫著${nameColor},推薦會當它是${nameColor};不是的話點開那件改名。`
+        : `「${name || "這件"}」換成你的圖了,顏色照新圖重抓;不對的話點開那件改。`);
   };
   const restoreOriginalImage = async (item) => {
     noteDeliberateDelete(`override-${item.id}`);

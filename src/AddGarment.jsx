@@ -13,6 +13,7 @@ import { CutoutPicker } from "./CutoutPicker.jsx";
 import { CURRENCIES, parsePrice } from "./price.js";
 import { brandInUrl, brandOf, brandSuggestions, canonicalBrand } from "./brands.js";
 import { track } from "./analytics.js";
+import { autoNamedKind } from "./standIns.js";
 
 // 分類清單在 src/parts.js(新增的選單照組排:衣服、鞋襪、配件、小物)
 
@@ -811,7 +812,10 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
           >
             {closeButton()}
             <p className="add-step">{replacing ? `換一張圖:${replacing.name || "這件"}` : "新增一件"}</p>
-            {replacing && <small className="add-hint">選一張照片或貼商品連結,框出衣服、去背之後換上。名稱、分類、顏色都不會變。</small>}
+            {/* 代表款換圖會重抓顏色(App.jsx replaceImage):舊版這裡照樣寫「顏色都不會變」,跟下一步的提示打架(2026-10-29 驗收) */}
+            {replacing && <small className="add-hint">{replacing.standIn
+              ? "選一張照片或貼商品連結,框出衣服、去背之後換上。換上之後就不是代表款了,顏色照新圖重抓。"
+              : "選一張照片或貼商品連結,框出衣服、去背之後換上。名稱、分類、顏色都不會變。"}</small>}
             {/* 貼連結放大門(2026-10-21):網購過的不用拍(商品圖照樣去背,只是省掉拍和框);拍照是沒連結時的第二條路 */}
             {!replacing && <small className="add-hint add-lead">網購過的衣服最快:到商品頁按「分享」拷貝連結,貼在下面,不用拍照。沒有連結的再拍照。</small>}
             <label className="add-field">
@@ -972,10 +976,13 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
                 </div>
               </div>
             )}
-            {/* 代表款換圖會重抓顏色、拿掉品名裡的顏色字(App.jsx replaceImage,2026-10-29) */}
-            <small className="add-hint">{replacing.standIn
-              ? "換上之後就不是代表款了:顏色照這張重抓,品名拿掉顏色字;分類不變。"
-              : "名稱、分類、顏色都不變;顏色要跟著新圖改的話,換好後在編輯裡按吸色。"}</small>
+            {/* 代表款換圖會重抓顏色、拿掉品名裡的顏色字(App.jsx replaceImage,2026-10-29)。
+                自己改過的品名(「我的白T」)不動,舊版這句照樣說「品名拿掉顏色字」(驗收抓到) */}
+            <small className="add-hint">{!replacing.standIn
+              ? "名稱、分類、顏色都不變;顏色要跟著新圖改的話,換好後在編輯裡按吸色。"
+              : autoNamedKind(replacing.name)
+                ? "換上之後就不是代表款了:顏色照這張重抓,品名拿掉顏色字;分類不變。"
+                : "換上之後就不是代表款了:顏色照這張重抓;名稱、分類不變。"}</small>
             <div className="add-actions">
               <button type="button" className="secondary-button" onClick={requestClose}>取消</button>
               <button type="button" className="primary-button" onClick={replace} disabled={!draft.blob}>

@@ -43,9 +43,13 @@ export function QuickStart({ demoItems, onClose, onSaved }) {
   const picksRef = useRef(picks);
   picksRef.current = picks;
   const mountedRef = useRef(true);
-  useEffect(() => () => {
-    mountedRef.current = false;
-    for (const pick of picksRef.current) if (pick.thumb) URL.revokeObjectURL(pick.thumb);
+  useEffect(() => {
+    // 開發版 StrictMode 會先模擬卸載再掛上:不設回 true,小圖做好就被丟掉,本機永遠看不到(2026-10-29 驗收)
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      for (const pick of picksRef.current) if (pick.thumb) URL.revokeObjectURL(pick.thumb);
+    };
   }, []);
 
   const toggle = async (kind, colorKey) => {

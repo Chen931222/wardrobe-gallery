@@ -43,6 +43,10 @@ export const STAND_INS = [
 
 export const standInName = (kind, colorKey) => `${STAND_IN_COLORS[colorKey].label}${kind.noun}`;
 
+/** 品名還是當初自動取的(「白色短袖T恤」)就回那一類,自己改過的回 undefined。
+ *  換圖時拿來決定要不要拿掉顏色字(App.jsx replaceImage),換圖視窗照這個講會不會改品名(AddGarment.jsx) */
+export const autoNamedKind = (name) => STAND_INS.find((kind) => Object.keys(STAND_IN_COLORS).some((colorKey) => standInName(kind, colorKey) === name));
+
 const toRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
 const lum = (r, g, b) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
 
