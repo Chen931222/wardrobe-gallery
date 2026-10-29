@@ -100,6 +100,8 @@ await copyFile(join(ROOT, "functions", "_feedback-core.mjs"), join(OUT, "api", "
 await copyFile(join(ROOT, "functions", "weather.mjs"), join(OUT, "api", "weather.mjs"));
 await copyFile(join(ROOT, "functions", "_weather-core.mjs"), join(OUT, "api", "_weather-core.mjs"));
 await copyFile(join(ROOT, "src", "city.js"), join(OUT, "api", "_city.mjs"));
+// 認得出衣櫃被瀏覽器清掉了(2026-10-29):只回一個記件數的 cookie,src/keepSafe.js
+await copyFile(join(ROOT, "functions", "keep.mjs"), join(OUT, "api", "keep.mjs"));
 await writeFile(join(OUT, "api", "_proxy-secret.mjs"), `export const SECRET = ${JSON.stringify(randomBytes(32).toString("hex"))};\n`);
 const blobVersion = JSON.parse(await readFile(join(ROOT, "node_modules", "@vercel", "blob", "package.json"), "utf8")).version;
 await writeFile(join(OUT, "package.json"), JSON.stringify({ private: true, type: "module", dependencies: { "@vercel/blob": blobVersion } }, null, 2) + "\n");

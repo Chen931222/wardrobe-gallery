@@ -20,8 +20,9 @@ import { ScrollRail } from "./ScrollRail.jsx";
 import { fetchPriceForUrl, sameProduct } from "./brandLink.js";
 import { CURRENCIES, formatPrice, parsePrice } from "./price.js";
 import { downloadBackupZip, importBackupFile } from "./backup.js";
-import { backupReminder, inAppBrowser, isIos, isStandalone, requestPersist, snoozeBackupHint } from "./keepSafe.js";
+import { backupReminder, firstSightOfWipe, forgetWipe, inAppBrowser, isIos, isStandalone, noteCloset, requestPersist, snoozeBackupHint, wipedCloset } from "./keepSafe.js";
 import { Welcome } from "./Welcome.jsx";
+import { Wiped } from "./Wiped.jsx";
 import { QuickStart } from "./QuickStart.jsx";
 import { UpdatesSheet } from "./Updates.jsx";
 import { useIndexIndicator } from "./useIndexIndicator.js";
@@ -1518,6 +1519,7 @@ export function App() {
   const servedSeq = useRef(0);
   const localSeq = useRef(0);
   const appliedComplete = useRef(false);   // 畫面上那份兩邊都有讀到
+  const localReadOk = useRef(false);       // 畫面上那份有讀到這台的衣服(讀失敗時是空的,不能當成 0 件報給伺服器)
   const [ownerLocked, setOwnerLocked] = useState(false);   // 擁有者模式但沒有開通的同步碼:看到的是示範衣櫃
   const [trash, setTrash] = useState([]);                   // 垃圾桶:刪掉、還沒真的刪的
   const [favorites, setFavorites] = useState(readFavorites); // 最愛的 id(favorites.js)
@@ -1540,6 +1542,7 @@ export function App() {
     }
     appliedSeq.current = seq;
     appliedComplete.current = Boolean(served && local);
+    localReadOk.current = Boolean(local);
     setError(!served && !servedRef.current ? (failed?.message || "衣櫃載入失敗。") : "");
     const edits = readEdits();
     const deleted = readDeletedItems();
@@ -1738,9 +1741,11 @@ export function App() {
 
   // 訪客的衣服沒有同步(同步只給站主),全靠這個瀏覽器存著:加了衣服沒備份就提醒,之後每多 3 件再提醒一次
   // (2026-10-05 前只提醒一次,按了「知道了」就再也不出現)。匯出鈕直接放在提醒裡,不用再跑去搭配頁最下面找。
+  // 2026-10-29:代表款不算,第一張自己拍的(或代表款換成自己的圖)存好才提醒;搭配頁也顯示——第一件存好是直接帶去搭配頁的,
+  // 以前只在衣櫃頁,剛投入的那一刻看不到
   const [keepTick, setKeepTick] = useState(0);
   const keepHint = useMemo(
-    () => (!CAN_EDIT && CAN_ADD && hasMine ? backupReminder(items.filter((item) => item.isLocal)) : null),
+    () => (!CAN_EDIT && CAN_ADD && hasMine ? backupReminder(items.filter((item) => item.isLocal && !item.standIn)) : null),
     [items, hasMine, keepTick],   // eslint-disable-line react-hooks/exhaustive-deps
   );
   const dismissKeepHint = () => { snoozeBackupHint(); setKeepTick((n) => n + 1); };
@@ -1753,9 +1758,36 @@ export function App() {
   };
   // 有自己的衣服了:跟瀏覽器要「不要自動清」
   useEffect(() => { if (hasMine) requestPersist(); }, [hasMine]);
+  // 衣櫃有幾件報給伺服器記成 cookie(src/keepSafe.js、functions/keep.mjs):之後被瀏覽器清掉,入口認得出來。這台的衣服讀失敗時不報
+  useEffect(() => {
+    if (CAN_EDIT || !CAN_ADD || loading || !localReadOk.current) return;
+    const mine = items.filter((item) => item.isLocal);
+    noteCloset(mine.filter((item) => !item.standIn).length, mine.filter((item) => item.standIn).length);
+  }, [items, loading, keepTick]);
+  // 被清掉了:cookie 說上次有衣服、這台的標記卻不見了。一打開就判斷一次;匯入或重新開始之後就不再出現
+  const [wiped, setWiped] = useState(() => (!CAN_EDIT && CAN_ADD ? wipedCloset() : null));
+  // 讀到這台還有衣服(或垃圾桶裡有)就不是被清掉:標記只是還沒寫回來(剛匯入完重新載入、上次報件數沒等到回應)。
+  // 不收起來的話,同一次打開裡把衣服刪光,會被說成「被清掉了」(驗收抓到)
+  useEffect(() => {
+    if (wiped && !loading && localReadOk.current && [...items, ...trash].some((item) => item.isLocal)) setWiped(null);
+  }, [wiped, loading, items, trash]);
+  // 從搭配頁「紀錄備份」匯出的:提醒收起來、cookie 的「備份過」跟著更新(keepSafe.js markBackedUp)
+  useEffect(() => {
+    const bump = () => setKeepTick((n) => n + 1);
+    window.addEventListener("wardrobe-backed-up", bump);
+    return () => window.removeEventListener("wardrobe-backed-up", bump);
+  }, []);
 
   // 訪客自己的衣櫃還空著、人在入口:歡迎畫面。這時把件數和衣櫃切換收起來(都是 0,示範從歡迎畫面的按鈕進去)
   const showWelcome = !error && !loading && !ownedItems.length && !unownedCount && view === "landing" && closet === "mine";
+  // 復原頁:這台的衣服有讀到(讀失敗時是空的,不算被清掉)、垃圾桶也是空的(被清掉時垃圾桶一起沒了;有東西就給歡迎畫面的垃圾桶入口)
+  const showWiped = showWelcome && Boolean(wiped) && !trashCount && localReadOk.current;
+  // 「衣櫃被清掉了」記一次:帶上次有幾件、備份過沒,看得出這個缺口有多少人踩到、提醒有沒有用(2026-10-29 本人要的數字)
+  useEffect(() => {
+    if (showWiped && firstSightOfWipe(wiped)) {
+      track("衣櫃被清掉了", { 自己加的: wiped.own, 代表款: wiped.standIns, 備份過: wiped.backedUp ? "有" : "沒有", 主畫面: isStandalone() ? "是" : "否" });
+    }
+  }, [showWiped]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // 「加入第一件衣服」「去新增」:換到衣櫃(新增鈕在那裡的標題列),叫新增自己打開
   /* 代表款起步(2026-10-29,src/QuickStart.jsx):存好就照今天的天氣配一套、帶進搭配頁,理由第一句講這是代表款。
@@ -2066,7 +2098,8 @@ export function App() {
         const kind = autoNamedKind(item.name);
         if (kind) name = kind.noun;
         const colors = await garmentColors(blob).catch(() => null);
-        fix = { standIn: false, ...(colors || {}), ...(kind ? { name } : {}) };
+        // photoAt:備份提醒照「第一張自己的圖」算(keepSafe.js 的 backupReminder),換上的這一刻也算一張
+        fix = { standIn: false, photoAt: new Date().toISOString(), ...(colors || {}), ...(kind ? { name } : {}) };
         // 編輯紀錄疊在 IndexedDB 上面:手動改過的顏色留著,新抓的就被蓋掉(驗收抓到)
         if (colors) dropPersistedFields(item.id, ["color", "secondaryColor"]);
         // 自己取的品名寫了顏色(「我的白T」)不動,顏色的說法照樣先看品名;跟新照片不同色就照實講,不說「重抓了」
@@ -2213,16 +2246,19 @@ export function App() {
         </header>
         )}
 
-        {keepHint && view === "closet" && (() => {
+        {keepHint && (view === "closet" || view === "styling") && (() => {
           const app = inAppBrowser();
           return (
-            <p className="keep-hint" role="note">
+            // 搭配頁用短的一句:第一件存好就是落在這頁,長的那段在手機上有 230px 高,把剛穿上的人台推出第一屏(驗收抓到)。長的留在衣櫃頁
+            <p className={view === "styling" ? "keep-hint is-short" : "keep-hint"} role="note">
               {keepHint.backedUp && `上次備份之後又加了 ${keepHint.fresh} 件。`}
-              {app
-                ? `你現在是在 ${app} 裡面開的,這些衣服只存在 ${app} 裡,改用 Safari 或 Chrome 打開會是空的。之後請固定從同一個地方打開,或先留一份備份。`
-                : isIos() && !isStandalone()
-                  ? "iPhone 的 Safari 大約一週沒開這個網站,就可能把這些衣服清掉(加到主畫面的不會)。先留一份備份;之後想改用主畫面版,在那邊按「匯入備份」選這個檔就搬過去了。"
-                  : "你的衣服只存在這台裝置的這個瀏覽器裡,清除瀏覽資料或換手機就會不見。留一份備份,不見了可以匯入回來。"}
+              {view === "styling"
+                ? (app ? `衣服只存在 ${app} 裡,先留一份備份。` : isIos() && !isStandalone() ? "Safari 一陣子沒開,就可能清掉這些衣服。先留一份備份。" : "衣服只存在這個瀏覽器裡,先留一份備份。")
+                : app
+                  ? `你現在是在 ${app} 裡面開的,這些衣服只存在 ${app} 裡,改用 Safari 或 Chrome 打開會是空的。之後請固定從同一個地方打開,或先留一份備份。`
+                  : isIos() && !isStandalone()
+                    ? "iPhone 的 Safari 大約一週沒開這個網站,就可能把這些衣服清掉(加到主畫面的不會)。先留一份備份;之後想改用主畫面版,在那邊按「匯入備份」選這個檔就搬過去了。"
+                    : "你的衣服只存在這台裝置的這個瀏覽器裡,清除瀏覽資料或換手機就會不見。留一份備份,不見了可以匯入回來。"}
               <span className="keep-hint-actions">
                 <button type="button" className="is-main" onClick={exportFromHint}>匯出備份</button>
                 <button type="button" onClick={dismissKeepHint}>知道了</button>
@@ -2251,7 +2287,19 @@ export function App() {
         {view !== "landing" && !error && loading && <p className="status">衣櫃載入中</p>}
         {/* 只看「想買的」分頁時它自己會列出來;入口、搭配、其他分頁仍要講,不然空白一片 */}
         {/* 訪客自己的衣櫃還空著:入口給一個歡迎畫面,不是直接攤開站主的衣服 */}
-        {showWelcome && (
+        {showWiped && (
+          <Wiped
+            had={wiped}
+            onImportFile={async (file) => {
+              const message = await importBackupFile(file, false);
+              if (message?.startsWith("已還原")) track("被清掉之後", { 做了: "匯入備份" });
+              if (message) say(message);
+            }}
+            onQuickStart={() => { track("被清掉之後", { 做了: "重新點代表款" }); forgetWipe(); setWiped(null); setQuickOpen(true); }}
+            onRestart={() => { track("被清掉之後", { 做了: "重新開始" }); forgetWipe(); setWiped(null); }}
+          />
+        )}
+        {showWelcome && !showWiped && (
           <Welcome
             demoItems={demoItems}
             onAdd={requestAdd}

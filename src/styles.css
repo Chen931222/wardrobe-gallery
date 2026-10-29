@@ -3310,6 +3310,37 @@ h1, h2, h3 {
   .welcome-look-why { font-size: 15px; }
 }
 /* 訪客加了衣服之後的一次性提醒:留備份 */
+/* 衣櫃被清掉之後的入口(2026-10-29,src/Wiped.jsx):跟歡迎畫面同一個左欄、同一級大字,沒有示範人台——
+   這時要看的只有「上次有幾件、為什麼、怎麼拿回來」。按鈕跟歡迎畫面同尺寸;主鈕照能不能救回來換邊 */
+.wiped { width: min(1200px, 100% - 112px); margin: 0 auto 56px; padding-top: clamp(24px, 8vh, 96px); }
+.wiped > * { max-width: 30rem; }
+.wiped .wiped-logo { display: block; margin: 0 0 clamp(28px, 5vh, 48px); }
+.wiped-title {
+  margin: 0;
+  font-family: var(--font-body); font-weight: 400;
+  font-size: clamp(26px, 3.1vw, 36px); line-height: 1.5; letter-spacing: .04em;
+  color: var(--ink);
+}
+.wiped-title span { display: block; }
+.wiped p { margin: 0; font-size: 15px; line-height: 1.9; color: var(--body); text-wrap: pretty; }
+.wiped .wiped-why { margin-top: 28px; }
+.wiped .wiped-how { margin-top: 12px; color: var(--ink); }
+.wiped-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+.wiped-actions button { min-height: 48px; padding: 0 26px; font-size: 15px; }
+.wiped .wiped-tip { margin-top: 24px; padding-left: 12px; border-left: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.wiped .wiped-skip { margin-top: 16px; font-size: 13px; }
+.wiped-skip button {
+  padding: 6px 0; border: 0; background: none;
+  color: var(--muted); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.wiped-skip button:hover, .wiped-skip button:focus-visible { color: var(--ink); }
+@media (max-width: 760px) {
+  .wiped { width: auto; margin: 0 18px 40px; padding-top: 8px; }
+}
+@media (max-width: 380px) {
+  .wiped-actions button { padding: 0 14px; }
+}
+
 .keep-hint {
   margin: 20px 56px 0;
   padding: 10px 14px;
@@ -3324,6 +3355,9 @@ h1, h2, h3 {
   border: 1px solid var(--ink); background: transparent; color: var(--ink); font: inherit; font-size: 12px; cursor: pointer;
 }
 .keep-hint button.is-main { background: var(--ink); color: var(--paper); }
+/* 搭配頁的短版(2026-10-29):一句話＋兩顆鈕排一行,放不下才換行 */
+.keep-hint.is-short { display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; row-gap: 6px; text-wrap: pretty; }
+.keep-hint.is-short .keep-hint-actions { margin-top: 0; }
 /* 開在 LINE／IG 內建瀏覽器裡:要在加衣服之前看到,所以放在按鈕上面、線條用墨色 */
 .welcome .welcome-tip.is-warning { margin: 18px 0; border-left-color: var(--ink); color: var(--body); }
 .welcome .welcome-tip.is-warning:first-child { margin-top: 0; }

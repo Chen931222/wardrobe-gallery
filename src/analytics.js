@@ -37,9 +37,17 @@ export function loadAnalytics() {
   script.dataset.doNotTrack = "true";
   script.dataset.excludeSearch = "true";
   script.dataset.excludeHash = "true";
-  script.onload = noteReturn;   // 事件要等腳本載好才送得出去(window.umami 那時才有)
+  // 事件要等腳本載好才送得出去(window.umami 那時才有)。載好之前記的先排著,載好一起送:
+  // 「衣櫃被清掉了」是一打開就記的,以前這種會掉(2026-10-29)
+  pending = [];
+  script.onload = () => {
+    noteReturn();
+    for (const [name, data] of pending.splice(0)) track(name, data);
+    pending = null;
+  };
   document.head.appendChild(script);
 }
+let pending = null;   // 腳本載入中:[[事件, 資料]];沒載入或已載好:null
 
 /* 「回來」(2026-10-21 行銷企劃第 0 週):上次打開是 1–7 天前就記一次,帶隔了幾天。同一天開幾次只算一次。
    上次的日期記在這台瀏覽器(open-wardrobe-last-visit),只有日期、沒有時間。 */
@@ -58,5 +66,6 @@ export function noteReturn() {   // export 只為了本機測
 
 /** 記一個事件(沒載入就什麼都不做)。data 只放類別,不放衣服名稱這類內容 */
 export function track(name, data) {
+  if (!window.umami && pending) { if (pending.length < 20) pending.push([name, data]); return; }
   try { window.umami?.track(name, data); } catch { /* 統計壞了不影響使用 */ }
 }
