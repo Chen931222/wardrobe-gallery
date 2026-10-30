@@ -214,7 +214,7 @@ function expandBox(region) {
  * 不存也行,按「不用了」什麼都不留。結果卡由 App 用 renderCheck(試算的這件, 已經有的) 畫(WishCheck 在 App 裡)。
  * 限制:店裡燈光偏黃,抓到的顏色會跟家裡拍的有落差,「同色」可能漏抓;分類照片認不出來,要人點。
  */
-export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHandled = null, replaceRequest = null, onReplaced = null, hideButton = false, onAddOne = null, renderCheck = null }) {
+export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHandled = null, replaceRequest = null, onReplaced = null, hideButton = false, onAddOne = null, renderCheck = null, onQuickStart = null }) {
   const inputRef = useRef(null);
   const retakeRef = useRef(false);   // 這次選照片是「重拍一張」:填好的留著
   const cameraRef = useRef(null);          // 店裡比一下:直接開相機的那一個
@@ -873,6 +873,11 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
                 {pageLoading ? "讀取中…" : effectiveLink?.images.length ? "列出商品圖" : "選截圖"}
               </button>
             </div>
+            {/* 第三條路(2026-10-30 本人「代表款不要只放在入口,新增第一件時旁邊也要有」):沒連結也不想拍的,從這裡直接進代表款。
+                先把這個視窗收掉(reset 會把 history 那筆也退掉),再開代表款;換圖時不出現,換圖是換成自己的,不是放代表款 */}
+            {!replacing && onQuickStart && (
+              <p className="add-alt">不想拍、也沒連結？<button type="button" onClick={() => { reset(); onQuickStart(); }}>點幾件代表款，先配一套</button></p>
+            )}
           </form>
         </div>
       )}

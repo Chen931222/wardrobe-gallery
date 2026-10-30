@@ -235,9 +235,10 @@ export function Welcome({ demoItems, onAdd, onDemo, onImportFile, trashCount = 0
           從 LINE／IG 開的(is-inapp)例外,按鈕那塊排回示範前面:要先看到「用瀏覽器開啟」,不然衣服加在 LINE 裡。
           標點改全形:半形逗號夾在中文裡會擠在一起,大字更明顯(站上其他頁還是半形,還沒改) */}
       <Logo className="welcome-logo" />
-      {/* 入口的字(2026-10-22 本人「寫的太 AI」):不做條列、不做「兩個字加粗當標題」,就幾段講話,長短不齊。每句都是實測過的事,限制照講 */}
+      {/* 入口的字(2026-10-22 本人「寫的太 AI」):不做條列、不做「兩個字加粗當標題」,就幾段講話,長短不齊。每句都是實測過的事,限制照講。
+          2026-10-30 本人「縮短標題字」:三行 23 字 →兩行 17 字;三件事都還在(你的衣服、今天的天氣、搭一套說為什麼),示範那套的理由就在正下方 */}
       <h2 id="welcome-title" className="welcome-lede">
-        <span>用你已有的衣服，</span><span>照今天的天氣搭一套，</span><span>告訴你為什麼。</span>
+        <span>你的衣服，今天的天氣，</span><span>搭一套、說為什麼。</span>
       </h2>
 
       {demoFirst && demo}

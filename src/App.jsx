@@ -1,13 +1,14 @@
 // [本 fork 修改] 上游 tandpfun/wardrobe 既有檔案。本 fork 的改動:介面全繁中化並擴充分類,新增入口環/衣櫃/搭配三頁切換、IndexedDB 本機衣物合併與格子刪除鈕。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Camera, CaretDown, Check, MagnifyingGlass, Plus, Sparkle, Star, Trash, X } from "@phosphor-icons/react";
+import { Camera, CaretDown, Check, MagnifyingGlass, PaintBucket, Plus, Sparkle, Star, Trash, X } from "@phosphor-icons/react";
 import { OptimizedImage } from "./OptimizedImage.jsx";
 import { OutfitStudio, rememberWearing } from "./OutfitStudio.jsx";
 import { LandingRing } from "./LandingRing.jsx";
 import { AddGarment } from "./AddGarment.jsx";
 import { SyncPanel } from "./SyncPanel.jsx";
 import { deleteLocalItem, findUrl, garmentColors, loadLocalItems, productUrlProblem, putLocalRecord, updateLocalItem } from "./localWardrobe.js";
-import { autoNamedKind } from "./standIns.js";
+import { STAND_IN_COLORS, autoNamedKind, standInName } from "./standIns.js";
+import { Recolor } from "./Recolor.jsx";
 import { CAN_ADD, CAN_EDIT, canEditItem } from "./ownerMode.js";
 import { hasLocalChanges, lastSyncError, noteDeliberateDelete, scheduleSync, syncCode, syncNotice, syncNow } from "./sync.js";
 import { findSameStyle, findSimilar, fitOf, guessWarmth, kindLabel, wishOutfits } from "./wishCheck.js";
@@ -1113,7 +1114,7 @@ function rebaseDraft(draft, before, after) {
 }
 
 /** @param gone 這件在別台被刪掉或隱藏了:頁面留著(草稿還在、可以複製),但存檔、刪除、穿上這些動作都關掉 */
-function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWear, onBought, onSetDream = null, onSetUrl, onSetPrice, onOpen, onWearOutfit, onReplaceImage, onRestoreImage, favorite = false, onToggleFavorite = null, onMergeAway = null, brandOptions = [] }) {
+function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWear, onBought, onSetDream = null, onSetUrl, onSetPrice, onOpen, onWearOutfit, onReplaceImage, onRecolor = null, onRestoreImage, favorite = false, onToggleFavorite = null, onMergeAway = null, brandOptions = [] }) {
   const closeButtonRef = useRef(null);
   const dialogRef = useRef(null);
   // 焦點圈在單品頁裡、關掉後回到原本點的那格(審查 F46)。Esc 照下面自己的處理(先取消吸色、有沒存的先擋)
@@ -1339,6 +1340,12 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
       {onReplaceImage && !sampling && (
         <button type="button" className="viewer-art-replace" onClick={() => onReplaceImage(item)} disabled={gone}>
           <Camera size={15} weight="regular" aria-hidden="true" /> 換圖
+        </button>
+      )}
+      {/* 換色(2026-10-30 本人:代表款的換色很好用,衣櫃裡每一件都要有):左下角,跟「換圖」同款;圖讀不到的不給換 */}
+      {onRecolor && !sampling && !item.imageBroken && (
+        <button type="button" className="viewer-art-replace viewer-art-recolor" onClick={() => onRecolor(item)} disabled={gone}>
+          <PaintBucket size={15} weight="regular" aria-hidden="true" /> 換色
         </button>
       )}
     </div>
@@ -2123,6 +2130,32 @@ export function App() {
     await settleRefresh();
     say(`「${item.name || "這件"}」換回原本的圖了。`);
   };
+  /* 換色(2026-10-30,src/Recolor.jsx):圖在面板裡換好才進來。
+     自己加的:直接換掉那張圖(跟換圖一樣,沒有復原),色碼改成點的那個、副色清掉、手動改過的顏色紀錄拿掉(不然新顏色會被蓋回去,同 replaceImage 的坑);
+     代表款品名還是自動取的就跟著改成新顏色(「白色短袖T恤」→「黑色短袖T恤」;自選顏色沒有名字,只留「短袖T恤」),自己改過的品名不動。
+     站主衣櫃的:圖另存 override-<id>(可「換回原圖」),顏色走編輯紀錄,跟單品頁存檔同一條路(persistEdit 對原本那份比,其他改過的欄位留著) */
+  const [recolorItem, setRecolorItem] = useState(null);
+  const recolorImage = async (item, blob, hex, colorKey) => {
+    let name = item.name;
+    if (item.isLocal) {
+      const fix = { color: hex, secondaryColor: null };
+      if (item.standIn) {
+        const kind = autoNamedKind(item.name);
+        if (kind) { name = colorKey ? standInName(kind, colorKey) : kind.noun; fix.name = name; }
+      }
+      dropPersistedFields(item.id, ["color", "secondaryColor"]);
+      await updateLocalItem(item.id, { blob, ...fix });
+    } else {
+      await putLocalRecord({ id: `override-${item.id}`, overrideFor: item.id, blob, createdAt: new Date().toISOString() });
+      const original = (servedRef.current || []).find((served) => served.id === item.id);
+      persistEdit({ ...item, color: hex, secondaryColor: null }, original);
+    }
+    track("換色", { 代表款: item.standIn ? "是" : "否", 自己加的: item.isLocal ? "是" : "否", 色票: colorKey || "自選" });
+    setRecolorItem(null);
+    await settleRefresh();
+    // 點色票的照色票的名字講(「酒紅」),colorName 會把 #682b33 叫「紅色」,跟剛點的字對不上(驗收截圖);自選顏色才用 colorName
+    say(`「${name || "這件"}」換成${colorKey ? STAND_IN_COLORS[colorKey].label : colorName(hex)}了，推薦照新顏色算。`);
+  };
 
   return (
     <div className={`app-shell${selectedItem ? " has-selection" : ""}`}>
@@ -2198,6 +2231,7 @@ export function App() {
                   }}
                   openRequest={addRequest}
                   onOpenHandled={() => setAddRequest(0)}
+                  onQuickStart={() => setQuickOpen(true)}
                   onAdded={async (wishlist, name, dream = false, id = null) => {
                     // 第一件(2026-10-21,行銷企劃第 0 週):加完不只說「加進衣櫃了」,直接穿上人台(firstLook)
                     const firstOwned = !wishlist && !CAN_EDIT && id && !itemsRef.current.some((item) => item.isLocal && !item.wishlist && !item.trashedAt);
@@ -2405,6 +2439,7 @@ export function App() {
         <AddGarment hideButton replaceRequest={replaceRequest} onReplaced={replaceImage} onAdded={() => {}} />
       )}
       {CAN_ADD && quickOpen && <QuickStart demoItems={demoItems} onClose={() => setQuickOpen(false)} onSaved={quickSaved} />}
+      {CAN_ADD && recolorItem && <Recolor item={recolorItem} onClose={() => setRecolorItem(null)} onApply={(blob, hex, colorKey) => recolorImage(recolorItem, blob, hex, colorKey)} />}
 
       {selectedItem && (
         <ItemViewer
@@ -2423,6 +2458,7 @@ export function App() {
           onSetUrl={setWishUrl}
           onSetPrice={setItemPrice}
           onReplaceImage={CAN_ADD && canEditItem(selectedItem) ? (item) => setReplaceRequest({ item, n: Date.now() }) : null}
+          onRecolor={CAN_ADD && canEditItem(selectedItem) ? setRecolorItem : null}
           onRestoreImage={restoreOriginalImage}
           favorite={favorites.has(selectedItem.id)}
           onToggleFavorite={onToggleFavorite}

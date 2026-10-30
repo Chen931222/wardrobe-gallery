@@ -21,6 +21,7 @@
   --line: #392f22;     /* 髮絲分隔線 */
   --fill: #5a4c3a;     /* 色票、留白佔位 */
   --accent: #cdaf7f;   /* 暖金樺木:文字強調、focus 環 */
+  --control: #8f7f69;  /* 2026-10-30 本人「按鈕選項跟背景一模一樣,很難分辨」:可按的東西(次要鈕、選項、城市)的邊框,比 --line 深,對紙底 ≥3:1 */
   --band: #2a231b;     /* 入口章節的帶子(深色主題):跟 --surface 同色 */
   --doll: #372f23;     /* 人形剪影:只比 --surface 亮一點點。2026-10-19 調淡(評論:圓頭加膠囊四肢符號感太強,要讓衣服輪廓主導畫面),
                           原本 #4a4030;再更早 #2c2419 是照著 --paper 調的,疊在 --surface 上幾乎消失(對比 1.0:1)。 */
@@ -69,6 +70,7 @@
   --line: #d2c4a9;
   --fill: #ab9a7d;
   --accent: #5d4a37;   /* espresso,可當文字與實心底 */
+  --control: #8a7a64;  /* 可按的東西的邊框(見深色主題同名註解);對 #ece3d1 約 3.1:1 */
   --band: #e4d9c2;     /* 2026-10-24 入口章節的米紙帶:比 --surface 深一號,跟紙色分得出來(muted 字在上面 4.6:1) */
   --doll: #e3d7bf;     /* 2026-10-19 調淡:原本 #d6c8ab,改成跟 --surface 只差一點,衣服輪廓主導畫面(#e7dcc7 太淡,手機上幾乎看不到) */
   --ok: #49604b;       /* 6.2:1 */
@@ -567,12 +569,14 @@ h1, h2, h3 {
   position: absolute; right: 0; bottom: 10px; z-index: 2;
   display: inline-flex; align-items: center; gap: 6px;
   min-height: 36px; padding: 6px 12px;
-  border: 1px solid var(--line); border-radius: 0;
+  border: 1px solid var(--control); border-radius: 0;
   background: var(--paper-veil); color: var(--ink);
   font: inherit; font-size: 12.5px; white-space: nowrap; cursor: pointer;
   transition: border-color 160ms ease;
 }
 .viewer-art-replace:hover { border-color: var(--ink); }
+/* 圖左下角的「換色」(2026-10-30 本人:代表款能換色很好用,衣櫃裡每一件都要有):跟「換圖」同一款,一左一右 */
+.viewer-art-recolor { right: auto; left: 0; }
 .viewer-art-replace:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .viewer-art-replace:disabled { opacity: .5; cursor: default; }
 
@@ -751,7 +755,7 @@ h1, h2, h3 {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--control);   /* 2026-10-30:原本 --line,跟底色幾乎同色,本人在手機上分不出哪裡能按 */
   padding: 8px 12px;
   background: transparent;
   color: var(--ink);
@@ -1735,6 +1739,31 @@ h1, h2, h3 {
 .add-dupe-thumbs img { width: 52px; height: 52px; object-fit: contain; background: var(--surface); border: 1px solid var(--line); }
 .add-dupe-thumbs span { font-size: 12px; color: var(--muted); }
 .add-actions { display: flex; justify-content: flex-end; gap: 8px; }
+/* 新增視窗第三條路(2026-10-30 本人「新增第一件時旁邊也要有代表款」):排在兩顆鈕下面,一行字＋有框的鈕,跟入口那條同款 */
+.add-panel .add-alt { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+.add-alt button {
+  display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px;
+  border: 1px solid var(--control); background: transparent;
+  color: var(--ink); font: inherit; font-size: 13px; cursor: pointer;
+}
+.add-alt button:hover { border-color: var(--ink); }
+.add-alt button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ===== 換色(2026-10-30,src/Recolor.jsx) ===== */
+.recolor-panel { width: min(460px, 100%); }
+.recolor-preview {
+  position: relative; display: grid; place-items: center;
+  width: 100%; height: 240px; background: var(--paper); border: 1px solid var(--line);
+}
+.recolor-preview img { width: 100%; height: 100%; min-height: 0; object-fit: contain; }   /* grid 裡的 img 只給 max-height 會撐破 240px 的框(驗收截圖) */
+.recolor-preview.is-busy img { opacity: .55; }
+.recolor-preview-status { position: absolute; left: 10px; bottom: 8px; font-size: 12px; color: var(--muted); }
+.recolor-swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+/* 自選顏色:系統的色盤藏在一顆看起來跟色票一樣的鈕底下 */
+.recolor-custom { position: relative; }
+.recolor-custom input[type="color"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.recolor-custom .quick-dot { background: conic-gradient(#c8463f, #d9a441, #4e8d5b, #3f6fb0, #8a4fa0, #c8463f); }
+.recolor-custom .quick-dot.is-set { background: var(--swatch); }
 .add-actions .primary-button:disabled,
 .add-actions .secondary-button:disabled { opacity: .45; cursor: default; }   /* 商品圖那步「去背框起來的」是次要鈕,還沒框時也要看得出按不了(2026-10-25 驗收) */
 
@@ -3243,7 +3272,7 @@ h1, h2, h3 {
 @media (forced-colors: active) {
   .logo { forced-color-adjust: none; background: CanvasText; }
 }
-.welcome .welcome-logo { margin: 0 0 clamp(28px, 5vh, 48px); justify-self: start; }
+.welcome .welcome-logo { width: 300px; margin: 0 0 clamp(28px, 5vh, 48px); justify-self: start; }   /* 2026-10-30 本人「logo 放大」:260→300;桌機留在左欄跟標題對齊 */
 
 /* 大字標題:中文用 Noto Serif TC(Cormorant 沒有中文),一個逗號一行;中文不收字距,反而放一點 */
 .welcome .welcome-lede {
@@ -3282,11 +3311,14 @@ h1, h2, h3 {
 .welcome .welcome-foot button { margin-left: 0; }   /* 頁尾的按鈕不接在問句後面,不用左邊那 6px */
 /* 不拍照的那條路(2026-10-29):兩顆按鈕正下方一行,字跟「不用註冊」那句同級,按的那段用墨色底線 */
 .welcome .welcome-quick { margin: 12px 0 0; font-size: 14px; line-height: 1.6; color: var(--muted); }
+/* 2026-10-30 本人「選代表款這類選項跟背景一模一樣」:原本是一行底線字,改成有框的鈕(跟次要鈕同款、同高) */
 .welcome-quick button {
-  margin-left: 4px; padding: 6px 0; border: 0; background: none;
-  color: var(--ink); font: inherit; text-decoration: underline; text-underline-offset: 4px; cursor: pointer;
+  display: inline-flex; align-items: center; min-height: 40px; margin-left: 6px; padding: 0 14px;
+  border: 1px solid var(--control); background: transparent;
+  color: var(--ink); font: inherit; font-size: 14px; cursor: pointer;
 }
-.welcome-quick button:hover, .welcome-quick button:focus-visible { color: var(--accent); }
+.welcome-quick button:hover, .welcome-quick button:focus-visible { border-color: var(--ink); outline: none; }
+.welcome-quick button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .welcome-look { margin: 8px 0 0; }
 .mini-look {
   position: relative;
@@ -3390,7 +3422,8 @@ h1, h2, h3 {
   .story-pair-cmd span { display: inline; }
   .welcome .story-pair-side p { font-size: 13px; }
   .welcome .story-pair figcaption { margin-top: 4px; }
-  .welcome .welcome-logo { margin-bottom: 20px; width: 210px; }
+  /* 2026-10-30 本人「logo 放大置中」:手機上標誌獨佔一列、置中,寬到 78vw(375 寬＝292px,原本 210);標題仍靠左 */
+  .welcome .welcome-logo { margin: 0 auto 22px; width: min(300px, 78vw); justify-self: center; }
   .welcome .welcome-lede { font-size: 24px; }
   .welcome-start { margin-top: 24px; }
   /* 示範那套是一條橫跨整個螢幕的米紙帶(負邊距吃掉左右 18px),跟下面 02 章同一個底色:第一屏有一塊是「東西」,不全是字 */
@@ -3406,7 +3439,7 @@ h1, h2, h3 {
 /* 矮的手機(iPhone SE:Safari 看得到 375×548):字標和人台縮一號、間距收一點,按鈕才留在第一屏(沒縮時掉到 572)。
    門檻 680 不是 620:沒縮時按鈕底在 620,門檻設 620 時 621 高的畫面按鈕貼著底邊;mini 那種 635 也留點空(驗收) */
 @media (max-width: 760px) and (max-height: 680px) {
-  .welcome .welcome-logo { width: 170px; margin-bottom: 14px; }
+  .welcome .welcome-logo { width: min(240px, 64vw); margin-bottom: 14px; }
   .welcome-look { margin-top: 18px; padding-block: 14px; }
   .welcome-look .mini-look { width: 112px; }
   .welcome-start { margin-top: 18px; }
@@ -3425,8 +3458,10 @@ h1, h2, h3 {
   position: absolute; inset: 0; width: 100%; height: 100%;
   opacity: 0; cursor: pointer; font-size: 16px;   /* 16px:iPhone 點了不會自動放大畫面 */
 }
-.city-select-label { border-bottom: 1px dotted currentColor; white-space: nowrap; }
-.city-select-label::after { content: "▾"; margin-left: 2px; font-size: .8em; opacity: .7; }
+/* 2026-10-30:原本只有一條虛線底,本人分不出能點。改成一個小框＋箭頭,顏色用 --control */
+.city-select-label { display: inline-block; padding: 1px 6px 1px 8px; border: 1px solid var(--control); white-space: nowrap; line-height: 1.5; }
+.city-select-label::after { content: "▾"; margin-left: 4px; font-size: .8em; opacity: .85; }
+.city-select:hover .city-select-label { border-color: var(--ink); }
 .city-select:focus-within .city-select-label { outline: 2px solid var(--ink); outline-offset: 2px; }
 .gallery-header.is-quiet .add-garment-button { display: none; }
 .view-nav[hidden], .piece-count[hidden] { display: none; }
@@ -3921,7 +3956,7 @@ h1, h2, h3 {
 .quick-kind {
   position: relative;
   display: flex; flex-direction: column; align-items: center; gap: 4px;
-  padding: 8px 6px 10px; border: 1px solid var(--line); background: var(--paper);
+  padding: 8px 6px 10px; border: 1px solid var(--control); background: var(--surface);   /* 2026-10-30 邊框 --line→--control、底 paper→surface:在面板上看得出是一格一格能按的 */
   color: var(--ink); font: inherit; font-size: 13px; cursor: pointer;
   transition: border-color .16s var(--ease-out), background-color .16s var(--ease-out);
 }
@@ -3938,11 +3973,11 @@ h1, h2, h3 {
 .quick-color {
   display: inline-flex; align-items: center; gap: 8px;
   min-height: 44px; padding: 0 14px 0 10px;
-  border: 1px solid var(--line); background: var(--surface);
+  border: 1px solid var(--control); background: var(--surface);
   color: var(--ink); font: inherit; font-size: 14px; cursor: pointer;
 }
-.quick-color[aria-pressed="true"] { border-color: var(--ink); background: var(--paper); }
-.quick-dot { width: 18px; height: 18px; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--line); }
+.quick-color[aria-pressed="true"], .quick-color.is-on { border-color: var(--ink); background: var(--paper); box-shadow: inset 0 0 0 1px var(--ink); }
+.quick-dot { width: 18px; height: 18px; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--control); }
 .quick-dock {
   position: sticky; bottom: 0; z-index: 1;
   margin: 0 -24px; padding: 12px 24px max(16px, env(safe-area-inset-bottom));
