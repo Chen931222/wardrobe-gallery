@@ -272,98 +272,6 @@ function persistDeletedItem(id) {
   if (typeof window !== "undefined") window.dispatchEvent(new Event("wardrobe-local-change"));
 }
 
-function rgbToHex(red, green, blue) {
-  return `#${[red, green, blue].map((value) => Math.max(0, Math.min(255, value)).toString(16).padStart(2, "0")).join("")}`;
-}
-
-function colorDistance(first, second) {
-  return Math.sqrt(
-    ((first.red - second.red) ** 2)
-    + ((first.green - second.green) ** 2)
-    + ((first.blue - second.blue) ** 2),
-  );
-}
-
-function extractPalette(image) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 72;
-  canvas.height = 72;
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  context.clearRect(0, 0, canvas.width, canvas.height);
-  context.drawImage(image, 0, 0, canvas.width, canvas.height);
-
-  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-  const buckets = new Map();
-
-  for (let index = 0; index < pixels.length; index += 4) {
-    const alpha = pixels[index + 3];
-    if (alpha < 72) continue;
-
-    const red = pixels[index];
-    const green = pixels[index + 1];
-    const blue = pixels[index + 2];
-    const key = `${Math.round(red / 28)}-${Math.round(green / 28)}-${Math.round(blue / 28)}`;
-    const current = buckets.get(key) || { red: 0, green: 0, blue: 0, count: 0 };
-    current.red += red;
-    current.green += green;
-    current.blue += blue;
-    current.count += 1;
-    buckets.set(key, current);
-  }
-
-  const ranked = [...buckets.values()]
-    .map((bucket) => ({
-      red: Math.round(bucket.red / bucket.count),
-      green: Math.round(bucket.green / bucket.count),
-      blue: Math.round(bucket.blue / bucket.count),
-      count: bucket.count,
-    }))
-    .sort((a, b) => b.count - a.count);
-
-  const selected = [];
-  for (const color of ranked) {
-    if (selected.every((existing) => colorDistance(existing, color) > 38)) selected.push(color);
-    if (selected.length === 5) break;
-  }
-
-  return selected.map((color) => rgbToHex(color.red, color.green, color.blue));
-}
-
-function buildSamplingCanvas(image) {
-  const canvas = document.createElement("canvas");
-  canvas.width = image.naturalWidth;
-  canvas.height = image.naturalHeight;
-  canvas.getContext("2d", { willReadFrequently: true }).drawImage(image, 0, 0);
-  return canvas;
-}
-
-function sampleImageColor(image, canvas, event) {
-  const bounds = image.getBoundingClientRect();
-  const scale = Math.min(bounds.width / image.naturalWidth, bounds.height / image.naturalHeight);
-  const renderedWidth = image.naturalWidth * scale;
-  const renderedHeight = image.naturalHeight * scale;
-  const offsetX = (bounds.width - renderedWidth) / 2;
-  const offsetY = (bounds.height - renderedHeight) / 2;
-  const imageX = Math.floor((event.clientX - bounds.left - offsetX) / scale);
-  const imageY = Math.floor((event.clientY - bounds.top - offsetY) / scale);
-
-  if (imageX < 0 || imageY < 0 || imageX >= canvas.width || imageY >= canvas.height) return null;
-
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  for (let radius = 0; radius <= 18; radius += 2) {
-    const startX = Math.max(0, imageX - radius);
-    const startY = Math.max(0, imageY - radius);
-    const width = Math.min(canvas.width - startX, (radius * 2) + 1);
-    const height = Math.min(canvas.height - startY, (radius * 2) + 1);
-    const data = context.getImageData(startX, startY, width, height).data;
-    for (let index = 0; index < data.length; index += 4) {
-      if (data[index + 3] > 96) return rgbToHex(data[index], data[index + 1], data[index + 2]);
-    }
-  }
-
-  return null;
-}
-
 /* picking:挑選模式(2026-10-09,想買的 ↔ 夢幻逸品一次搬幾件)。挑選時點格子是勾選、不開單品頁,刪除鈕藏起來免得誤刪 */
 function GalleryItem({ item, selected, onOpen, onDelete, favorite = false, picking = false, picked = false, onPick = null }) {
   const type = TYPE_MAP[item.part]?.singular || "衣物";
@@ -683,6 +591,10 @@ function TagEditor({ tags, onChange }) {
 const COLOR_PARTNER = { upperbody: "lowerbody", lowerbody: "upperbody", wholebody_up: "upperbody", shoes: "lowerbody", bag: "upperbody", socks: "shoes" };
 
 /** 顏色區塊的主體:這個顏色在推薦裡是底色還是重點色、櫃裡有幾件跟它配得起來 */
+/* 「顏色抓錯了」的色票(2026-10-30):推薦引擎認得的 13 種顏色,每個色碼丟進 colorName 都叫回色票上那個名字
+   (換色那 10 色不能直接用:米色、軍綠、酒紅會被叫成白色、綠色、紅色,點了米色卻顯示白色)。改 COLOR_WORDS 要回來對一次 */
+const LABEL_COLORS = ["#f1efea", "#1d1d20", "#8e9094", "#26314a", "#56728f", "#ad9670", "#5a4333", "#556b2f", "#a8322d", "#e391b0", "#6b4a7a", "#dcd24a", "#e8743a"];
+
 function ColorRoleNote({ draft, owned, itemId }) {
   const piece = { color: draft.color, name: draft.name, tags: draft.tags, part: draft.part };
   const { role, why } = colorRole(piece);
@@ -690,7 +602,7 @@ function ColorRoleNote({ draft, owned, itemId }) {
   const partners = partner ? owned.filter((other) => other.part === partner && other.id !== itemId && !other.wishlist) : [];
   // 「配得起來」= 兩件擺一起,colorScore 不判成「顏色可能打架」(跟「值不值得買」同一個算法)
   const fit = partners.filter((other) => colorScore([piece, other]).score > -3).length;
-  if (!draft.color) return <p className="color-role-copy">還沒有主色,推薦時當成跟什麼都搭。從圖片吸一個,配色才算得準。</p>;
+  if (!draft.color) return <p className="color-role-copy">還沒有主色,推薦時當成跟什麼都搭。在下面點它的顏色,配色才算得準。</p>;
   return (
     <div className="color-role">
       <span className="color-role-swatch" style={{ backgroundColor: draft.color }} aria-hidden="true" />
@@ -713,69 +625,9 @@ function ColorRoleNote({ draft, owned, itemId }) {
   );
 }
 
-function ColorControl({ label, field, value, palette, onChange, sampling, setSampling, optional = false, onClear, onAdd }) {
-  if (optional && !value) {
-    return (
-      <div className="color-slot empty-color-slot">
-        <div className="color-slot-heading">
-          <span>{label}</span>
-          <small>選填</small>
-        </div>
-        <p>沒有偵測到明顯的副色。</p>
-        <button className="add-secondary-button" type="button" onClick={onAdd}>新增副色</button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="color-slot">
-      <div className="color-slot-heading">
-        <span>{label}</span>
-        {optional && <button type="button" onClick={onClear}>移除</button>}
-      </div>
-      <label className="selected-color-control">
-        <input
-          type="color"
-          value={value || "#9a9286"}
-          onChange={(event) => onChange(event.target.value)}
-          aria-label={`選擇${label}`}
-        />
-        <span className="selected-color-copy" title={value || undefined}>
-          <small>目前</small>
-          <strong>{value ? colorName(value) : "自訂"}</strong>
-        </span>
-      </label>
-      <div className="suggestion-heading">
-        <span>圖片建議色</span>
-        <small>點一下套用</small>
-      </div>
-      <div className="palette" aria-label={`從圖片取出的${label}建議`}>
-        {palette.map((color) => (
-          <button
-            type="button"
-            key={color}
-            className={value?.toLowerCase() === color.toLowerCase() ? "active" : ""}
-            style={{ backgroundColor: color }}
-            onClick={() => onChange(color)}
-            aria-label={`把這個${colorName(color)}設為${label}`}
-            title={colorName(color)}
-          />
-        ))}
-      </div>
-      <button
-        className={`sample-button${sampling === field ? " active" : ""}`}
-        type="button"
-        onClick={() => setSampling((current) => current === field ? null : field)}
-      >
-        {sampling === field ? "取消吸色" : `從圖片吸${label}`}
-      </button>
-    </div>
-  );
-}
-
-function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleStatus, priceStatus = "", onFetchPrice = null, mergeCandidates = [], onMerge = null, brandOptions = [], owned = [], itemId = null }) {
+function ItemEditor({ draft, setDraft, onPickColor = null, colorStatus = "", canRecolor = false, priceStatus = "", onFetchPrice = null, mergeCandidates = [], onMerge = null, brandOptions = [], owned = [], itemId = null }) {
   const [fixingColor, setFixingColor] = useState(false);
-  const suggestedSecondary = palette.find((color) => color.toLowerCase() !== draft.color?.toLowerCase()) || "#9a9286";
+  const nameSays = draft.color ? colorLabel(draft.name, draft.color) : "";
 
   return (
     <div className="item-editor">
@@ -862,39 +714,34 @@ function ItemEditor({ draft, setDraft, palette, sampling, setSampling, sampleSta
 
       <fieldset className="color-field">
         <legend>顏色</legend>
-        {/* 2026-10-08 本人:這個區塊不知道存在的意義。舊版一打開就是調色盤,五個建議色常常是五個差不多的黑。
-            顏色在推薦裡只用來判斷「底色/重點色」,所以先講這件,改色收進「顏色抓錯了」。 */}
+        {/* 2026-10-08 本人:這個區塊不知道存在的意義 → 先講這件在推薦裡是底色還是重點色,改色收進「顏色抓錯了」。
+            2026-10-30 本人:「這個部分沒有用」(點建議色圖不變、三顆都叫深藍色、改完要捲到底按儲存)→
+            改成引擎認得的 13 種顏色,點了直接存;拿掉圖片建議色、從圖片吸色、副色編輯(自動抓到的副色留著)。 */}
         <ColorRoleNote draft={draft} owned={owned} itemId={itemId} />
-        {!(fixingColor || sampling || !draft.color) && (
+        {!(fixingColor || !draft.color) && (
           <button type="button" className="color-fix-toggle" onClick={() => setFixingColor(true)} aria-expanded="false">顏色抓錯了?改</button>
         )}
-        {(fixingColor || sampling || !draft.color) && (
+        {(fixingColor || !draft.color) && (
         <>
-        <div className="colors-editor">
-          <ColorControl
-            label="主色"
-            field="primary"
-            value={draft.color}
-            palette={palette}
-            onChange={(color) => setDraft((current) => ({ ...current, color }))}
-            sampling={sampling}
-            setSampling={setSampling}
-          />
-          <ColorControl
-            label="副色"
-            field="secondary"
-            value={draft.secondaryColor}
-            palette={palette}
-            onChange={(secondaryColor) => setDraft((current) => ({ ...current, secondaryColor }))}
-            sampling={sampling}
-            setSampling={setSampling}
-            optional
-            onClear={() => setDraft((current) => ({ ...current, secondaryColor: null }))}
-            onAdd={() => setDraft((current) => ({ ...current, secondaryColor: suggestedSecondary }))}
-          />
+        <p className="color-help">點它實際的顏色,馬上存。只改推薦怎麼配它,圖不會變{canRecolor ? ";想讓衣服本身變色,按圖上的「換色」" : ""}。</p>
+        <div className="label-colors" role="group" aria-label="這件實際的顏色">
+          {LABEL_COLORS.map((hex) => {
+            const name = colorName(hex);
+            const on = Boolean(draft.color) && colorName(draft.color) === name;
+            return (
+              <button key={hex} type="button" className="quick-color" aria-pressed={on} onClick={() => onPickColor?.(hex)} disabled={!onPickColor}>
+                <span className="quick-dot" style={{ background: hex }} aria-hidden="true" />
+                {name}
+                {on && <Check size={14} weight="bold" aria-hidden="true" />}
+              </button>
+            );
+          })}
         </div>
-        <p className="color-help" aria-live="polite">{sampling ? "點衣服上的任一處吸取顏色。" : sampleStatus || "主色是從圖片自動抓的;只有在偵測到明顯的第二種顏色時才會建議副色。"}</p>
-        {draft.color && !sampling && <button type="button" className="color-fix-toggle" onClick={() => setFixingColor(false)} aria-expanded="true">收起</button>}
+        {nameSays && nameSays !== colorName(draft.color) && (
+          <p className="color-help">上面寫「{nameSays}」是照品名;配色照這裡點的顏色算。</p>
+        )}
+        <p className="color-help" aria-live="polite">{colorStatus}</p>
+        {draft.color && <button type="button" className="color-fix-toggle" onClick={() => setFixingColor(false)} aria-expanded="true">收起</button>}
         </>
         )}
       </fieldset>
@@ -1114,18 +961,15 @@ function rebaseDraft(draft, before, after) {
 }
 
 /** @param gone 這件在別台被刪掉或隱藏了:頁面留著(草稿還在、可以複製),但存檔、刪除、穿上這些動作都關掉 */
-function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWear, onBought, onSetDream = null, onSetUrl, onSetPrice, onOpen, onWearOutfit, onReplaceImage, onRecolor = null, onRestoreImage, favorite = false, onToggleFavorite = null, onMergeAway = null, brandOptions = [] }) {
+function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWear, onBought, onSetDream = null, onSetUrl, onSetPrice, onOpen, onWearOutfit, onReplaceImage, onRecolor = null, onSetColor = null, onRestoreImage, favorite = false, onToggleFavorite = null, onMergeAway = null, brandOptions = [] }) {
   const closeButtonRef = useRef(null);
   const dialogRef = useRef(null);
-  // 焦點圈在單品頁裡、關掉後回到原本點的那格(審查 F46)。Esc 照下面自己的處理(先取消吸色、有沒存的先擋)
+  // 焦點圈在單品頁裡、關掉後回到原本點的那格(審查 F46)。Esc 照下面自己的處理(有沒存的先擋)
   useDialog(dialogRef, null, { initialFocus: closeButtonRef });
   const imageRef = useRef(null);
   const viewImage = useFullImage(item);   // 自己加的衣服:清單裡是縮圖,這裡換成原圖
-  const samplingCanvasRef = useRef(null);
   const shakeTimerRef = useRef(null);
-  const [sampling, setSampling] = useState(null);
-  const [sampleStatus, setSampleStatus] = useState("");
-  const [palette, setPalette] = useState(item.palette || []);
+  const [colorStatus, setColorStatus] = useState("");
   const [draft, setDraft] = useState(() => draftOf(item));
   const [shaking, setShaking] = useState(false);
   const [closeBlocked, setCloseBlocked] = useState(false);
@@ -1136,9 +980,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
   if (draftBase !== item) {
     setDraftBase(item);
     if (draftBase.id !== item.id) {
-      setSampling(null);
-      setSampleStatus("");
-      setPalette(item.palette || []);
+      setColorStatus("");
       setDraft(draftOf(item));
     } else {
       setDraft((current) => rebaseDraft(current, draftOf(draftBase), draftOf(item)));
@@ -1197,10 +1039,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
   useEffect(() => {
     const onKeyDown = (event) => {
       if (event.isComposing || event.keyCode === 229) return;   // 選字中按 Esc 是取消選字
-      if (event.key === "Escape") {
-        if (sampling) setSampling(null);
-        else requestClose();
-      }
+      if (event.key === "Escape") requestClose();
     };
 
     document.addEventListener("keydown", onKeyDown);
@@ -1210,7 +1049,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
       document.body.classList.remove("viewer-open");
       clearTimeout(shakeTimerRef.current);
     };
-  }, [requestClose, sampling]);
+  }, [requestClose]);
 
   // 焦點只在打開或換一件時放到關閉鈕;放在上面那個 effect 裡會跟著每次重新 render 搶焦點(同步重讀衣櫃時正在打字的欄位被搶走)
   useEffect(() => {
@@ -1222,10 +1061,6 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
   }, [isDirty]);
 
   // 「已儲存。」只講剛剛那一次;存完又改了就拿掉,免得有沒存的修改時還寫著已儲存
-  useEffect(() => {
-    if (isDirty) setSampleStatus((status) => (status === "已儲存。" ? "" : status));
-  }, [isDirty]);
-
   // 「在搭配頁穿上」「穿上看看」會離開這頁:有沒存的修改先擋下來,跟關閉一樣(審查抓到:改了分類沒存,直接穿上就丟了)
   const wearHere = () => {
     if (isDirty && !gone) { nudgeUnsaved(); return; }
@@ -1234,8 +1069,6 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
 
   const cancelEditing = () => {
     setDraft(draftOf(item));
-    setSampling(null);
-    setSampleStatus("");
     onClose();
   };
 
@@ -1265,29 +1098,15 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
       price, priceCurrency: price ? draft.priceCurrency || "TWD" : null, quantity: qtyOf(draft.quantity), brand,
       note: (draft.note || "").trim(),
     });
-    setSampling(null);
     // 存完就關掉,回到原本那一格(2026-10-06 本人要的;舊版存完停在原地,只在表單裡寫一行「已儲存」)
     onClose();
   };
 
-  const handleImageLoad = (event) => {
-    samplingCanvasRef.current = buildSamplingCanvas(event.currentTarget);
-    const extracted = extractPalette(event.currentTarget);
-    setPalette([...new Set([...(item.palette || []), ...extracted])].slice(0, 5));
-  };
-
-  const handleImageClick = (event) => {
-    if (!sampling || !samplingCanvasRef.current) return;
-    const color = sampleImageColor(event.currentTarget, samplingCanvasRef.current, event);
-    if (!color) {
-      setSampleStatus("那個位置是透明的——請直接點在衣服上。");
-      return;
-    }
-    const targetField = sampling === "secondary" ? "secondaryColor" : "color";
-    setDraft((current) => ({ ...current, [targetField]: color }));
-    setPalette((current) => [color, ...current.filter((existing) => existing.toLowerCase() !== color.toLowerCase())].slice(0, 5));
-    setSampleStatus(`已吸取這個${colorName(color)}。`);
-    setSampling(null);
+  // 「顏色抓錯了」點色票直接存(2026-10-30):不必捲到最底按儲存。只改色碼(推薦怎麼配它),圖不動;要變色用「換色」
+  const pickColor = (hex) => {
+    setDraft((current) => ({ ...current, color: hex }));
+    onSetColor(item.id, hex);
+    setColorStatus(`改成${colorName(hex)},存好了。推薦照這個顏色配。`);
   };
 
   // 同一款的另一張:可以併進這一格,數量加上去。2026-10-08 起改用 findSameStyle(品牌、細節、品名顏色、品名都要對得上);
@@ -1322,7 +1141,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
 
   const garmentArtwork = (
     <div
-      className={`viewer-art${hasModeledImage ? " viewer-art-floating" : ""}${sampling ? " sampling" : ""}`}
+      className={`viewer-art${hasModeledImage ? " viewer-art-floating" : ""}`}
       style={hasModeledImage ? { "--piece-rotation": pieceRotation } : undefined}
     >
       <OptimizedImage
@@ -1332,18 +1151,15 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
         sizes="(max-width: 520px) 40vw, 300px"
         breakpoints={[160, 240, 320, 480, 640]}
         priority
-        onLoad={handleImageLoad}
-        onClick={handleImageClick}
       />
-      {sampling && <span className="sample-hint">點衣服吸色</span>}
       {/* 換圖放在圖上(2026-10-06):本人在下面那一排沒找到;想換圖時眼睛本來就在看圖 */}
-      {onReplaceImage && !sampling && (
+      {onReplaceImage && (
         <button type="button" className="viewer-art-replace" onClick={() => onReplaceImage(item)} disabled={gone}>
           <Camera size={15} weight="regular" aria-hidden="true" /> 換圖
         </button>
       )}
       {/* 換色(2026-10-30 本人:代表款的換色很好用,衣櫃裡每一件都要有):左下角,跟「換圖」同款;圖讀不到的不給換 */}
-      {onRecolor && !sampling && !item.imageBroken && (
+      {onRecolor && !item.imageBroken && (
         <button type="button" className="viewer-art-replace viewer-art-recolor" onClick={() => onRecolor(item)} disabled={gone}>
           <PaintBucket size={15} weight="regular" aria-hidden="true" /> 換色
         </button>
@@ -1437,10 +1253,9 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
               itemId={item.id}
               draft={draft}
               setDraft={setDraft}
-              palette={palette}
-              sampling={sampling}
-              setSampling={setSampling}
-              sampleStatus={sampleStatus}
+              onPickColor={onSetColor && !gone ? pickColor : null}
+              colorStatus={colorStatus}
+              canRecolor={Boolean(onRecolor) && !item.imageBroken}
               priceStatus={priceStatus}
               onFetchPrice={canFetchPrice ? () => fetchPrice(false) : null}
               mergeCandidates={mergeCandidates}
@@ -1922,6 +1737,17 @@ export function App() {
     setItems((current) => current.map((item) => (item.id === id ? updated : item)));
     const original = [...(servedRef.current || []), ...(localRef.current || [])].find((item) => item.id === id);
     persistEdit(updated, original);
+  }, []);
+
+  // 「顏色抓錯了」點色票直接存(2026-10-30):跟價錢同一條(編輯紀錄,開了同步會傳到每一台)。只改色碼,圖不動
+  const setItemColor = useCallback((id, color) => {
+    const target = itemsRef.current.find((item) => item.id === id);
+    if (!target || !color) return;
+    const updated = { ...target, color };
+    setItems((current) => current.map((item) => (item.id === id ? updated : item)));
+    const original = [...(servedRef.current || []), ...(localRef.current || [])].find((item) => item.id === id);
+    persistEdit(updated, original);
+    track("改顏色", { 顏色: colorName(color), 自己加的: target.isLocal ? "是" : "否" });
   }, []);
 
   // 想買的、有網址、還沒標價的:背景一件一件去找(這次打開網站每件只試一次,讀不到就留給人自己填)
@@ -2457,6 +2283,7 @@ export function App() {
           onSetDream={setDream}
           onSetUrl={setWishUrl}
           onSetPrice={setItemPrice}
+          onSetColor={setItemColor}
           onReplaceImage={CAN_ADD && canEditItem(selectedItem) ? (item) => setReplaceRequest({ item, n: Date.now() }) : null}
           onRecolor={CAN_ADD && canEditItem(selectedItem) ? setRecolorItem : null}
           onRestoreImage={restoreOriginalImage}

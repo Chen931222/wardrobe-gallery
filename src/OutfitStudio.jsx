@@ -1594,7 +1594,8 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
             );
           })}
         </nav>
-        {onOpenItem && <p className="studio-rack-hint">點一下穿上,點兩下看資訊</p>}
+        {/* 換色、換圖都在單品頁裡(2026-10-30 本人在搭配頁找不到換色);示範衣櫃的不能換,不寫 */}
+        {onOpenItem && <p className="studio-rack-hint">點一下穿上,點兩下看資訊{closet === "demo" ? "" : "、換色"}</p>}
         <div className="studio-rack-grid">
           {rackSections.map((section) => (
             <Fragment key={section.slot || "all"}>
@@ -1612,7 +1613,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
               aria-pressed={wearing[slotOf(item)]?.id === item.id}
               aria-label={`${item.name || SLOT_LABEL[item.part]}${item.wishlist ? "(還沒買)" : ""}`}
               onClick={() => tapRackItem(item)}
-              title={`${item.wishlist ? `${item.name}(還沒買)` : item.name}${onOpenItem ? "\n點兩下看資訊" : ""}`}
+              title={`${item.wishlist ? `${item.name}(還沒買)` : item.name}${onOpenItem ? `\n點兩下看資訊${closet === "demo" ? "" : "、換色"}` : ""}`}
             >
               <span className="studio-rack-thumb">
                 <img src={item.thumbnail || item.image} alt="" loading="lazy" />
