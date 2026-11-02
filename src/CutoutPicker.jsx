@@ -4,6 +4,8 @@
    沙發、床單滲進來,點那塊「這不是」就拿掉,衣服不會跟著被擦。
    畫面:框起來的照片調暗,選到的部分照原色疊在上面;點過的地方標一個小圓(綠 = 這也是、紅 = 這不是)。
    每點一下就照全部的點重選一次(在 Worker 裡算,畫面不凍住);「上一點」退掉最後一點重選。
+   2026-11-02 本人「操作指示不夠清楚」(截圖:想去掉鞋子,沒切到「這不是」,鞋子反而被加進來):拿掉「這也是／這不是」切換,
+   點下去那一點現在有留著就是「這不是」,沒留著就是「這也是」。按鈕也不再並排「不改了」「不用改」兩個長得一樣的字。
    框的正中央剛好是背景(兩隻鞋中間、敞開的外套)時,中間那點本身就錯了:「從頭點」連它一起清掉,自己點衣服。 */
 import { useEffect, useRef, useState } from "react";
 import { CENTER, refineCutout, strokeAt } from "./cutout.js";
@@ -22,9 +24,9 @@ export function CutoutPicker({ input, cut, strokes: initialStrokes, onDone, onCa
   const canvasRef = useRef(null);
   const photoRef = useRef(null);
   const downRef = useRef(null);
+  const keptRef = useRef(null);   // 現在選到的部分的透明度(畫布大小),點下去時看那一點有沒有留著
   const [strokes, setStrokes] = useState(initialStrokes?.length ? initialStrokes : [CENTER]);
   const [current, setCurrent] = useState(cut);   // null = 什麼都沒選(從頭點之後)
-  const [mode, setMode] = useState("add");
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [problem, setProblem] = useState("");
@@ -59,6 +61,13 @@ export function CutoutPicker({ input, cut, strokes: initialStrokes, onDone, onCa
       context.drawImage(photoRef.current, 0, 0);
       context.globalAlpha = 1;
       if (selected) context.drawImage(selected, 0, 0, canvas.width, canvas.height);
+      keptRef.current = null;
+      if (selected) {
+        const probe = Object.assign(document.createElement("canvas"), { width: canvas.width, height: canvas.height });
+        const probeContext = probe.getContext("2d", { willReadFrequently: true });
+        probeContext.drawImage(selected, 0, 0, canvas.width, canvas.height);
+        keptRef.current = { data: probeContext.getImageData(0, 0, canvas.width, canvas.height).data, w: canvas.width, h: canvas.height };
+      }
       const r = Math.max(6, Math.round(canvas.width / 70));
       for (const stroke of strokes) {
         const [{ x, y }] = stroke.point;
@@ -103,25 +112,32 @@ export function CutoutPicker({ input, cut, strokes: initialStrokes, onDone, onCa
     const rect = canvasRef.current.getBoundingClientRect();
     const x = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
     const y = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
-    // 從頭點之後第一點一定是「這也是」(什麼都沒選時,「這不是」沒有東西可以拿掉)
-    reselect([...strokes, strokeAt(anySelected ? mode : "add", x, y)]);
+    // 點到現在有留著的(照原色)= 這不是;點到變淡的 = 這也是。什麼都沒選時一定是「這也是」
+    const kept = keptRef.current;
+    const isKept = Boolean(kept) && anySelected
+      && kept.data[(Math.min(kept.h - 1, Math.floor(y * kept.h)) * kept.w + Math.min(kept.w - 1, Math.floor(x * kept.w))) * 4 + 3] > 128;
+    reselect([...strokes, strokeAt(isKept ? "remove" : "add", x, y)]);
   };
   const undo = () => { if (strokes.length) reselect(strokes.slice(0, -1)); };
-  const restart = () => { setMode("add"); reselect([]); };
+  const restart = () => reselect([]);
 
   return (
     <div className="eraser picker">
       <p className="add-step">點一下修正</p>
-      <small className="add-hint">
-        {anySelected
-          ? "漏掉的地方(例如另一隻鞋)選「這也是」再點它;多出來的床單、沙發選「這不是」再點它。照原色的是會留下來的部分。"
-          : "點一下衣服,點到的那件會照原色亮起來;成雙的鞋兩隻都點。"}
-      </small>
+      {anySelected ? (
+        <ol className="picker-steps">
+          <li>照原色的會留下來,變淡的會去掉。</li>
+          <li>哪裡不對就點哪裡:多出來的(別件衣服、鞋、床單)點一下就去掉;漏掉的(袖子、另一隻鞋)點一下就加回來。</li>
+          <li>點錯了按「上一點」。</li>
+        </ol>
+      ) : (
+        <small className="add-hint">點一下衣服,點到的那件會照原色亮起來;成雙的鞋兩隻都點。</small>
+      )}
       <div className="eraser-stage">
         <canvas
           ref={canvasRef}
           className="eraser-canvas picker-canvas"
-          aria-label="框起來的照片,照原色的是會留下來的部分;點一下照上面選的加進來或拿掉"
+          aria-label="框起來的照片,照原色的是會留下來的部分;點留下來的地方會去掉,點變淡的地方會加回來"
           onPointerDown={down}
           onPointerUp={tap}
           onPointerCancel={() => { downRef.current = null; }}
@@ -129,10 +145,7 @@ export function CutoutPicker({ input, cut, strokes: initialStrokes, onDone, onCa
         {busy && <span className="picker-busy" role="status">重選中…</span>}
       </div>
       <div className="eraser-tools">
-        <div className="eraser-sizes" role="group" aria-label="點下去是加進來還是拿掉">
-          <button type="button" aria-pressed={mode === "add"} onClick={() => setMode("add")}>這也是</button>
-          <button type="button" aria-pressed={mode === "remove"} onClick={() => setMode("remove")} disabled={!anySelected}>這不是</button>
-        </div>
+        <p className="picker-legend" aria-hidden="true"><span className="is-add" />加回來的<span className="is-remove" />去掉的</p>
         <div className="picker-history">
           <button type="button" className="secondary-button" onClick={undo} disabled={busy || !strokes.length}>上一點</button>
           <button type="button" className="secondary-button" onClick={restart} disabled={busy || !strokes.length}>從頭點</button>
@@ -140,14 +153,14 @@ export function CutoutPicker({ input, cut, strokes: initialStrokes, onDone, onCa
       </div>
       {problem && <small className="add-field-error" role="alert">{problem}</small>}
       <div className="add-actions">
-        <button type="button" className="secondary-button" onClick={onCancel} disabled={busy}>不改了</button>
+        {changed && <button type="button" className="secondary-button" onClick={onCancel} disabled={busy}>放棄這幾點</button>}
         <button
           type="button"
           className="primary-button"
           onClick={() => (changed ? onDone(current, strokes) : onCancel())}
           disabled={!ready || busy || (changed && !current)}
         >
-          {!changed ? "不用改" : current ? "改好了" : "先點一下衣服"}
+          {!changed ? "這樣就好" : current ? "改好了" : "先點一下衣服"}
         </button>
       </div>
     </div>

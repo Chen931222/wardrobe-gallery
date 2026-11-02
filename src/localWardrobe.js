@@ -597,6 +597,39 @@ export function guessPart(bitmap) {
   return guessPartFromMask((x, y) => alpha[(y * W + x) * 4 + 3] > 128, W, H);
 }
 
+/** 衣服是不是斜放、橫放(2026-11-02 本人「加入提醒照片放歪了」:橫放的褲子被猜成上衣,入口說還差下身;人台上也是斜的)。
+ *  用遮罩的二階動差找主軸:夠長(主軸／副軸 ≥ 1.6)又偏離直立 25° 以上才算。上衣、外套接近方的,長度不夠,不會被算進來;
+ *  鞋、包、皮帶這些配件本來就可能是橫的,只拿上衣、外套、下身來判(TILT_PARTS)。
+ *  實測(站主 104 件,都擺正):誤判 0;10 件下身轉 90°、35° 各抓到 9 件(漏的是接近方形的短褲),轉 10° 0 件。門檻降到 1.5 腰包會被誤判回 { tilted, degrees(偏離直立幾度) }。分開寫,實測腳本才能直接拿遮罩跑 */
+export function tiltFromMask(on, W, H) {
+  let n = 0, sx = 0, sy = 0;
+  for (let y = 0; y < H; y += 1) for (let x = 0; x < W; x += 1) if (on(x, y)) { n += 1; sx += x; sy += y; }
+  if (n < 20) return { tilted: false, degrees: 0 };
+  const mx = sx / n, my = sy / n;
+  let a = 0, b = 0, c = 0;
+  for (let y = 0; y < H; y += 1) for (let x = 0; x < W; x += 1) {
+    if (!on(x, y)) continue;
+    const dx = x - mx, dy = y - my;
+    a += dx * dx; b += dx * dy; c += dy * dy;
+  }
+  a /= n; b /= n; c /= n;
+  const spread = Math.sqrt(((a - c) / 2) ** 2 + b * b);
+  const long = (a + c) / 2 + spread, short = Math.max((a + c) / 2 - spread, 1e-6);
+  const theta = (0.5 * Math.atan2(2 * b, a - c) * 180) / Math.PI;   // 主軸跟水平線的夾角
+  const degrees = Math.round(Math.abs(90 - Math.abs(theta)));
+  return { tilted: Math.sqrt(long / short) >= 1.6 && degrees >= 25, degrees };
+}
+export const TILT_PARTS = ["upperbody", "wholebody_up", "lowerbody"];
+export function looksTilted(bitmap) {
+  const W = 64;
+  const H = Math.max(8, Math.round((bitmap.height / bitmap.width) * W));
+  const canvas = Object.assign(document.createElement("canvas"), { width: W, height: H });
+  const context = canvas.getContext("2d");
+  context.drawImage(bitmap, 0, 0, W, H);
+  const alpha = context.getImageData(0, 0, W, H).data;
+  return tiltFromMask((x, y) => alpha[(y * W + x) * 4 + 3] > 128, W, H);
+}
+
 /** guessPart 的判斷本身:on(x, y) = 那一格有沒有衣服。分開寫,實測腳本才能直接拿遮罩跑 */
 export function guessPartFromMask(on, W, H) {
   let x0 = W, x1 = -1, y0 = H, y1 = -1;

@@ -1582,6 +1582,14 @@ h1, h2, h3 {
    擦除要整張畫布接手指(touch-action: none),這裡只收點一下,捲動、縮放照常交給瀏覽器 */
 .picker-canvas { cursor: crosshair; touch-action: manipulation; }
 .picker-history { display: inline-flex; gap: 8px; }
+/* 點一下修正的說明(2026-11-02):三步編號,第一步講怎麼看、第二步講怎麼點,不再一整句塞在一起 */
+.picker-steps { margin: 0; padding-left: 1.4em; display: grid; gap: 4px; font-size: 13px; line-height: 1.65; color: var(--body); }
+.picker-steps li::marker { color: var(--muted); }
+/* 畫布上的小圓點代表什麼:綠 = 加回來、紅 = 去掉(顏色跟 CutoutPicker 畫的一樣) */
+.picker-legend { margin: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.picker-legend span { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 2px #fff; }
+.picker-legend .is-add { background: #2e6b3a; }
+.picker-legend .is-remove { background: #b3261e; margin-left: 10px; }
 .eraser-sizes button:disabled { opacity: .45; cursor: default; }
 .picker-busy {
   position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
@@ -2679,6 +2687,15 @@ h1, h2, h3 {
   color: var(--muted);
 }
 
+/* 衣櫃還配不出一套(「還差下身 1 件就能配」):這時它是畫面上唯一要人做的事,用正文大小的深色字,不是天氣那行的淡色小標(2026-11-02) */
+.landing-daily-missing {
+  margin: 0;
+  font-size: clamp(16px, 1.25vw, 26px);
+  letter-spacing: .04em;
+  color: var(--ink);
+}
+.landing-daily-missing + .landing-daily-go { margin-top: 16px; }
+
 .landing-daily-list {
   list-style: none;
   margin: 0;
@@ -3680,6 +3697,8 @@ h1, h2, h3 {
 /* 重拍一張(2026-10-22):跟回報鈕同一種底線字,夾在提示句尾 */
 .add-text-button { font-size: inherit; min-height: 24px; }
 .add-retake { margin-top: 8px; }
+/* 照片放歪了(2026-11-02):要人重拍的提醒,深色字＋左邊一條線,比一般提示句顯眼 */
+.add-panel .add-tilt { margin: 8px 0 0; padding-left: 10px; border-left: 2px solid var(--danger); font-size: 13px; line-height: 1.6; color: var(--ink); }
 /* 左上角:標誌,右邊一欄是回報鈕和件數(2026-10-23)。工具列對齊標誌的底邊,像報頭 */
 /* flex: none + 整排可換行:左邊 317px(2026-10-24 標誌換成橫的 180 寬)、工具列 435px,一排要 ~780px;放不下就讓工具列掉到下一行
    (以前 641–740 之間會把回報鈕壓在「新增」底下,驗收抓到) */
@@ -3810,3 +3829,26 @@ h1, h2, h3 {
 .batch-row.is-work { border-color: var(--control); }
 .batch-row.is-fail .batch-text small { color: var(--danger); }
 .batch-actions { align-items: center; justify-content: space-between; flex-wrap: wrap; }
+
+/* ===== 大螢幕跟著放大(2026-11-02 本人:「標題這些地方改成自適應」,1920 寬的桌機上一件衣服、標題、按鈕都小小一塊) =====
+   1440 以下照舊(每條 clamp 的下限就是原本的 px);超過 1440 照畫面寬等比放大,到約 2560 封頂。
+   只用在 1441 以上:641–860 那些縮小標誌的規則不受影響。入口、衣櫃、搭配頁首同一套,換頁時標誌不會忽大忽小 */
+@media (min-width: 1441px) {
+  .landing-top .landing-logo, .header-logo { width: clamp(180px, 12.5vw, 300px); }
+  .landing-top h1 { font-size: clamp(22px, 1.53vw, 34px); }
+  .landing-note { font-size: clamp(12px, .83vw, 16px); }
+  .landing-top nav button { font-size: clamp(13px, .9vw, 18px); padding: .7em 1.7em; }
+  .landing-top .feedback-button, .feedback-button.in-brand, .piece-count { font-size: clamp(13px, .9vw, 17px); }
+  .view-nav button, .add-garment-button { font-size: clamp(13px, .9vw, 18px); }
+  .view-nav button { padding: .62em 1.54em; }
+  .add-garment-button { padding: .62em 1.23em; }
+  .landing-daily h2 { font-size: clamp(20px, 1.39vw, 30px); }
+  .landing-daily-weather, .landing-daily-loading { font-size: clamp(11.5px, .8vw, 16px); }
+  .landing-daily-list { font-size: clamp(12.5px, .87vw, 18px); gap: .3em; }
+  .landing-daily-list span { font-size: clamp(10.5px, .73vw, 14px); min-width: 3.2em; }
+  .landing-daily-go { font-size: clamp(12.5px, .87vw, 17px); padding: .64em 1.44em; }
+  .landing-hint { font-size: clamp(12px, .83vw, 16px); }
+}
+/* 空衣櫃的歡迎畫面:版面是 1200 寬一格一格排好的,整塊等比放大比逐條改字級穩(zoom 會連格子、影片一起放大) */
+@media (min-width: 1700px) { .welcome { zoom: 1.15; } }
+@media (min-width: 2200px) { .welcome { zoom: 1.3; } }

@@ -169,6 +169,19 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
     stripObserver.current.observe(el);
   }, []);
 
+  // 桌機今日推薦的實際高度(2026-11-02 本人「整個頁面太空白」):一排的時候衣服和推薦排成一組、上下置中,
+  // 推薦多高就留多高——「還差下身 1 件」只有兩行,舊版一律預留 260px,衣服上面、推薦下面各空一大段
+  const [dailyH, setDailyH] = useState(0);
+  const dailyObserver = useRef(null);
+  const dailyRef = useCallback((el) => {
+    dailyObserver.current?.disconnect();
+    if (!el) return;
+    const read = () => setDailyH(el.offsetHeight);
+    read();
+    dailyObserver.current = new ResizeObserver(read);
+    dailyObserver.current.observe(el);
+  }, []);
+
   const n = picked.length;
 
   // 圓環中央的今日推薦:掛載後背景抓天氣,不擋圓環渲染;失敗就顯示提示不影響其他功能
@@ -263,11 +276,27 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
     const tallest = Math.max(...boxes.map((b) => b.h), 0.01);
     const topClear = topH + 8;                                 // 卡片上緣至少要在標題列下面
     if (n <= ROW_MAX) {
-      // 一排:總寬不超過畫面 70%、最高的一件不超過畫面 30%(手機 24%),每件之間留 1/4 件寬
+      // 一排:總寬不超過畫面 70%,每件之間留 1/4 件寬。件數越少畫越大(2026-11-02 本人:只有一件時畫面空、衣服小):
+      // 最高的一件,一件時可到畫面 46%、兩件 40%、三件 34%(手機 34/30/26%);舊版一律 30%(手機 24%)且最大 260px,大螢幕上一件只佔四分之一。
+      // 下面要留今日推薦(桌機估 260px 或畫面 28%,加上下各 40、56 的空)、手機留推薦長條;放不下就縮,不壓到推薦
+      const frac = (phone ? [0.34, 0.3, 0.26] : [0.52, 0.46, 0.4])[n - 1] ?? 0.3;
       const totalW = boxes.reduce((sum, b) => sum + b.w, 0) * 1.25;
-      const k = Math.max(1, Math.min((w * 0.7) / totalW, (h * (phone ? 0.24 : 0.3)) / tallest, 260));
-      const rowY = Math.max(h * (phone ? 0.3 : 0.32), topClear + (tallest * k) / 2);
-      return { wide, ringR, k, cy: rowY, row: true };
+      // 寬:舊版整排不超過畫面 70%,手機上一件衣服被這條卡在 197px;件數少時放寬到 80/84/88%
+      const widthK = (w * ([0.8, 0.84, 0.88][n - 1] ?? 0.7)) / totalW;
+      if (phone) {
+        const room = Math.max(h * 0.18, h - topClear - Math.max(stripH, 184) - 24);
+        const k = Math.max(1, Math.min(widthK, Math.min(h * frac, room) / tallest));
+        const half = (tallest * k) / 2;
+        return { wide, ringR, k, cy: Math.max(h * 0.3, topClear + half), row: true, rowHalf: half };
+      }
+      // 桌機:衣服＋間距＋今日推薦當一組,放在標題列和底下那行提示之間的正中間。推薦還沒量到(天氣讀取中)先當 260 或畫面 28%
+      const block = dailyH || Math.min(260, h * 0.28);
+      const gap = Math.max(32, h * 0.045);
+      const avail = h - topClear - 56;
+      const k = Math.max(1, Math.min(widthK, Math.min(h * frac, avail - gap - block) / tallest));
+      const rowH = tallest * k;
+      const top = topClear + Math.max(0, (avail - (rowH + gap + block)) / 2);
+      return { wide, ringR, k, cy: top + rowH / 2, row: true, rowHalf: rowH / 2, dailyY: top + rowH + gap + block / 2 };
     }
     const GAP = 6;                                            // 卡與卡之間至少留白(px)
 
@@ -319,7 +348,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
       }
     }
     return { wide, ringR, k, cy, row: false };
-  }, [dims, boxes, n, phone, topH, stripH]);
+  }, [dims, boxes, n, phone, topH, stripH, dailyH]);
 
   // 依模式算每張卡的位置與大小(純函式,一次算完交給 CSS transition 去飛)
   const layout = (index) => {
@@ -431,14 +460,16 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
         {focusIdx === null && metrics && dims && !phone && (
           <div
             className="landing-daily"
+            ref={dailyRef}
             style={{
               left: `${dims.w * 0.5}px`,
-              top: `${metrics.row ? Math.max(dims.h * 0.7, metrics.cy + dims.h * 0.3) : metrics.cy}px`,   // 一排的時候放在那排下面
-              width: `${metrics.row ? Math.min(dims.w * 0.6, 360) : metrics.ringR * 1.12}px`,
+              // 一排的時候緊接在那排下面(metrics.dailyY,跟衣服排成一組上下置中)
+              top: `${metrics.row ? metrics.dailyY : metrics.cy}px`,
+              width: `${metrics.row ? Math.min(dims.w * 0.6, Math.max(360, dims.w * 0.26)) : metrics.ringR * 1.12}px`,
             }}
           >
             {!daily && <p className="landing-daily-loading">讀取今天的天氣…</p>}
-            {daily?.error && <p className="landing-daily-loading">{daily.error}</p>}
+            {daily?.error && <p className={daily.missing ? "landing-daily-missing" : "landing-daily-loading"}>{daily.error}</p>}
             {daily?.missing && onAdd && <button type="button" className="landing-daily-go" onClick={onAdd}>去新增</button>}
             {dailyOutfit && (
               <>

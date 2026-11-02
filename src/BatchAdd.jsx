@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "@phosphor-icons/react";
 import { useDialog } from "./useDialog.js";
-import { guessPart, saveLocalItem } from "./localWardrobe.js";
+import { guessPart, looksTilted, saveLocalItem, TILT_PARTS } from "./localWardrobe.js";
 import { abandonCutout } from "./cutout.js";
 import { colorName } from "./recommend.js";
 import { PARTS } from "./parts.js";
@@ -68,12 +68,15 @@ export function BatchAdd({ files, existing, cut, errorText, note = "", onDone })
             }).then((value) => { clearTimeout(timer); resolve(value); }, (cause) => { clearTimeout(timer); reject(cause); });
           });
           if (!alive || stopRef.current) break;   // 算到一半按了停:這張不存
-          let bitmap = null, part = "upperbody", noun = "";
+          let bitmap = null, part = "upperbody", noun = "", tilted = false;
           try {
             bitmap = await createImageBitmap(result.blob);
             part = guessPart(bitmap) || "upperbody";
             if (part === "lowerbody" && bitmap.height / bitmap.width >= SHOE_RATIO) part = "shoes";
-            if (part === "lowerbody") noun = bitmap.height / bitmap.width < SHORTS_RATIO ? "短褲" : "長褲";
+            // 放歪了先看(橫放的褲子形狀像上衣,分類會猜錯),再定品名
+            tilted = TILT_PARTS.includes(part) && looksTilted(bitmap).tilted;
+            // 放歪的褲子長寬比是反的,分不出長短褲(實測橫放長褲被叫成短褲),叫「褲子」
+            if (part === "lowerbody") noun = tilted ? "褲子" : bitmap.height / bitmap.width < SHORTS_RATIO ? "短褲" : "長褲";
           } catch { /* 讀不到就當上衣 */ } finally { bitmap?.close?.(); }
           const base = `${colorName(result.color).replace("混色", "")}${noun || NOUN[part] || PARTS[part]?.singular || "單品"}`;
           let name = base;
@@ -92,7 +95,7 @@ export function BatchAdd({ files, existing, cut, errorText, note = "", onDone })
           if (owned === 5) track("第 5 件");
           const preview = URL.createObjectURL(result.blob);
           previewsRef.current.push(preview);
-          if (alive) update(index, { state: "saved", text: "", preview, name, part });
+          if (alive) update(index, { state: "saved", text: "", preview, name, part, tilted });
         } catch (cause) {
           console.error(cause);
           if (!alive) break;
@@ -136,7 +139,7 @@ export function BatchAdd({ files, existing, cut, errorText, note = "", onDone })
   const failed = rows.filter((row) => row.state === "fail").length;
   const status = running
     ? `${saved} / ${files.length} 放進衣櫃了，一張一張去背中…`
-    : `放進衣櫃 ${saved} 件${failed ? `，${failed} 張沒成功` : ""}${rows.some((row) => row.state === "skip") ? `，${rows.filter((row) => row.state === "skip").length} 張沒處理` : ""}。`;
+    : `放進衣櫃 ${saved} 件${rows.some((row) => row.tilted) ? `，${rows.filter((row) => row.tilted).length} 張照片放歪了` : ""}${failed ? `，${failed} 張沒成功` : ""}${rows.some((row) => row.state === "skip") ? `，${rows.filter((row) => row.state === "skip").length} 張沒處理` : ""}。`;
 
   return createPortal(
     <div className="add-overlay" role="presentation">
@@ -154,7 +157,7 @@ export function BatchAdd({ files, existing, cut, errorText, note = "", onDone })
               <span className="batch-text">
                 <b>{row.state === "saved" ? row.name : `第 ${row.index + 1} 張`}</b>
                 <small>
-                  {row.state === "saved" ? `放進衣櫃了・猜是${PARTS[row.part]?.singular || "上衣"}`
+                  {row.state === "saved" ? `放進衣櫃了・猜是${PARTS[row.part]?.singular || "上衣"}${row.tilted ? "・照片放歪了,分類可能不對,點開按「換圖」重拍" : ""}`
                     : row.state === "work" ? row.text || "去背中…"
                       : row.state === "fail" ? row.text
                         : row.state === "skip" ? "沒處理"

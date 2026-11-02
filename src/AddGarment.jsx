@@ -1,7 +1,7 @@
 // [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Eraser, HandTap, Plus, SpinnerGap, X } from "@phosphor-icons/react";
-import { cropBlob, deleteLocalItem, findUrl, garmentColors, guessPart, productUrlProblem, refillGaps, saveLocalItem, shrinkImage, trimTransparent } from "./localWardrobe.js";
+import { cropBlob, deleteLocalItem, findUrl, garmentColors, guessPart, looksTilted, productUrlProblem, refillGaps, saveLocalItem, shrinkImage, TILT_PARTS, trimTransparent } from "./localWardrobe.js";
 import { PART_GROUPS, PART_ORDER, PARTS } from "./parts.js";
 import { fetchBrandProduct, fetchProductPage, parseBrandLink, partFromName, partFromProduct, sameProduct } from "./brandLink.js";
 import { findSameStyle, findSimilar, fitChoices, kindChoices, kindLabel } from "./wishCheck.js";
@@ -666,6 +666,24 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
   const brandPick = !store && Boolean(source?.fromBrand);   // 從商品頁挑的商品圖(不是截圖、不是自己拍的)
   const retake = () => { retakeRef.current = true; inputRef.current?.click(); };
 
+  // 照片放歪了(2026-11-02 本人):去背好就看一次,上衣、外套、下身斜了 25° 以上才講。分類還沒選就照形狀猜那一類來判
+  const [tilt, setTilt] = useState(null);
+  useEffect(() => {
+    setTilt(null);
+    if (!draft?.blob || store) return undefined;
+    let alive = true;
+    (async () => {
+      let bitmap = null;
+      try {
+        bitmap = await createImageBitmap(draft.blob);
+        const part = draft.part || guessPart(bitmap);
+        const result = TILT_PARTS.includes(part) ? looksTilted(bitmap) : null;
+        if (alive && result?.tilted) setTilt(result);
+      } catch { /* 讀不到就不講 */ } finally { bitmap?.close?.(); }
+    })();
+    return () => { alive = false; };
+  }, [draft?.blob, draft?.part, store]);
+
   const tooSmall = box.w < 0.05 || box.h < 0.05;
   const urlError = draft ? productUrlProblem(draft.sourceUrl) : "";
   const urlInvalid = Boolean(urlError);
@@ -1175,7 +1193,13 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
             {fillToggle()}
             {pickButton()}
             {eraseButton()}
-            {ownPhoto && draft.blob && (
+            {tilt && draft.blob && (
+              <p className="add-tilt" role="status">
+                <b>照片好像放歪了</b>(斜了約 {tilt.degrees}°)。歪著存,人台上也會斜,分類也常猜錯:橫放的褲子會被當成上衣。直直平放、領口或褲頭朝上再拍一張。
+                {ownPhoto && <>{" "}<button type="button" className="add-text-button" onClick={retake}>重拍一張</button></>}
+              </p>
+            )}
+            {ownPhoto && draft.blob && !tilt && (
               <small className="add-hint add-retake">
                 看起來皺皺的?掛起來或拉平再拍一張,名稱和分類會留著。{" "}
                 <button type="button" className="add-text-button" onClick={retake}>重拍一張</button>
