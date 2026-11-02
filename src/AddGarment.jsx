@@ -1,6 +1,6 @@
 // [本 fork 新增] 上游 tandpfun/wardrobe 沒有此檔,整份由本 fork 撰寫。
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Eraser, HandTap, Plus, SpinnerGap, Storefront, X } from "@phosphor-icons/react";
+import { Eraser, HandTap, Plus, SpinnerGap, X } from "@phosphor-icons/react";
 import { cropBlob, deleteLocalItem, findUrl, garmentColors, guessPart, productUrlProblem, refillGaps, saveLocalItem, shrinkImage, trimTransparent } from "./localWardrobe.js";
 import { PART_GROUPS, PART_ORDER, PARTS } from "./parts.js";
 import { fetchBrandProduct, fetchProductPage, parseBrandLink, partFromName, partFromProduct, sameProduct } from "./brandLink.js";
@@ -14,6 +14,7 @@ import { CURRENCIES, parsePrice } from "./price.js";
 import { brandInUrl, brandOf, brandSuggestions, canonicalBrand } from "./brands.js";
 import { track } from "./analytics.js";
 import { autoNamedKind } from "./standIns.js";
+import { BATCH_MAX, BatchAdd } from "./BatchAdd.jsx";
 
 // 分類清單在 src/parts.js(新增的選單照組排:衣服、鞋襪、配件、小物)
 
@@ -167,9 +168,19 @@ async function limitSide(blob, max) {
   return (await new Promise((resolve) => canvas.toBlob(resolve, "image/png"))) || blob;
 }
 
+/** 一次加好幾件(BatchAdd.jsx)用:整張去背 → 補洞補實 → 補條紋縫 → 去掉透明邊、縮小 → 抓顏色。
+ *  跟單張流程「整張去背」同一條,只是不框、不點、不讓人看預覽。onProgress 照 removeBg */
+export async function cutoutWhole(file, onProgress) {
+  const input = await limitSide(await toCutoutFormat(file), 1600);
+  const raw = await removeBg(input, onProgress);
+  const clean = await refillGaps(input, await fixCutout(input, raw, { part: "", strong: false }));
+  const blob = await shrinkImage((await trimTransparent(clean)).blob);
+  return { blob, ...(await garmentColors(blob)) };
+}
+
 /* 去背失敗講真正的原因。舊版一律「可能是照片太大或網路斷線」,真機上壞了也看不出是哪一個
    (2026-10-05 本人 iPhone 4G 兩格訊號、框皮帶去背失敗)。最後附上原始錯誤,截圖回報才查得到 */
-function cutoutErrorText(cause) {
+export function cutoutErrorText(cause) {
   const raw = `${cause?.name || ""} ${cause?.message || cause || ""}`.trim();
   // 記憶體先判:WASM 記憶體不夠時錯誤長得像「Aborted(OOM)」,不能被下面的 abort 當成斷線
   if (/memory|oom|allocation|rangeerror|out of bounds|aborted\(/i.test(raw)) {
@@ -214,8 +225,13 @@ function expandBox(region) {
  * 不存也行,按「不用了」什麼都不留。結果卡由 App 用 renderCheck(試算的這件, 已經有的) 畫(WishCheck 在 App 裡)。
  * 限制:店裡燈光偏黃,抓到的顏色會跟家裡拍的有落差,「同色」可能漏抓;分類照片認不出來,要人點。
  */
-export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHandled = null, replaceRequest = null, onReplaced = null, hideButton = false, onAddOne = null, renderCheck = null, onQuickStart = null }) {
+export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHandled = null, replaceRequest = null, onReplaced = null, hideButton = false, onAddOne = null, renderCheck = null, onQuickStart = null, onBatchAdded = null }) {
   const inputRef = useRef(null);
+  const multiRef = useRef(null);           // 新增一件「拍照或選照片」:可以一次選好幾張(2026-11-02),選 2 張以上走 BatchAdd
+  const [batch, setBatch] = useState(null);   // { files }:一次加好幾件進行中
+  const batchRef = useRef(false);
+  batchRef.current = Boolean(batch);
+  const [batchNote, setBatchNote] = useState("");
   const retakeRef = useRef(false);   // 這次選照片是「重拍一張」:填好的留著
   const cameraRef = useRef(null);          // 店裡比一下:直接開相機的那一個
   const [store, setStore] = useState(false);
@@ -278,6 +294,8 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     const onPop = () => {
       if (!historyRef.current) return;   // 自己 history.back() 吃掉的那一筆,或新增沒開著
       historyRef.current = false;
+      // 一次加好幾件開著(新增視窗已收掉、stage 是 idle):返回手勢不離開網站,把那筆押回去,要停請按「停下來」(驗收抓到:第二次側滑直接離站)
+      if (batchRef.current) { pushHistory(); return; }
       if (stageRef.current === "idle") return;
       if (stageRef.current === "review" && !window.confirm("要放棄剛去背好的這件嗎?")) { pushHistory(); return; }
       clearRef.current();
@@ -757,6 +775,37 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
         onChange={(event) => { const keepDraft = retakeRef.current; retakeRef.current = false; pick(event.target.files?.[0], { keepDraft }); event.target.value = ""; }}
       />
       <input
+        ref={multiRef}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={(event) => {
+          const files = [...(event.target.files || [])];
+          event.target.value = "";
+          if (files.length < 2) { pick(files[0]); return; }
+          // 新增視窗收掉(history 那筆留著:BatchAdd 開著時返回手勢只吃掉那一筆、不離開網站),換成一次加好幾件
+          clear();
+          setBatchNote(files.length > BATCH_MAX ? `一次最多 ${BATCH_MAX} 張，先處理前 ${BATCH_MAX} 張，其他的再選一次。` : "");
+          setBatch({ files: files.slice(0, BATCH_MAX) });
+        }}
+      />
+      {batch && (
+        <BatchAdd
+          files={batch.files}
+          existing={existing}
+          cut={cutoutWhole}
+          errorText={cutoutErrorText}
+          note={batchNote}
+          onDone={(saved) => {
+            setBatch(null);
+            setBatchNote("");
+            if (historyRef.current) { historyRef.current = false; window.history.back(); }
+            onBatchAdded?.(saved);
+          }}
+        />
+      )}
+      <input
         ref={cameraRef}
         type="file"
         accept="image/*"
@@ -775,11 +824,6 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
           {stage === "working"
             ? <><SpinnerGap size={14} className="add-spinner" aria-hidden="true" /> 處理中</>
             : <><Plus size={14} weight="bold" aria-hidden="true" /> 新增</>}
-        </button>
-      )}
-      {!hideButton && renderCheck && (
-        <button type="button" className="add-garment-button add-store-button" onClick={openStore} disabled={stage === "working"}>
-          <Storefront size={14} weight="bold" aria-hidden="true" /> 店裡比一下
         </button>
       )}
 
@@ -866,15 +910,22 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
               </small>
             )}
             <div className="add-actions">
-              <button type="button" className="secondary-button" onClick={() => { setLink(parsedLink?.notProduct ? null : effectiveLink ? { ...effectiveLink, images: [] } : null); inputRef.current?.click(); }}>
+              <button type="button" className="secondary-button" onClick={() => { setLink(parsedLink?.notProduct ? null : effectiveLink ? { ...effectiveLink, images: [] } : null); (parsedLink || replacing || !onBatchAdded ? inputRef : multiRef).current?.click(); }}>
                 {parsedLink ? "改用照片" : "沒有連結,拍照或選照片"}
               </button>
               <button type="submit" className="primary-button" disabled={!parsedLink || parsedLink.notProduct || pageLoading}>
                 {pageLoading ? "讀取中…" : effectiveLink?.images.length ? "列出商品圖" : "選截圖"}
               </button>
             </div>
+            {/* 一次好幾張(2026-11-02):懶的是拍完之後一件件框、等、填,不是拍照 */}
+            {!replacing && !parsedLink && onBatchAdded && <small className="add-hint">從相簿可以一次選好幾張，每張自動去背、直接放進衣櫃。</small>}
             {/* 第三條路(2026-10-30 本人「代表款不要只放在入口,新增第一件時旁邊也要有」):沒連結也不想拍的,從這裡直接進代表款。
                 先把這個視窗收掉(reset 會把 history 那筆也退掉),再開代表款;換圖時不出現,換圖是換成自己的,不是放代表款 */}
+            {/* 店裡比一下(2026-11-02 本人「新增和店裡比一下是一樣的,感覺可以刪掉」):頁首那顆拿掉,入口收到這裡。功能留著:
+                它不存,是拍正在看的那件、比家裡有幾件像的,跟新增不一樣 */}
+            {!replacing && renderCheck && (
+              <p className="add-alt">在店裡挑衣服？<button type="button" onClick={() => { setLink(null); setLinkText(""); openStore(); }}>拍一張，跟家裡的比一下（不存）</button></p>
+            )}
             {!replacing && onQuickStart && (
               <p className="add-alt">不想拍、也沒連結？<button type="button" onClick={() => { reset(); onQuickStart(); }}>點幾件代表款，先配一套</button></p>
             )}

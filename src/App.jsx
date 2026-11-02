@@ -1570,6 +1570,7 @@ export function App() {
     () => (!CAN_EDIT && CAN_ADD && hasMine ? backupReminder(items.filter((item) => item.isLocal && !item.standIn)) : null),
     [items, hasMine, keepTick],   // eslint-disable-line react-hooks/exhaustive-deps
   );
+  const closetBackupRef = useRef(null);
   const dismissKeepHint = () => { snoozeBackupHint(); setKeepTick((n) => n + 1); };
   const exportFromHint = async () => {
     try {
@@ -2037,12 +2038,15 @@ export function App() {
             {/* 左上角(2026-10-23 本人「問題回報和 logo 做在左上角:logo 在左邊,問題回報在右邊」):標誌,右邊一欄放回報和件數。
                 歡迎畫面有自己的大標誌,這裡不重複 */}
             {!showWelcome && (
+              /* 報頭(2026-11-02 本人「pair this 標題置中」):標誌正中,兩邊是報耳。左耳件數(衣櫃頁的件數在目錄第一行,這裡只在其他頁出現),
+                 右耳回報(2026-10-23 本人定「問題回報在右邊」,置中之後照樣在標誌右邊) */
               <div className="header-brand">
-                <Logo className="header-logo" />
-                <div className="header-brand-side">
-                  {!CAN_EDIT && <Feedback where={view === "closet" ? "衣櫃" : view === "styling" ? "搭配" : "入口"} className="in-brand" />}
-                  {/* 衣櫃頁的件數、想買的在目錄第一行,這裡只在搭配頁出現 */}
+                <div className="masthead-ear is-left">
                   <p className="piece-count" hidden={view === "closet"}>{ownedItems.length} 件單品{wishCount > 0 && <span className="piece-count-wish"> · 想買 {wishCount}</span>}</p>
+                </div>
+                <Logo className="header-logo" />
+                <div className="masthead-ear is-right">
+                  {!CAN_EDIT && <Feedback where={view === "closet" ? "衣櫃" : view === "styling" ? "搭配" : "入口"} className="in-brand" label="卡住了？告訴我" />}
                 </div>
               </div>
             )}
@@ -2058,6 +2062,16 @@ export function App() {
                   openRequest={addRequest}
                   onOpenHandled={() => setAddRequest(0)}
                   onQuickStart={() => setQuickOpen(true)}
+                  onBatchAdded={async (saved) => {
+                    // 一次加好幾件(src/BatchAdd.jsx):存好帶去衣櫃「全部」,看得到猜的分類標記
+                    if (!saved) return;
+                    if (!CAN_EDIT) { setClosetChoice("mine"); setPendingOutfit(null); }
+                    await refresh();
+                    setActiveType("all");
+                    setView("closet");
+                    window.scrollTo({ top: 0 });
+                    say(`${saved} 件放進衣櫃了。分類是猜的,猜錯的點開那件改。`);
+                  }}
                   onAdded={async (wishlist, name, dream = false, id = null) => {
                     // 第一件(2026-10-21,行銷企劃第 0 週):加完不只說「加進衣櫃了」,直接穿上人台(firstLook)
                     const firstOwned = !wishlist && !CAN_EDIT && id && !itemsRef.current.some((item) => item.isLocal && !item.wishlist && !item.trashedAt);
@@ -2258,6 +2272,31 @@ export function App() {
               />
             ))}
           </section>
+        )}
+        {/* 衣櫃頁也放備份(2026-11-02 本人:「我還是沒看到匯出備份」「衣櫃也要有」):原本只在搭配頁最底下,
+            正上方還有一顆「匯出這套」(匯出的是那套搭配的圖),找不到。提醒卡只在有自己拍的之後才出現 */}
+        {view === "closet" && CAN_ADD && hasMine && activeType !== "trash" && !searching && !picking && (
+          <div className="studio-backup closet-backup">
+            <div className="studio-backup-controls">
+              <span className="studio-backup-label">紀錄備份</span>
+              <button type="button" onClick={exportFromHint}>匯出備份</button>
+              <button type="button" onClick={() => closetBackupRef.current?.click()}>匯入備份</button>
+              <input
+                ref={closetBackupRef}
+                type="file"
+                accept="application/zip,.zip,application/json,.json"
+                hidden
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (!file) return;
+                  const message = await importBackupFile(file, Boolean(syncCode()));
+                  if (message) say(message);
+                }}
+              />
+            </div>
+            <p className="studio-backup-note">備份是一個 ZIP,存在你自己手上。換手機、清瀏覽資料之前先匯出,到新的地方按「匯入備份」選這個檔。</p>
+          </div>
         )}
       </main>
 
