@@ -28,6 +28,8 @@ export function QuickStart({ demoItems, onClose, onSaved }) {
   const [picks, setPicks] = useState([]);   // [{ key, kind, color, thumb }]
   const [saving, setSaving] = useState(null);   // null | { done, total }
   const [error, setError] = useState("");
+  const [nudge, setNudge] = useState(null);   // { key, n } 打開了卻沒選顏色就按放進衣櫃:那類顏色列底下講一句;n 讓再按一次也重新捲過去
+  const [touchedKey, setTouchedKey] = useState(null);   // 打開之後選過顏色的那類:選了又拿掉是自己不要,不算沒選(2026-11-02 驗收)
   const close = () => { if (!saving) onClose(); };
   useDialog(dialogRef, close);
 
@@ -53,6 +55,7 @@ export function QuickStart({ demoItems, onClose, onSaved }) {
   }, []);
 
   const toggle = async (kind, colorKey) => {
+    setNudge(null);
     const key = `${kind.key}:${colorKey}`;
     const had = picks.find((pick) => pick.key === key);
     if (had) {
@@ -60,6 +63,7 @@ export function QuickStart({ demoItems, onClose, onSaved }) {
       setPicks((current) => current.filter((pick) => pick.key !== key));
       return;
     }
+    setTouchedKey(kind.key);
     setPicks((current) => [...current, { key, kind, color: colorKey, thumb: null }]);
     try {
       const url = URL.createObjectURL(await makeStandInBlob(sources(kind.base).thumb, STAND_IN_COLORS[colorKey].hex, 200));
@@ -79,13 +83,21 @@ export function QuickStart({ demoItems, onClose, onSaved }) {
     document.getElementById(`quick-colors-${kind?.part}`)?.scrollIntoView({ block: "nearest", behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   }, [openKind]);
 
+  // 提醒放在顏色列底下、不放底下那條:放那條會把它撐高,蓋住包第二排的顏色(2026-11-02 手機截圖)
+  useEffect(() => {
+    if (nudge) document.getElementById("quick-nudge")?.scrollIntoView({ block: "nearest", behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }, [nudge]);
+
   const count = (part) => picks.filter((pick) => pick.kind.part === part).length;
   const tops = count("upperbody"), bottoms = count("lowerbody");
   const missing = [!tops && "上衣", !bottoms && "下身"].filter(Boolean);
   const ready = !missing.length && !saving;
+  // 點開一類卻沒選顏色:那類不會放進去。本人 iPad 點了後背包、沒點顏色就按放進衣櫃,只存了 3 件也沒說(2026-11-02)
+  const openEmpty = STAND_INS.find((kind) => kind.key === openKind && kind.key !== touchedKey && !picks.some((pick) => pick.kind.key === kind.key));
 
   const save = async () => {
     if (!ready) return;
+    if (openEmpty) { setNudge((current) => ({ key: openEmpty.key, n: (current?.n || 0) + 1 })); return; }
     setError("");
     setSaving({ done: 0, total: picks.length });
     const stamp = Date.now();
@@ -125,7 +137,9 @@ export function QuickStart({ demoItems, onClose, onSaved }) {
     ? `做代表款… ${saving.done}/${saving.total}`
     : missing.length
       ? `還差${missing.map((part) => `${part} 1 件`).join("、")}就能配`
-      : `${picks.length} 件，可以配了`;
+      : openEmpty
+        ? `${picks.length} 件；${openEmpty.label}還沒選顏色`
+        : `${picks.length} 件，可以配了`;
 
   return createPortal(
     <div className="add-overlay quick-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && close()}>
@@ -152,7 +166,7 @@ export function QuickStart({ demoItems, onClose, onSaved }) {
                       className={openKind === kind.key ? "quick-kind is-open" : "quick-kind"}
                       aria-expanded={openKind === kind.key}
                       aria-controls={`quick-colors-${group.part}`}
-                      onClick={() => setOpenKind((current) => (current === kind.key ? null : kind.key))}
+                      onClick={() => { setNudge(null); setTouchedKey(null); setOpenKind((current) => (current === kind.key ? null : kind.key)); }}
                     >
                       <img src={sources(kind.base).thumb} alt="" loading="lazy" draggable={false} />
                       <span>{kind.label}</span>
@@ -175,6 +189,11 @@ export function QuickStart({ demoItems, onClose, onSaved }) {
                     );
                   })}
                 </div>
+              )}
+              {open && nudge?.key === open.key && (
+                <p id="quick-nudge" className="add-field-error quick-nudge" role="alert">
+                  {open.label}還沒選顏色，所以還沒放進去。點一個顏色；不要的話，再點一次「{open.label}」收起來。
+                </p>
               )}
             </section>
           );

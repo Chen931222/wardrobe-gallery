@@ -3728,6 +3728,7 @@ h1, h2, h3 {
   background: var(--ink); color: var(--paper); font-size: 12px; font-variant-numeric: tabular-nums;
 }
 .quick-colors { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; scroll-margin-bottom: 190px; }   /* 打開一類時捲到看得見,不被底下那條蓋住 */
+.add-panel .quick-nudge { margin: 12px 0 0; color: var(--danger); scroll-margin-bottom: 190px; }   /* 打開一類沒選顏色就按放進衣櫃:講在顏色列底下,同樣不被底下那條蓋住 */
 .quick-color {
   display: inline-flex; align-items: center; gap: 8px;
   min-height: 44px; padding: 0 14px 0 10px;
