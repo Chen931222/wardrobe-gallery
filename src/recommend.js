@@ -1180,6 +1180,32 @@ export function randomOutfit(items, weather = null) {
 }
 
 /**
+ * 只說「下雨」(沒講場合、色系、顏色、品類、冷熱、不要什麼):身上這套留著,只換怕雨的。
+ * 回 { release, stuck }:release = 要放開重挑的格子(人台的格子名),其他格子由呼叫端鎖住(身上沒穿的鎖成 null);
+ * stuck = 怕雨、但櫃裡同一類沒有不怕雨的,只好留著的格子(要照實講)。不是這種句子、或身上還沒有上衣和下身,回 null,照舊整套重挑。
+ * 只看上衣、襯衫、下身、外套、鞋、包:襪子跟著鞋留著,配件(皮帶、手錶)不因為雨換。
+ * rainOk 沒標的(訪客自己加的衣服)當成不怕雨,跟 recommendOutfit 一樣。
+ * 2026-11-03:以前整套重挑,正式站示範衣櫃打 10 次有 9 次連上衣、短褲、包都換了,理由卻只講鞋和外套
+ */
+export function rainOnlySlots(intent, worn, weather, items = []) {
+  if (!intent?.forceRainy || intent.formality || intent.palette || intent.warmthDelta || intent.exclude?.length) return null;
+  // 「下雨 想穿黑色」「下雨換件上衣」:還講了顏色或品類(palette 只認「全黑」「大地色」這類),不是只講雨
+  const raw = (intent.raw || "").toLowerCase();
+  if (detectColor(raw) || detectSlot(raw)) return null;
+  if (!(worn.upperbody || worn.shirt) || !worn.lowerbody) return null;
+  const release = [], stuck = [];
+  for (const slot of ["upperbody", "shirt", "lowerbody", "wholebody_up", "shoes", "bag"]) {
+    const item = worn[slot];
+    if (item?.rainOk !== false) continue;
+    const part = slot === "shirt" ? "upperbody" : slot;
+    (items.some((other) => other.part === part && other.rainOk !== false && other.id !== item.id) ? release : stuck).push(slot);
+  }
+  // 外套:身上沒有,而且這個體感下雨該加(跟 recommendOutfit 同一個 needOuter、降雨一樣拉到 80%)才放開那格
+  if (!worn.wholebody_up && needOuter(weather.feelsLike, Math.max(weather.rainProb ?? 0, 80))) release.push("wholebody_up");
+  return { release, stuck };
+}
+
+/**
  * @param {Array} items    整櫃衣物(需含 warmth/rainOk/color/part)
  * @param {Object} weather fetchWeather() 的結果
  * @param {Object} wearLog readWearLog() 的結果
@@ -1207,7 +1233,8 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
   const strict = isStrictPalette(intent?.palette);
   const fitsPalette = (item) => !inPalette || !item?.color || inPalette(item);
   const byPart = (part) => items.filter((item) => item.part === part && item.warmth !== undefined);
-  const pool = (part) => (locked[part] ? [locked[part]] : byPart(part));
+  // 鎖成 null = 這格空著、不要挑(只說「下雨」時身上沒有的那幾格,見 rainOnlySlots)
+  const pool = (part) => (locked[part] ? [locked[part]] : locked[part] === null ? [] : byPart(part));
   const tops = pool("upperbody"), bottoms = pool("lowerbody");
   // 講缺什麼,畫面上才知道下一步要加哪一件(審查 F36:舊版只說「不夠」)
   if (!tops.length || !bottoms.length) {
@@ -1252,6 +1279,7 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
   const wanted = intent?.boost ? thinOuters.filter((outer) => intent.boost.some((word) => itemText(outer).includes(word))) : [];
   if (!wantOuter && wanted.length) { useOpenLayer = true; outers = wanted; }
   if (locked.wholebody_up) { outers = [locked.wholebody_up]; useOpenLayer = false; }   // 鎖住的外套就是外套
+  else if (locked.wholebody_up === null) { outers = [null]; useOpenLayer = false; }
   const target = targetWarmth(weather.feelsLike);
 
   // 自己的選擇(taste.js):嫌過的組合每次都扣;喜歡的(穿過、收藏過)不是每次都加。
@@ -1350,7 +1378,7 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
 
   // 襪子:有就順手配一雙(挑最久沒穿的);穿拖鞋就免了
   if (locked.socks) outfit.socks = locked.socks;
-  else if (outfit.shoes?.tags?.includes("slides") !== true) {
+  else if (locked.socks !== null && outfit.shoes?.tags?.includes("slides") !== true) {
     const socks = byPart("socks").sort((a, b) => (wearLog[a.id] || "").localeCompare(wearLog[b.id] || ""));
     if (socks.length) outfit.socks = socks[0];
   }
@@ -1376,6 +1404,7 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
   const wornSoFar = [...chosen, outfit.shoes, outfit.bag].filter(Boolean);
   const pickAccessory = (part, keep = () => true, bonus = () => 0) => {
     if (locked[part]) return locked[part];
+    if (locked[part] === null) return null;
     let bestAcc = null;
     for (const acc of items) {
       if (acc.part !== part || acc.wishlist || !keep(acc)) continue;

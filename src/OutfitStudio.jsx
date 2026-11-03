@@ -3,7 +3,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useIndexIndicator } from "./useIndexIndicator.js";
 import { ArrowCounterClockwise, ArrowsClockwise, CalendarCheck, Export, FloppyDisk, ImageSquare, Lock, LockOpen, MagnifyingGlass, Microphone, Sparkle, Trash, X } from "@phosphor-icons/react";
 import { CitySelect, WeatherCredit } from "./CitySelect.jsx";
-import { adjustIntent, fetchWeather, findItemForSwap, parseRequest, randomOutfit, readWearLog, recommendOutfit, recordWear, unrecordWear } from "./recommend.js";
+import { adjustIntent, fetchWeather, findItemForSwap, parseRequest, rainOnlySlots, randomOutfit, readWearLog, recommendOutfit, recordWear, unrecordWear } from "./recommend.js";
 import { syncCode } from "./sync.js";
 import { track } from "./analytics.js";
 import { downloadBackupZip, importBackupFile } from "./backup.js";
@@ -187,6 +187,8 @@ function askedLabel(spec, fallback) {
    身上有穿的那類旁邊一個小點;縮圖放大、下面寫品名(上衣 45 件,好幾件灰 T 只看圖分不出來)。 */
 export function OutfitStudio({ items, initialOutfit = null, initialDaily = null, onOpenItem = null, closet = "all", itemMatches = null }) {
   const [wearing, setWearing] = useState(() => toStudio(initialOutfit));   // 帶一套進來時一開始就穿著,寫回時才不會先寫出空的
+  const wearingRef = useRef(wearing);   // 非同步的推薦(等天氣、語音)要讀「現在」身上的,見 runRecommend
+  wearingRef.current = wearing;
   const [looks, setLooks] = useState(readLooks);
   // 一開始就停在有衣服的第一格(不然先畫一格「這一類還沒有單品」再跳,2026-10-25 驗收);之後衣服變了由下面的 effect 補
   const [stripType, setStripType] = useState(() => (RACK_TABS.find((tab) => items.some((item) => tab.slots.includes(slotOf(item)))) || RACK_TABS[0]).id);
@@ -682,24 +684,50 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   //   useLocks    鎖住的槽位:把身上那件當固定,引擎圍著它配
   //   notes       要一起講給使用者聽的話(例如「已經最正式了」)
   const shownRef = useRef([]);   // 最近三次推薦各自的單品 id
-  const runRecommend = async (intent = null, pin = null, unknownRaw = null, useLocks = locks, notes = []) => {
+  const lastRainOnlyRef = useRef(false);   // 上一次推薦是不是「只說下雨、身上這套留著」
+  //   rainOnly    只說「下雨」:身上這套留著,只換怕雨的(rainOnlySlots 決定放開哪幾格)
+  const runRecommend = async (intent = null, pin = null, unknownRaw = null, useLocks = locks, notes = [], rainOnly = false) => {
     setDailyBusy(true);
     try {
       if (!weatherRef.current) weatherRef.current = await fetchWeather();
+      // 等天氣、語音辨識的這段時間可能自己換過衣服:用現在身上的,不用按下去那一刻的(保留身上這套時特別看得出來)
+      const wearing = wearingRef.current;
       const weather = weatherRef.current;
       const wearLog = readWearLog();
       const lockedStudio = {};
       for (const slot of Object.keys(useLocks)) if (wearing[slot]) lockedStudio[slot] = wearing[slot];
+      const userLocked = Object.keys(lockedStudio);
+      // 只說「下雨」:放開的格子以外全鎖住,身上沒穿的格子鎖成空的,引擎才不會順手加一條項鍊、一件敞開的球衣
+      const rain = rainOnly ? rainOnlySlots(intent, wearing, weather, items) : null;
+      const rainSlots = rain?.release || null;
+      if (rainSlots) for (const [slot, item] of Object.entries(wearing)) if (item && !rainSlots.includes(slot)) lockedStudio[slot] = item;
       const locked = toEngineLocks(lockedStudio);
+      if (rainSlots) {
+        for (const part of ["wholebody_up", "shoes", "socks", "bag", "eyewear", "wrist", "belt", "necklace", "ring", "accessories_up"]) {
+          if (!locked[part] && !rainSlots.includes(part)) locked[part] = null;
+        }
+      }
       // 最近三次推薦出現過的往後排:「再推薦一套」才不會換來換去還是那幾件
       const avoid = new Map();
       for (const ids of shownRef.current) for (const id of ids) avoid.set(id, (avoid.get(id) || 0) + 1);
       // 只用這個衣櫃的衣服配;不夠一套時引擎回「還差上衣 1 件就能配」(2026-10-26 起不再跟示範衣櫃借)
       const result = recommendOutfit(items, weather, wearLog, intent, locked, avoid, readTaste());
       if (result.error) { setDaily({ error: result.error }); return; }
-      noteRecommendation(result.outfit, result.recalled);
+      // 襪子跟著鞋留著;怕雨的鞋換成拖鞋時才脫
+      if (rainSlots && result.outfit.socks && result.outfit.shoes?.tags?.includes("slides") && result.outfit.shoes.id !== wearing.shoes?.id) {
+        result.reasons.push(`換成拖鞋,「${result.outfit.socks.name}」先脫掉`);
+        delete result.outfit.socks;
+      }
+      const after = toStudio(result.outfit);
+      if (lockedStudio.shirt && lockedStudio.upperbody) after.shirt = lockedStudio.shirt;
+      // 沒東西要換(再按一次「下雨」、身上本來就不怕雨):不記成一次推薦、不多存一步復原
+      const unchanged = Boolean(rainSlots) && [...new Set([...Object.keys(wearing), ...Object.keys(after)])]
+        .every((slot) => slot === "carry" || wearing[slot]?.id === after[slot]?.id);
+      if (!unchanged) {
+        noteRecommendation(result.outfit, result.recalled);
+        shownRef.current = [Object.values(result.outfit).filter(Boolean).map((item) => item.id), ...shownRef.current].slice(0, 3);
+      }
       track("用過推薦", { 來源: intent ? "指令" : "今日推薦" });   // 漏斗(2026-10-21)
-      shownRef.current = [Object.values(result.outfit).filter(Boolean).map((item) => item.id), ...shownRef.current].slice(0, 3);
       // 眼鏡、手錶、配件現在引擎也會挑(2026-10-06);這次沒挑到的那格,身上有就留著,別每次推薦都被脫掉。
       // 但這句話講了不要的那格(「不要戴眼鏡」)就不放回去
       const dropped = new Set((intent?.exclude || []).filter((ex) => ex.whole).map((ex) => ex.slot));
@@ -707,10 +735,31 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       if (notes.length) result.reasons.unshift(...notes);
       // 「不要短褲」碰到鎖住的短褲:引擎放掉那個鎖(result.unlocked),就不能再寫「鎖住沒動」
       const released = new Set(result.unlocked || []);
-      const lockedLabels = Object.keys(lockedStudio)
+      const lockedLabels = userLocked
         .filter((slot) => !dropped.has(slot) && !released.has(slot) && !(slot === "shirt" && released.has("upperbody")))
         .map((slot) => SLOT_LABEL[slot]);
       if (lockedLabels.length) result.reasons.push(`鎖住沒動:${lockedLabels.join("、")}`);
+      if (rainSlots) {
+        // 鞋和包怕雨被換掉,引擎自己會講(「帆布、真皮的鞋先收著」);上衣、褲子、外套怕雨(針織、真皮、燈芯絨)要另外講
+        for (const slot of ["upperbody", "shirt", "lowerbody", "wholebody_up"]) {
+          const before = wearing[slot];
+          if (!before || !rainSlots.includes(slot) || after[slot]?.id === before.id) continue;
+          // 怕雨的襯衫換成 T 恤會換到上衣格(反過來也是):那一格本來空著的話,算是換成它
+          const swapIn = after[slot] || (slot === "shirt" && !wearing.upperbody ? after.upperbody : slot === "upperbody" && !wearing.shirt ? after.shirt : null);
+          result.reasons.push(swapIn ? `「${before.name}」怕雨,換成「${swapIn.name}」` : `「${before.name}」怕雨,先脫掉`);
+        }
+        for (const slot of rain.stuck) {
+          if (!userLocked.includes(slot)) result.reasons.push(`「${wearing[slot].name}」怕雨,不過櫃裡沒有不怕雨的${SLOT_LABEL[slot]},先穿著`);
+        }
+        const keptSlots = ["upperbody", "shirt", "wholebody_up", "lowerbody", "shoes", "bag"]
+          .filter((slot) => wearing[slot] && !rainSlots.includes(slot) && !rain.stuck.includes(slot) && !userLocked.includes(slot));
+        // 自己加的衣服沒標怕不怕雨(rainOk),引擎當成不怕:不能說成「沒有怕雨的」
+        const unmarked = keptSlots.some((slot) => wearing[slot].rainOk === undefined);
+        if (keptSlots.length && !unchanged) result.reasons.push(`其他幾件留著沒換:${keptSlots.map((slot) => SLOT_LABEL[slot]).join("、")}`);
+        else if (unchanged) {
+          result.reasons.push(unmarked ? "沒認出怕雨的,留著沒換;自己加的衣服還分不出怕不怕雨" : rain.stuck.length ? "其他幾件不怕雨,留著沒換" : "身上這套沒有怕雨的,留著沒換");
+        }
+      }
       if (unknownRaw) {
         result.reasons.push(`「${unknownRaw}」我還沒學過,這套是純照天氣挑的;想更準可以說場合(約會、上班、看球賽)、色系(全黑、大地色)或「換成白色襯衫」`);
       }
@@ -725,8 +774,9 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
         }
       }
       lastIntentRef.current = intent;
+      lastRainOnlyRef.current = Boolean(rainSlots);
       setAdjusting(null);
-      pushHistory(wearing); dirtyRef.current = true;
+      if (!unchanged) { pushHistory(wearing); dirtyRef.current = true; }
       // 引擎照部位排 → 換成人台的格子;上衣、襯衫都鎖著的話,引擎只管上衣,鎖住的襯衫放回去
       const studioOutfit = toStudio(result.outfit);
       if (lockedStudio.shirt && lockedStudio.upperbody) studioOutfit.shirt = lockedStudio.shirt;
@@ -748,9 +798,10 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   const recommendAgain = () => runRecommend(lastIntentRef.current);   // 「再推薦一套」要記得上次的場合,不能弄丟
   // 換城市:天氣快取作廢;畫面上正顯示「照天氣配的」那套,就照新城市的天氣重配(不然天氣和衣服對不上)
   const cityChangeRef = useRef(null);
+  // 剛剛只說「下雨」(身上這套留著,lastRainOnlyRef):換城市也只照新天氣補外套、換怕雨的,不整套重抽;「再推薦一套」照舊整套換
   cityChangeRef.current = () => {
     weatherRef.current = null;
-    if (daily?.weather && !dailyBusy) recommendAgain();
+    if (daily?.weather && !dailyBusy) runRecommend(lastIntentRef.current, null, null, locks, [], lastRainOnlyRef.current);
   };
   useEffect(() => {
     const onCity = () => cityChangeRef.current();
@@ -849,7 +900,8 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     }
 
     // 照場合挑整套:沒用上的字、還聽到但沒照的場合(req.notes)放在理由最前面,一眼看到它聽懂了多少
-    if (req.kind === "outfit") { runRecommend(req.intent, req.pin || null, null, locks, req.notes || []); return; }
+    // 只說「下雨」:不整套重挑,只換怕雨的(runRecommend 的 rainOnly)
+    if (req.kind === "outfit") { runRecommend(req.intent, req.pin || null, null, locks, req.notes || [], !req.pin); return; }
 
     if (req.kind === "swap") {
       const vague = !req.color && !req.category && !(req.descriptors || []).length && !req.byText;   // 「換一件上衣」→ 要跟身上那件不一樣
