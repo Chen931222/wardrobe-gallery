@@ -3375,6 +3375,10 @@ h1, h2, h3 {
 /* 格子上的「夢想」:實心,跟空心的「想買」一眼分得開 */
 .wish-badge.is-dream { color: var(--paper); background: var(--accent); }
 /* 備註:跟其他欄位同一套方框,佔滿一整列 */
+/* 怕雨嗎(2026-11-03):三顆跟「顏色抓錯了」同一款(.quick-color),點了亮框 */
+.rain-field { grid-column: 1 / -1; }   /* 半欄放不下三顆,會折成兩行 */
+.rain-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.rain-field small { display: block; margin-top: 6px; font-size: 11.5px; line-height: 1.6; color: var(--muted); }
 .note-field { grid-column: 1 / -1; }
 .note-field textarea {
   width: 100%;

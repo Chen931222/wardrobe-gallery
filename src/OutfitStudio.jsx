@@ -753,11 +753,11 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
         }
         const keptSlots = ["upperbody", "shirt", "wholebody_up", "lowerbody", "shoes", "bag"]
           .filter((slot) => wearing[slot] && !rainSlots.includes(slot) && !rain.stuck.includes(slot) && !userLocked.includes(slot));
-        // 自己加的衣服沒標怕不怕雨(rainOk),引擎當成不怕:不能說成「沒有怕雨的」
-        const unmarked = keptSlots.some((slot) => wearing[slot].rainOk === undefined);
+        // 自己加的衣服沒標怕不怕雨(rainOk 沒有或 null),引擎當成不怕:不能說成「沒有怕雨的」,要講去哪裡標(單品頁「怕雨嗎」,2026-11-03 起)
+        const unmarked = keptSlots.some((slot) => wearing[slot].rainOk == null);
         if (keptSlots.length && !unchanged) result.reasons.push(`其他幾件留著沒換:${keptSlots.map((slot) => SLOT_LABEL[slot]).join("、")}`);
         else if (unchanged) {
-          result.reasons.push(unmarked ? "沒認出怕雨的,留著沒換;自己加的衣服還分不出怕不怕雨" : rain.stuck.length ? "其他幾件不怕雨,留著沒換" : "身上這套沒有怕雨的,留著沒換");
+          result.reasons.push(unmarked ? "沒認出怕雨的,留著沒換;自己加的衣服還分不出怕不怕雨,到衣櫃點開那件、在「怕雨嗎」標了才會換" : rain.stuck.length ? "其他幾件不怕雨,留著沒換" : "身上這套沒有怕雨的,留著沒換");
         }
       }
       if (unknownRaw) {

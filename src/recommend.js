@@ -1184,7 +1184,7 @@ export function randomOutfit(items, weather = null) {
  * 回 { release, stuck }:release = 要放開重挑的格子(人台的格子名),其他格子由呼叫端鎖住(身上沒穿的鎖成 null);
  * stuck = 怕雨、但櫃裡同一類沒有不怕雨的,只好留著的格子(要照實講)。不是這種句子、或身上還沒有上衣和下身,回 null,照舊整套重挑。
  * 只看上衣、襯衫、下身、外套、鞋、包:襪子跟著鞋留著,配件(皮帶、手錶)不因為雨換。
- * rainOk 沒標的(訪客自己加的衣服)當成不怕雨,跟 recommendOutfit 一樣。
+ * rainOk 沒標的(訪客自己加的衣服,單品頁「怕雨嗎」選了才有)當成不怕雨,跟 recommendOutfit 一樣。
  * 2026-11-03:以前整套重挑,正式站示範衣櫃打 10 次有 9 次連上衣、短褲、包都換了,理由卻只講鞋和外套
  */
 export function rainOnlySlots(intent, worn, weather, items = []) {

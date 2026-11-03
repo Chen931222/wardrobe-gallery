@@ -201,7 +201,12 @@ function readEdits() {
 // quantity(2026-10-06 本人要的:同一款買了兩件,不想佔兩格):數量,沒寫就是 1
 // brand(2026-10-07):品牌,沒寫就看品名、標籤、網址猜(brands.js);存成空白 = 刻意不寫
 // note(2026-10-08 本人要的備註欄):自己寫給自己看的,公開的單品頁不顯示。跟其他欄位一樣逐欄記、逐欄同步
-const EDIT_FIELDS = ["name", "part", "color", "secondaryColor", "tags", "price", "priceCurrency", "quantity", "brand", "note"];
+// rainOk(2026-11-03):怕不怕雨,只說「下雨」時 recommend.js 只換 rainOk === false 的。站主的 104 件是離線批次標的;
+// 自己加的衣服沒有這個欄位,在單品頁三選一(不知道／怕雨／不怕雨)。「不知道」= null,跟原本一樣就不記,存出來沒有這個欄位
+const EDIT_FIELDS = ["name", "part", "color", "secondaryColor", "tags", "price", "priceCurrency", "quantity", "brand", "note", "rainOk"];
+// 只有這幾類問怕不怕雨:襪子跟著鞋留著,配件不因為雨換(rainOnlySlots 也只看這幾格)
+const RAIN_PARTS = new Set(["upperbody", "lowerbody", "wholebody_up", "shoes", "bag"]);
+const rainOf = (value) => (typeof value === "boolean" ? value : null);
 const qtyOf = (value) => Math.min(99, Math.max(1, Math.floor(Number(value)) || 1));
 const editValue = (item, field) => {
   const value = item?.[field];
@@ -209,6 +214,7 @@ const editValue = (item, field) => {
   if (field === "name") return value || "";
   if (field === "note") return String(value || "").trim();
   if (field === "quantity") return qtyOf(value);
+  if (field === "rainOk") return rainOf(value);
   return value ?? null;
 };
 
@@ -663,6 +669,23 @@ function ItemEditor({ draft, setDraft, onPickColor = null, colorStatus = "", can
         </select>
       </label>
 
+      {/* 怕雨嗎(2026-11-03):自己加的衣服沒標,只說「下雨」時不會換掉它們。不照形狀猜(帆布鞋和慢跑鞋形狀一樣,猜錯比不標更糟),
+          自己點。換到襪子、配件這些分類就收起來,值留著不動 */}
+      {RAIN_PARTS.has(draft.part) && (
+        <div className="field rain-field">
+          <span id="rain-label">怕雨嗎</span>
+          <div className="rain-row" role="group" aria-labelledby="rain-label">
+            {[[null, "不知道"], [false, "怕雨"], [true, "不怕雨"]].map(([value, label]) => (
+              <button key={label} type="button" className="quick-color" aria-pressed={rainOf(draft.rainOk) === value} onClick={() => setDraft((current) => ({ ...current, rainOk: value }))}>
+                {label}
+                {rainOf(draft.rainOk) === value && <Check size={14} weight="bold" aria-hidden="true" />}
+              </button>
+            ))}
+          </div>
+          <small>搭配頁只打「下雨」時,標「怕雨」的會先被換掉;「不知道」和「不怕雨」都留著。不幫你猜:帆布鞋和慢跑鞋長得一樣。</small>
+        </div>
+      )}
+
       {/* 數量(2026-10-06):同一款有好幾件,一格寫 ×2 就好;櫃裡有很像的另一張,可以直接併進來 */}
       <div className="field qty-field">
         <span id="qty-label">數量</span>
@@ -940,7 +963,7 @@ function WishCheck({ item, owned, onOpen, onWearOutfit, loose = false }) {
   );
 }
 
-const DRAFT_FIELDS = ["name", "part", "color", "secondaryColor", "tags", "price", "priceCurrency", "quantity", "brand", "note"];
+const DRAFT_FIELDS = ["name", "part", "color", "secondaryColor", "tags", "price", "priceCurrency", "quantity", "brand", "note", "rainOk"];
 
 function draftOf(item) {
   return {
@@ -949,6 +972,7 @@ function draftOf(item) {
     quantity: qtyOf(item.quantity),
     brand: brandOf(item) || "",
     note: item.note || "",
+    rainOk: rainOf(item.rainOk),
   };
 }
 
@@ -1007,6 +1031,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
       quantity: qtyOf(draft.quantity),
       brand: canonicalBrand(draft.brand) || "",
       note: (draft.note || "").trim(),
+      rainOk: rainOf(draft.rainOk),
     }) !== JSON.stringify({
       name: (item.name || "").trim(),
       part: item.part,
@@ -1018,6 +1043,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
       quantity: qtyOf(item.quantity),
       brand: brandOf(item) || "",
       note: (item.note || "").trim(),
+      rainOk: rainOf(item.rainOk),
     });
   }, [draft, item]);
 
@@ -1096,7 +1122,7 @@ function ItemViewer({ item, gone = false, owned, onClose, onSave, onDelete, onWe
     onSave({
       ...item, ...draft, name: draft.name.trim(), tags: draft.tags.map((tag) => tag.trim()).filter(Boolean),
       price, priceCurrency: price ? draft.priceCurrency || "TWD" : null, quantity: qtyOf(draft.quantity), brand,
-      note: (draft.note || "").trim(),
+      note: (draft.note || "").trim(), rainOk: rainOf(draft.rainOk),
     });
     // 存完就關掉,回到原本那一格(2026-10-06 本人要的;舊版存完停在原地,只在表單裡寫一行「已儲存」)
     onClose();

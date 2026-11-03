@@ -25,6 +25,7 @@ const FIELDS = {
   quantity: asNumber,
   brand: orNull(asText),
   note: orNull(asText),
+  rainOk: orNull((value) => (typeof value === "boolean" ? value : undefined)),   // 怕不怕雨:只收 true/false;null = 單品頁選回「不知道」
   sourceUrl: (value) => (typeof value === "string" && /^https?:\/\//i.test(value) ? value : null),   // 會放進 <a href>:只收 http(s),跟 cleanUrl 一樣
   warmth: asNumber,
   trashedAt: orNull(asText),
