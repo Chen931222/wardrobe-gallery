@@ -4,7 +4,7 @@ import { Sparkle, X } from "@phosphor-icons/react";
 import { fetchWeather, readWearLog, recommendOutfit } from "./recommend.js";
 import { CitySelect, useCity, WeatherCredit } from "./CitySelect.jsx";
 import { readTaste } from "./taste.js";
-import { Logo } from "./Brand.jsx";
+import { LogoHome } from "./Brand.jsx";
 
 // 入口導覽頁 v2(2026-07-21 依使用者回饋改版):
 //   - 拿掉滾輪/拖曳/自轉 —— 沒有 rAF 迴圈,平常是純靜態排版,零效能負擔
@@ -74,8 +74,9 @@ const ROW_MAX = 3;
  * @param onAdd        推薦不了(缺上衣或下身)時給一顆「去新增」;沒給就不顯示
  * @param syncAlert    同步有狀況(停掉、上次失敗):「同步」旁亮一個點
  */
-/** @param feedback 回報鈕(App 給,站主模式是 null):放在左上標誌右邊那一欄 */
-export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = null, onAdd = null, syncAlert = false, onUpdates = null, updatesUnseen = false, title = "我的衣櫃", note = null, feedback = null }) {
+/** @param feedback 回報鈕(App 給,站主模式是 null):放在左上標誌右邊那一欄
+ *  @param onHome   點左上標誌或標題:回最開始的入口;沒給(?public)兩個都只是字 */
+export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = null, onAdd = null, syncAlert = false, onUpdates = null, updatesUnseen = false, title = "我的衣櫃", note = null, feedback = null, onHome = null }) {
   // 手機(<640)重排:少放幾件圓環卡才夠大可點,今日推薦從環心移到環下方長條,不再壓卡片
   const [phone, setPhone] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches);
   useEffect(() => {
@@ -430,9 +431,9 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
         {/* 左上(2026-10-23 本人「這一頁左上角也要一樣的改動」,跟衣櫃、搭配頁一樣):標誌,右邊一欄是標題、說明、回報鈕。
             桌機回報鈕排在「建立我的衣櫃」右邊(不另起一行,頂列高度跟改之前一樣);手機標誌和回報自己一行(見 styles.css) */}
         <div className="landing-brand">
-          <Logo className="landing-logo" />
+          <LogoHome className="landing-logo" onClick={onHome} />
           <div className="landing-title">
-            <h1>{title}</h1>
+            <h1>{onHome ? <button type="button" className="landing-home" onClick={onHome}>{title}</button> : title}</h1>
             {note && <p className="landing-note">{note}</p>}
             {feedback && <p className="landing-feedback">{feedback}</p>}
           </div>

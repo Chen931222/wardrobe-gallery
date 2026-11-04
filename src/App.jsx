@@ -14,7 +14,7 @@ import { hasLocalChanges, lastSyncError, noteDeliberateDelete, scheduleSync, syn
 import { findSameStyle, findSimilar, fitOf, guessWarmth, kindLabel, wishOutfits } from "./wishCheck.js";
 import { colorLabel, colorName, colorRole, colorScore, fetchWeather, isNeutral, readWearLog, recommendOutfit } from "./recommend.js";
 import { Feedback } from "./Feedback.jsx";
-import { Logo } from "./Brand.jsx";
+import { LogoHome } from "./Brand.jsx";
 import { track } from "./analytics.js";
 import { useDialog } from "./useDialog.js";
 import { ScrollRail } from "./ScrollRail.jsx";
@@ -1628,7 +1628,8 @@ export function App() {
   }, []);
 
   // 訪客自己的衣櫃還空著、人在入口:歡迎畫面。這時把件數和衣櫃切換收起來(都是 0,示範從歡迎畫面的按鈕進去)
-  const showWelcome = !error && !loading && !ownedItems.length && !unownedCount && view === "landing" && closet === "mine";
+  // view === "welcome":點標誌回來的,衣櫃有衣服也顯示(goEntrance)
+  const showWelcome = !error && !loading && (view === "welcome" || (!ownedItems.length && !unownedCount && view === "landing" && closet === "mine"));
   // 復原頁:這台的衣服有讀到(讀失敗時是空的,不算被清掉)、垃圾桶也是空的(被清掉時垃圾桶一起沒了;有東西就給歡迎畫面的垃圾桶入口)
   const showWiped = showWelcome && Boolean(wiped) && !trashCount && localReadOk.current;
   // 「衣櫃被清掉了」記一次:帶上次有幾件、備份過沒,看得出這個缺口有多少人踩到、提醒有沒有用(2026-10-29 本人要的數字)
@@ -1672,6 +1673,14 @@ export function App() {
   const requestAdd = () => {
     setView("closet");
     setAddRequest((count) => count + 1);
+  };
+
+  // 回最開始的入口(2026-11-04 本人「就算我裡面已經有一件衣服」):有衣服時入口是衣服環,歡迎畫面只有空衣櫃進得去,所以多一個 view。
+  // 不記在網址,重新整理回衣服環。切回自己的衣櫃:歡迎畫面是「我的衣櫃」的入口,從示範衣櫃點過來也一樣
+  const goEntrance = () => {
+    chooseCloset("mine");
+    setView("welcome");
+    window.scrollTo({ top: 0 });
   };
 
   const chooseType = (typeId) => {
@@ -2031,6 +2040,7 @@ export function App() {
             updatesUnseen={updatesUnseen}
             onOpen={setSelectedId}
             onEnter={setView}
+            onHome={CAN_ADD ? goEntrance : null}
             onAdd={CAN_ADD ? requestAdd : null}
             onWearOutfit={(outfit, daily) => { wearOutfit(outfit, daily); setView("styling"); }}
             feedback={!CAN_EDIT ? <Feedback where="入口" className="in-brand" /> : null}
@@ -2070,7 +2080,7 @@ export function App() {
                 <div className="masthead-ear is-left">
                   <p className="piece-count" hidden={view === "closet"}>{ownedItems.length} 件單品{wishCount > 0 && <span className="piece-count-wish"> · 想買 {wishCount}</span>}</p>
                 </div>
-                <Logo className="header-logo" />
+                <LogoHome className="header-logo" onClick={CAN_ADD ? goEntrance : null} />
                 <div className="masthead-ear is-right">
                   {!CAN_EDIT && <Feedback where={view === "closet" ? "衣櫃" : view === "styling" ? "搭配" : "入口"} className="in-brand" label="卡住了？告訴我" />}
                 </div>
@@ -2166,7 +2176,7 @@ export function App() {
             </p>
           );
         })()}
-        {CAN_EDIT && ownerLocked && view !== "landing" && (
+        {CAN_EDIT && ownerLocked && view !== "landing" && !showWelcome && (
           <p className="keep-hint" role="note">
             你的衣櫃要用同步碼打開:這台還沒輸入同步碼(或碼已經換新的),現在看到的是示範衣櫃。
             <span className="keep-hint-actions">
@@ -2203,12 +2213,13 @@ export function App() {
           <Welcome
             demoItems={demoItems}
             onAdd={requestAdd}
+            onBack={ownedItems.length || unownedCount ? () => { setView("landing"); window.scrollTo({ top: 0 }); } : null}
             onQuickStart={() => setQuickOpen(true)}
             // 帶著入口配好的那套直接進搭配頁(2026-10-24);那套還沒配好就照舊停在入口。
             // 不走 wearOutfit:它記「身上這套」用的是切換前的衣櫃(mine),這裡要記在 demo
             onDemo={(demo) => {
               chooseCloset("demo");
-              if (!demo) return;
+              if (!demo) { setView("landing"); return; }   // 點標誌回來的(view 是 welcome):不換頁就停在原地,看起來像沒按到
               rememberWearing(demo.outfit, "demo");
               setPendingOutfit(demo.outfit);
               setPendingDaily(demo.daily);

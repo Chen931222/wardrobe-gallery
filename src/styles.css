@@ -2491,6 +2491,7 @@ h1, h2, h3 {
   }
   .landing-brand, .landing-title { display: contents; }
   .landing-top .landing-logo { grid-area: logo; width: 130px; }   /* 橫的標誌 130 寬只有 27 高(舊的直式 40 寬、48 高):這頁的主角是圓環,頂列每多 1px 圓環就縮 */
+  .landing-top .logo-home { grid-area: logo; justify-self: start; }   /* 標誌包在按鈕裡時,放進格子的是按鈕;靠左,不把同一列右邊的回報蓋掉 */
   .landing-feedback { grid-row: 1; grid-column: 2; justify-self: end; align-self: end; margin: 0; }
   .landing-top h1 { grid-area: title; }
   .landing-top nav { grid-area: nav; }
@@ -3049,6 +3050,13 @@ h1, h2, h3 {
 @media (forced-colors: active) {
   .logo { forced-color-adjust: none; background: CanvasText; }
 }
+/* 左上標誌和入口的「我的衣櫃」點了回最開始的入口(2026-11-04):長得跟原本一樣,滑過才看得出能點。
+   手機上兩個都只有 26px 高:padding 撐大點擊範圍,負的 margin 抵掉,版面一格不動 */
+.logo-home, .landing-home { padding: 6px; margin: -6px; border: 0; background: none; color: inherit; letter-spacing: inherit; cursor: pointer; }
+.logo-home { display: block; flex: none; transition: opacity .15s; }
+.logo-home:hover { opacity: .6; }
+.landing-home { text-underline-offset: 4px; }
+.landing-home:hover { text-decoration: underline; }
 .welcome .welcome-logo { width: 300px; margin: 0 0 clamp(28px, 5vh, 48px); justify-self: start; }   /* 2026-10-30 本人「logo 放大」:260→300;桌機留在左欄跟標題對齊 */
 
 /* 大字標題:中文用 Noto Serif TC(Cormorant 沒有中文),一個逗號一行;中文不收字距,反而放一點 */

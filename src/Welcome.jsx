@@ -140,8 +140,9 @@ function StoryLoop({ name, label }) {
  *   onDemo(demo):demo = { outfit, daily } 是這頁配好的那套(天氣是假的時 daily 為 null);還沒配好時是 null
  */
 /** @param trashCount 垃圾桶裡有幾件(刪光了回到這裡,還要找得到);onOpenTrash 打開垃圾桶
- *  @param onQuickStart 不拍照、點代表款起步(src/QuickStart.jsx,2026-10-29) */
-export function Welcome({ demoItems, onAdd, onDemo, onImportFile, trashCount = 0, onOpenTrash = null, onUpdates = null, onQuickStart = null }) {
+ *  @param onQuickStart 不拍照、點代表款起步(src/QuickStart.jsx,2026-10-29)
+ *  @param onBack 衣櫃有東西(含只有想買的)、點標誌回到這頁時才有(2026-11-04):第一顆按鈕換成「回我的衣櫃」,這時「加入第一件」不是真話,也要有路回去 */
+export function Welcome({ demoItems, onAdd, onBack = null, onDemo, onImportFile, trashCount = 0, onOpenTrash = null, onUpdates = null, onQuickStart = null }) {
   const fileRef = useRef(null);
   const [weather, setWeather] = useState(null);
   const city = useCity();
@@ -261,7 +262,7 @@ export function Welcome({ demoItems, onAdd, onDemo, onImportFile, trashCount = 0
           </p>
         )}
         <div className="welcome-actions">
-          <button type="button" className="primary-button" onClick={onAdd}>加入第一件衣服</button>
+          <button type="button" className="primary-button" onClick={onBack || onAdd}>{onBack ? "回我的衣櫃" : "加入第一件衣服"}</button>
           {/* 2026-10-24(試用者:「打一句話就能改」藏太深):直接帶這頁那套進搭配,不再先停在衣服環繞的入口 */}
           {!!demoItems.length && <button type="button" className="secondary-button" onClick={() => (look ? onDemo(demoPayload()) : setDemoWanted(true))} disabled={demoWanted} aria-busy={demoWanted}>看看穿搭示範</button>}
         </div>

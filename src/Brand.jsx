@@ -8,3 +8,14 @@
 export function Logo({ className = "" }) {
   return <span className={`logo ${className}`.trim()} role="img" aria-label="PairThis 搭這件" />;
 }
+
+/** 點了回最開始入口的標誌(2026-11-04)。按鈕包在外面:標誌是遮罩,按鈕本身當標誌的話鍵盤的外框線會被遮掉。
+ *  onClick 沒給就只是標誌(?public 不能新增,沒有入口可回) */
+export function LogoHome({ className = "", onClick = null }) {
+  if (!onClick) return <Logo className={className} />;
+  return (
+    <button type="button" className="logo-home" onClick={onClick} aria-label="PairThis 搭這件,回到入口">
+      <Logo className={className} />
+    </button>
+  );
+}
