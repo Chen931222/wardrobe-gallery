@@ -10,6 +10,7 @@
  * 在 Worker 裡算(2026-10-07 本人回報「在等待去背時不能寫入細節」:主執行緒算的那幾秒整頁凍住,欄位打不了字);
  * 舊 Safari 開不了 module Worker、或 Worker 裡沒有 OffscreenCanvas、載不了 MediaPipe 的,照舊在主執行緒算。 */
 import { MODEL_BYTES, WASM_BYTES } from "./cutoutAssets.js";
+import { inAppBrowser } from "./keepSafe.js";
 
 const MODEL_READY_KEY = "open-wardrobe-bgmodel-v2";   // v2(2026-10-27):換了模型,舊的「下載過」不算數
 export const modelReady = () => { try { return localStorage.getItem(MODEL_READY_KEY) === "1"; } catch { return false; } };
@@ -126,10 +127,11 @@ export function abandonCutout() {
   for (const job of waiting) job.reject(new Error("去背模型下載停住,這次停掉了"));
 }
 
-/** 這台會不會先載(省流量、2G 不先載)。新增視窗的提示照這個講「打開就開始下載」還是「去背時才下載」 */
+/** 這台會不會先載(省流量、2G 不先載)。新增視窗的提示照這個講「打開就開始下載」還是「去背時才下載」。
+ *  內建瀏覽器也不先載(2026-11-04):新增視窗最上面才勸人換瀏覽器,換過去模型要重下載一次 */
 export function preloadsEarly() {
   const connection = typeof navigator !== "undefined" ? navigator.connection : null;
-  return !(connection?.saveData || /2g/.test(connection?.effectiveType || ""));
+  return !(connection?.saveData || /2g/.test(connection?.effectiveType || "") || inAppBrowser());
 }
 
 /** 一打開新增視窗就在背景先載模型(2026-10-05 本人要的:選照片、框衣服的這段時間就載完了)。省流量、2G 不先載 */

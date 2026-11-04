@@ -179,10 +179,8 @@ export function Welcome({ demoItems, onAdd, onBack = null, onDemo, onImportFile,
   // 所以要在還沒加衣服的這個時候講,加完才搬就看不到了
   const ios = isIos();
   const standalone = isStandalone();
-  // 從 LINE／IG 點連結進來的:其實開在那個 app 自己的瀏覽器裡,在這裡加的衣服 Safari 看不到。一樣要在加之前講
+  // 從 LINE／IG／Threads 點連結進來的:主畫面那句用不上,在這裡加的衣服 Safari 看不到的提醒在新增視窗(src/InAppTip.jsx)
   const app = inAppBrowser();
-  const here = typeof window === "undefined" ? "" : window.location.origin;
-  const [copied, setCopied] = useState("");
   // 捲到才出現:一列進到畫面就加 is-in(只加一次)。沒有 IntersectionObserver 就全部直接顯示
   const storyRef = useRef(null);
   const [reveal, setReveal] = useState(false);
@@ -218,22 +216,16 @@ export function Welcome({ demoItems, onAdd, onBack = null, onDemo, onImportFile,
       <div className="mini-look"><Silhouette /></div>
     </figure>
   ) : null;
-  // 手機:示範在按鈕前面;桌機示範在右欄,DOM 放按鈕後面。DOM 跟著畫面換,不只靠 grid 搬:Tab 和讀屏的順序要跟眼睛看的一樣(驗收)。
-  // LINE／IG 裡開的不管寬窄都是按鈕那塊先:「用瀏覽器開啟」要先看到
-  const narrow = useMedia("(max-width: 760px)");
-  const demoFirst = narrow && !app;
-  const copyLink = async () => {
-    try { await navigator.clipboard.writeText(here); setCopied("已複製，到 Safari 或 Chrome 貼上"); }
-    catch { setCopied(`複製不了，手動輸入：${here.replace(/^https?:\/\//, "")}`); }
-  };
+  // 手機:示範在按鈕前面;桌機示範在右欄,DOM 放按鈕後面。DOM 跟著畫面換,不只靠 grid 搬:Tab 和讀屏的順序要跟眼睛看的一樣(驗收)
+  const demoFirst = useMedia("(max-width: 760px)");
 
   return (
-    <section className={app ? "welcome is-inapp" : "welcome"} aria-labelledby="welcome-title">
+    <section className="welcome" aria-labelledby="welcome-title">
       {/* 站名(2026-10-23 本人定):PairThis,中文「搭這件」;網址 pairthis.app、帳號 @pairthis.app 同名。
           同日本人「入口有點醜、沒有商標」:頂端放標誌(src/Brand.jsx,本人選的 design.com 那張),原本的第一段升成大字標題,
           示範穿搭放大。排版用 grid:桌機示範穿搭在右欄;手機(2026-10-24 本人「看起來只是文字排版」)依序是
           標題、示範那套(一條米紙帶)、按鈕:講它做什麼 → 真的配一套給你看 → 開始。三樣在 393×700(iPhone Safari)和 375×548(SE)都在第一屏。
-          從 LINE／IG 開的(is-inapp)例外,按鈕那塊排回示範前面:要先看到「用瀏覽器開啟」,不然衣服加在 LINE 裡。
+          2026-11-04 從 LINE／IG／Threads 開的不再例外(以前按鈕和「用瀏覽器開啟」排在示範前面):貼文點進來的人全都是這種,提醒搬到新增視窗。
           標點改全形:半形逗號夾在中文裡會擠在一起,大字更明顯(站上其他頁還是半形,還沒改) */}
       <Logo className="welcome-logo" />
       {/* 入口的字(2026-10-22 本人「寫的太 AI」):不做條列、不做「兩個字加粗當標題」,就幾段講話,長短不齊。每句都是實測過的事,限制照講。
@@ -249,18 +241,6 @@ export function Welcome({ demoItems, onAdd, onBack = null, onDemo, onImportFile,
           2026-10-24 本人「下面已經有介紹了,上面是不是就不需要」拿掉。意思都在下面:貼連結是 01 章標題,
           拍平放的在 01 章內文(一字不差)。「不用拍」三個字這頁沒有了,在新增那頁的第一句;加完第一件時 App 會講還差什麼才配得成一套(firstLook 那條理由) */}
       <div className="welcome-start">
-        {app && (
-          <p className="welcome-tip is-warning" role="note">
-            你現在是在 {app} 裡面開的。在這裡加的衣服只存在 {app} 裡，之後用 Safari 或 Chrome 打開會是空的。
-            先從 {app} 的選單選「用瀏覽器開啟」，再開始加。
-            <span className="welcome-tip-actions">
-              {/* LINE 認這個參數:帶著它的連結會改用手機的預設瀏覽器開 */}
-              {app === "LINE" && <a href={`${here}/?openExternalBrowser=1`}>用瀏覽器開啟</a>}
-              <button type="button" onClick={copyLink}>複製網址</button>
-            </span>
-            {copied && <span className="welcome-tip-status" role="status">{copied}</span>}
-          </p>
-        )}
         <div className="welcome-actions">
           <button type="button" className="primary-button" onClick={onBack || onAdd}>{onBack ? "回我的衣櫃" : "加入第一件衣服"}</button>
           {/* 2026-10-24(試用者:「打一句話就能改」藏太深):直接帶這頁那套進搭配,不再先停在衣服環繞的入口 */}

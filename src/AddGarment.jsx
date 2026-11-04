@@ -15,6 +15,7 @@ import { brandInUrl, brandOf, brandSuggestions, canonicalBrand } from "./brands.
 import { track } from "./analytics.js";
 import { autoNamedKind } from "./standIns.js";
 import { BATCH_MAX, BatchAdd } from "./BatchAdd.jsx";
+import { InAppTip } from "./InAppTip.jsx";
 
 // 分類清單在 src/parts.js(新增的選單照組排:衣服、鞋襪、配件、小物)
 
@@ -874,6 +875,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
           >
             {closeButton()}
             <p className="add-step">{replacing ? `換一張圖:${replacing.name || "這件"}` : "新增一件"}</p>
+            {!replacing && <InAppTip />}
             {/* 代表款換圖會重抓顏色(App.jsx replaceImage):舊版這裡照樣寫「顏色都不會變」,跟下一步的提示打架(2026-10-29 驗收) */}
             {replacing && <small className="add-hint">{replacing.standIn
               ? "選一張照片或貼商品連結,框出衣服、去背之後換上。換上之後就不是代表款了,顏色照新圖重抓。"
@@ -1162,6 +1164,8 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
                   )}
             </div>
 
+            {/* 比一下本身不存,底下這兩顆才存:提醒放在這裡,不擋只想比的人 */}
+            <InAppTip />
             <div className="add-actions add-store-actions">
               <button type="button" className="secondary-button" onClick={reset}>不用了</button>
               <button type="button" className="primary-button" onClick={() => save({ wishlist: true, dream: false, name: storeName(draft) })} disabled={!draft.part || !draft.blob}>放進想買的</button>

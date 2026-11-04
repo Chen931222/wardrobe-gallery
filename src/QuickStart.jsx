@@ -8,6 +8,7 @@ import { useDialog } from "./useDialog.js";
 import { STAND_INS, STAND_IN_COLORS, makeStandInBlob, standInName } from "./standIns.js";
 import { deleteLocalItem, saveLocalItem } from "./localWardrobe.js";
 import { track } from "./analytics.js";
+import { InAppTip } from "./InAppTip.jsx";
 
 const GROUPS = [
   { part: "upperbody", label: "上衣" },
@@ -149,6 +150,7 @@ export function QuickStart({ demoItems, onClose, onSaved }) {
         </button>
         <h2 id="quick-title" className="quick-title">不拍照，先點你有的</h2>
         <p className="quick-lede">點一類、選顏色，放一件長得像的代表款。上衣、下身各一件就配得出來；之後點開那件按「換圖」，換成你自己的。</p>
+        <InAppTip />
 
         {GROUPS.map((group) => {
           const kinds = STAND_INS.filter((kind) => kind.part === group.part);

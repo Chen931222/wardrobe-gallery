@@ -3074,7 +3074,6 @@ h1, h2, h3 {
 .welcome-copy { margin-top: 20px; max-width: 27em; }   /* 2026-10-24 說明段落搬走後只剩「匯入備份、垃圾桶」一行小字,跟「不用註冊」那行同一組,不再拉開 56px */
 .welcome p { margin: 0; font-size: 15px; line-height: 1.9; color: var(--body); text-wrap: pretty; }   /* pretty:最後一行不要只剩一個字 */
 .welcome-actions { display: flex; flex-wrap: wrap; gap: 10px; }
-.welcome-tip + .welcome-actions { margin-top: 18px; }   /* LINE／IG 那段警告在按鈕上面時 */
 .welcome-actions button { min-height: 48px; padding: 0 26px; font-size: 15px; }
 /* 2026-10-24 按鈕字變長(加入第一件衣服、看看穿搭示範):兩顆加間距要 328,畫面窄於 364 就疊成兩行(360 的 Android 也是),
    320 寬時 iOS 提醒被擠出第一屏。內距 26→14,兩顆 280,320 寬(可用 284)也排得下一行 */
@@ -3175,9 +3174,8 @@ h1, h2, h3 {
 /* 搭配頁的短版(2026-10-29):一句話＋兩顆鈕排一行,放不下才換行 */
 .keep-hint.is-short { display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; row-gap: 6px; text-wrap: pretty; }
 .keep-hint.is-short .keep-hint-actions { margin-top: 0; }
-/* 開在 LINE／IG 內建瀏覽器裡:要在加衣服之前看到,所以放在按鈕上面、線條用墨色 */
-.welcome .welcome-tip.is-warning { margin: 18px 0; border-left-color: var(--ink); color: var(--body); }
-.welcome .welcome-tip.is-warning:first-child { margin-top: 0; }
+/* 開在 LINE／IG／Threads 內建瀏覽器裡:加衣服之前要看到,放在新增、代表款視窗最上面,線條用墨色(src/InAppTip.jsx) */
+.add-panel .inapp-tip { margin: 0; padding-left: 12px; border-left: 1px solid var(--ink); font-size: 13px; line-height: 1.7; color: var(--body); }
 .welcome-tip-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .welcome-tip-actions a, .welcome-tip-actions button {
   display: inline-flex; align-items: center; padding: 2px 12px; min-height: 36px;
@@ -3187,10 +3185,8 @@ h1, h2, h3 {
 .welcome-tip-status { display: block; margin-top: 6px; font-size: 12px; color: var(--muted); }
 .status .welcome-demo { margin-left: 8px; }
 @media (max-width: 760px) {
-  /* 手機:示範穿搭緊接在標題下面,再來才是按鈕(2026-10-24 本人「看起來只是文字排版」:原本第一屏是五塊字,人台到 552 才開始、下半截切掉)。
-     LINE／IG 裡開的照舊先放按鈕那塊:「用瀏覽器開啟」要在第一屏 */
+  /* 手機:示範穿搭緊接在標題下面,再來才是按鈕(2026-10-24 本人「看起來只是文字排版」:原本第一屏是五塊字,人台到 552 才開始、下半截切掉) */
   .welcome { grid-template-columns: minmax(0, 1fr); grid-template-areas: "logo" "lede" "look" "start" "copy" "story" "foot"; grid-template-rows: none; width: auto; margin: 0 18px 40px; padding-top: 0; }
-  .welcome.is-inapp { grid-template-areas: "logo" "lede" "start" "look" "copy" "story" "foot"; }
   /* 手機:一章一章疊:編號 → 字 → 影片(寬 220 置中)→ 理由／前後對照;粗線和米紙帶照舊 */
   .welcome-story { margin-top: 48px; }
   .story-step, .story-intro { padding: 56px 0; }
@@ -3213,7 +3209,6 @@ h1, h2, h3 {
   .welcome-start { margin-top: 24px; }
   /* 示範那套是一條橫跨整個螢幕的米紙帶(負邊距吃掉左右 18px),跟下面 02 章同一個底色:第一屏有一塊是「東西」,不全是字 */
   .welcome-look { display: flex; gap: 18px; align-items: center; margin: 24px -18px 0; padding: 20px 18px; background: var(--band); }
-  .welcome.is-inapp .welcome-look { margin-top: 32px; }
   .welcome-look .mini-look { width: 136px; flex: none; }
   .welcome-look figcaption { margin: 0; }
   .welcome-copy { margin-top: 16px; }
