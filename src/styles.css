@@ -3174,8 +3174,16 @@ h1, h2, h3 {
 /* 搭配頁的短版(2026-10-29):一句話＋兩顆鈕排一行,放不下才換行 */
 .keep-hint.is-short { display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; row-gap: 6px; text-wrap: pretty; }
 .keep-hint.is-short .keep-hint-actions { margin-top: 0; }
-/* 開在 LINE／IG／Threads 內建瀏覽器裡:加衣服之前要看到,放在新增、代表款視窗最上面,線條用墨色(src/InAppTip.jsx) */
-.add-panel .inapp-tip { margin: 0; padding-left: 12px; border-left: 1px solid var(--ink); font-size: 13px; line-height: 1.7; color: var(--body); }
+/* 開在 LINE／IG／Threads 內建瀏覽器裡:加衣服之前要看到(src/InAppTip.jsx)。
+   2026-11-04 本人 iPhone 實機「不夠醒目」:原本跟旁邊的說明同大小、只多一條細線,看起來是另一段說明。改成主按鈕那種墨色塊,標題放大。
+   不用紅、黃:全站只有一個強調色,這也不是出錯。Noto Serif TC 只載 400,不加粗(會變假粗體) */
+.add-panel .inapp-tip { align-self: stretch; margin: 0; padding: 14px 16px 16px; border: 1px solid transparent; background: var(--ink); color: var(--paper); font-size: 14px; line-height: 1.7; text-align: left; }   /* 透明框:強制色彩模式背景會被換掉,靠這條畫出邊界 */
+.inapp-tip :focus-visible { outline-color: var(--paper); }   /* 全域的金色外框在墨色上看不見(驗收抓到) */
+.inapp-tip strong { display: block; margin-bottom: 6px; font-size: 18px; font-weight: 400; line-height: 1.4; }
+.inapp-tip .welcome-tip-actions { margin-top: 12px; }
+.inapp-tip .welcome-tip-actions button { border-color: var(--paper); color: var(--paper); }
+.inapp-tip .welcome-tip-actions a { border-color: var(--paper); background: var(--paper); color: var(--ink); }
+.inapp-tip .welcome-tip-status { color: var(--paper); }
 .welcome-tip-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .welcome-tip-actions a, .welcome-tip-actions button {
   display: inline-flex; align-items: center; padding: 2px 12px; min-height: 36px;

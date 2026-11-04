@@ -15,8 +15,8 @@ export function InAppTip() {
   };
   return (
     <p className="inapp-tip" role="note">
-      你現在是在 {app} 裡面開的。在這裡加的衣服只存在 {app} 裡，之後用 Safari 或 Chrome 打開會是空的。
-      先從 {app} 的選單選「用瀏覽器開啟」，再開始加。
+      <strong>先換到瀏覽器，再加衣服</strong>
+      你現在是在 {app} 裡面開的。在這裡加的衣服只存在 {app} 裡，之後用 Safari 或 Chrome 打開會是空的。從 {app} 的選單選「用瀏覽器開啟」。
       <span className="welcome-tip-actions">
         {/* LINE 認這個參數:帶著它的連結會改用手機的預設瀏覽器開 */}
         {app === "LINE" && <a href={`${here}/?openExternalBrowser=1`}>用瀏覽器開啟</a>}
