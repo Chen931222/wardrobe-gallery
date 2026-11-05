@@ -3889,3 +3889,10 @@ button.key-button:disabled { background: transparent; opacity: .55; }   /* 還�
 @media (max-width: 760px) {
   .page-foot { margin: 40px 18px 0; padding-bottom: 20px; }
 }
+
+/* 寬螢幕的衣櫃、搭配頁(2026-11-05 本人截圖,瀏覽器縮到 75%、寬 2560):標誌、分頁跟著整個畫面,搜尋停在 816,格子貼左,備份在正中間,三種對齊。
+   內容收進置中的一欄,搜尋、目錄拉滿這一欄,左右同一條邊界。入口、歡迎頁是滿版的,不套用;1440 以下不變 */
+@media (min-width: 1441px) {
+  .gallery-pane.is-page { max-width: clamp(1440px, 72vw, 1900px); margin-inline: auto; }
+  .is-page .closet-index, .is-page .closet-search-wrap, .is-page .closet-total { max-width: none; }
+}

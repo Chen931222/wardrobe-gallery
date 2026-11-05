@@ -2022,7 +2022,7 @@ export function App() {
 
   return (
     <div className={`app-shell${selectedItem ? " has-selection" : ""}`}>
-      <main className="gallery-pane">
+      <main className={view === "closet" || view === "styling" ? "gallery-pane is-page" : "gallery-pane"}>
         {view === "landing" && !loading && !!ownedItems.length && (
           <LandingRing
             title={closet === "demo" && CAN_ADD ? "示範衣櫃" : "我的衣櫃"}
