@@ -71,15 +71,15 @@ const STEPS = [
   { key: "weather", no: "02", title: ["照你那邊的天氣", "配一套，說為什麼"], body: "天氣照你選的城市。圖是示範衣櫃；你的衣櫃有一件上衣、一件下身，就配得出來。" },
   { key: "talk", no: "03", title: ["不喜歡，", "打一句話就換"], body: "說個場合，整套照著重挑；只說不要哪一件，就只動那一件。" },
 ];
-// 第二章:示範衣櫃實際配出來的一套(work/preview-2026-10-26-own-only/scripts/capture-weather.mjs,2026-10-26)。
-// 城市選基隆:那天毛毛雨、降雨 80%,看得到「下雨」那幾條判斷。理由照原文、標點換全形,收三條:溫度、下雨、顏色各一
-const WEATHER_SHOT = { src: "/media/weather-demo.jpg", when: "基隆，24°、毛毛雨、降雨 80%，2026 年 10 月 26 日" };
+// 第二章:示範衣櫃實際配出來的一套(2026-11-05 換字體、底色後在正式站重拍)。
+// 城市選基隆:那天短暫雨、降雨 60%,看得到「下雨」那幾條判斷。理由照原文、標點換全形,收三條:溫度、下雨、顏色各一
+const WEATHER_SHOT = { src: "/media/weather-demo.jpg", when: "基隆，24°、短暫雨、降雨 60%，2026 年 11 月 5 日" };
 const RECORDED_REASONS = [
   "體感 26°，薄長袖或短袖都行",
   "會下雨，加件「深藍連帽防風外套」",
   "只有「深藍連帽防風外套」有顏色，其他低調色襯著它",
 ];
-// 第三章前後對照:示範衣櫃實際配出來的兩套(work/preview-2026-10-23-brand/scripts/capture-talk.mjs,2026-10-24)。
+// 第三章前後對照:示範衣櫃實際配出來的兩套(2026-11-05 在正式站重拍,基隆,第一次就拍到前有外套、後沒有)。
 // 推薦有隨機,腳本重試到「今日推薦有外套」那次才存;人台上的 ✕ 和選取框截圖時藏起來;衣服和位置是 app 真的配出來的。
 // 照「上課」整套重挑,不只拿掉外套:上衣和下身也換了,註記照實寫。兩邊的理由句 2026-10-24 拿掉(收短),只留標籤
 const TALK = {
@@ -311,7 +311,7 @@ export function Welcome({ demoItems, onAdd, onBack = null, onDemo, onImportFile,
               )}
               {step.key === "weather" && (
                 <div className="story-media">
-                  <img className="story-video" src={WEATHER_SHOT.src} alt="示範衣櫃的搭配頁：人台穿著深藍連帽防風外套、白 T、深色短褲、球鞋，背黑色後背包" loading="lazy" />
+                  <img className="story-video" src={WEATHER_SHOT.src} alt="示範衣櫃的搭配頁：人台穿著深藍連帽防風外套、黑色丹寧上衣、卡其短褲、慢跑鞋，背黑色後背包" loading="lazy" />
                 </div>
               )}
               {step.key === "weather" && (
