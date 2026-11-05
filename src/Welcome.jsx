@@ -9,7 +9,7 @@ import { DOLL, MEASURED_SLOTS, SLOT_STYLE, cachedShape, placeGarment, shapeFromI
 import { fetchWeather, recommendOutfit } from "./recommend.js";
 import { CitySelect, useCity } from "./CitySelect.jsx";
 import { inAppBrowser, isIos, isStandalone } from "./keepSafe.js";
-import { Feedback } from "./Feedback.jsx";
+import { SiteFooter } from "./SiteFooter.jsx";
 import { Logo } from "./Brand.jsx";
 import { track } from "./analytics.js";
 
@@ -222,7 +222,7 @@ export function Welcome({ demoItems, onAdd, onBack = null, onDemo, onImportFile,
   return (
     <section className="welcome" aria-labelledby="welcome-title">
       {/* 站名(2026-10-23 本人定):PairThis,中文「搭這件」;網址 pairthis.app、帳號 @pairthis.app 同名。
-          同日本人「入口有點醜、沒有商標」:頂端放標誌(src/Brand.jsx,本人選的 design.com 那張),原本的第一段升成大字標題,
+          同日本人「入口有點醜、沒有商標」:頂端放標誌(src/Brand.jsx,2026-10-24 換成自己做的字標,字是 Cormorant 轉外框),原本的第一段升成大字標題,
           示範穿搭放大。排版用 grid:桌機示範穿搭在右欄;手機(2026-10-24 本人「看起來只是文字排版」)依序是
           標題、示範那套(一條米紙帶)、按鈕:講它做什麼 → 真的配一套給你看 → 開始。三樣在 393×700(iPhone Safari)和 375×548(SE)都在第一屏。
           2026-11-04 從 LINE／IG／Threads 開的不再例外(以前按鈕和「用瀏覽器開啟」排在示範前面):貼文點進來的人全都是這種,提醒搬到新增視窗。
@@ -359,20 +359,7 @@ export function Welcome({ demoItems, onAdd, onBack = null, onDemo, onImportFile,
       </section>
 
       {/* 頁尾:更新、說明、回饋各一個連結,不加前綴問句 */}
-      <footer className="welcome-foot">
-        {onUpdates && (
-          <>
-            <button type="button" onClick={onUpdates}>更新紀錄</button>
-            <span aria-hidden="true"> · </span>
-          </>
-        )}
-        <a href="/privacy.html">隱私與使用說明</a>
-        <span aria-hidden="true"> · </span>
-        <Feedback where="歡迎" label="意見回饋" />
-        <span aria-hidden="true"> · </span>
-        {/* 授權聲明和原始碼(2026-10-26):AGPL 要讓用的人拿得到原始碼,MIT、OFL 要附聲明;入口的天氣也在這頁寫出處 */}
-        <a href="/licenses.html">授權與原始碼</a>
-      </footer>
+      <SiteFooter className="welcome-foot" where="歡迎" onUpdates={onUpdates} />
     </section>
   );
 }

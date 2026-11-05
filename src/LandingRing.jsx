@@ -9,7 +9,7 @@ import { LogoHome } from "./Brand.jsx";
 // 入口導覽頁 v2(2026-07-21 依使用者回饋改版):
 //   - 拿掉滾輪/拖曳/自轉 —— 沒有 rAF 迴圈,平常是純靜態排版,零效能負擔
 //   - 圓環間距加大:卡片寬 = 圓周 ÷ (n×1.28),保證相鄰不重疊
-//   - 點任何一件 → 聚焦模式(抄 store.elevenlabs.io 的 zoomed-circle):
+//   - 點任何一件 → 聚焦模式(版面參考 store.elevenlabs.io 的圓環放大,程式是這裡自己寫的):
 //       圓心移到畫面左緣外、半徑放大,被點的那件轉到「三點鐘方向」並放大 2.5 倍,
 //       其他件沿左側大弧排開;右下出現資訊卡
 //   - 點聚焦中的衣服或資訊卡 → 開完整詳情(ItemViewer);點空白處 → 退回圓環
@@ -75,8 +75,9 @@ const ROW_MAX = 3;
  * @param syncAlert    同步有狀況(停掉、上次失敗):「同步」旁亮一個點
  */
 /** @param feedback 回報鈕(App 給,站主模式是 null):放在左上標誌右邊那一欄
+ *  @param footer   頁尾(這頁滿版不能捲:手機放在今日推薦那條裡,桌機貼畫面底)
  *  @param onHome   點左上標誌或標題:回最開始的入口;沒給(?public)兩個都只是字 */
-export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = null, onAdd = null, syncAlert = false, onUpdates = null, updatesUnseen = false, title = "我的衣櫃", note = null, feedback = null, onHome = null }) {
+export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = null, onAdd = null, syncAlert = false, onUpdates = null, updatesUnseen = false, title = "我的衣櫃", note = null, feedback = null, footer = null, onHome = null }) {
   // 手機(<640)重排:少放幾件圓環卡才夠大可點,今日推薦從環心移到環下方長條,不再壓卡片
   const [phone, setPhone] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches);
   useEffect(() => {
@@ -552,6 +553,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
               </button>
             </>
           )}
+          {footer}
         </div>
       )}
 
@@ -579,6 +581,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
             : touch ? "上下滑看下一件 · 再點看細節 · 點空白返回" : "滾輪瀏覽下一件 · 再點一下看細節 · 點空白處返回"}
         </p>
       )}
+      {!phone && footer && <div className="landing-foot">{footer}</div>}
     </section>
   );
 }

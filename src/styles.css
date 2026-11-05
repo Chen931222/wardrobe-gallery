@@ -2576,7 +2576,7 @@ h1, h2, h3 {
 
 .landing-hint {
   position: absolute;
-  inset: auto 0 22px;
+  inset: auto 0 32px;
   z-index: 40;
   margin: 0;
   text-align: center;
@@ -3877,3 +3877,15 @@ h1, h2, h3 {
 button.key-button { border-color: var(--control); background: var(--block); color: var(--ink); }
 button.key-button:hover:not(:disabled) { background: var(--block); color: var(--ink); filter: brightness(.94); }   /* 滑過去變深:原本的 hover 會把色塊換成很淡的底,像被取消(驗收抓到) */
 button.key-button:disabled { background: transparent; opacity: .55; }   /* 還不能按的不給色塊,也要看得出不能按 */
+
+/* 頁尾每一頁都有(src/SiteFooter.jsx,2026-11-05)。衣櫃、搭配排在內容最後;衣服環滿版不能捲,桌機貼畫面底,手機放在今日推薦那條裡 */
+.site-foot { font-size: 13px; line-height: 2; color: var(--muted); }
+.site-foot a { color: var(--accent); text-underline-offset: 3px; }
+.site-foot button { padding: 0; border: 0; background: none; color: var(--ink); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.page-foot { margin: 56px 56px 0; padding: 16px 0 28px; border-top: 1px solid var(--line); }
+.landing-foot { position: absolute; inset: auto 0 8px; z-index: 40; text-align: center; }
+.landing-foot .site-foot { font-size: 12px; line-height: 1.6; }
+.landing-daily-strip .site-foot { margin-top: 12px; font-size: 12px; line-height: 1.6; }
+@media (max-width: 760px) {
+  .page-foot { margin: 40px 18px 0; padding-bottom: 20px; }
+}

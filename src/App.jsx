@@ -23,6 +23,7 @@ import { CURRENCIES, formatPrice, parsePrice } from "./price.js";
 import { downloadBackupZip, importBackupFile } from "./backup.js";
 import { backupReminder, firstSightOfWipe, forgetWipe, inAppBrowser, isIos, isStandalone, noteCloset, requestPersist, snoozeBackupHint, wipedCloset } from "./keepSafe.js";
 import { Welcome } from "./Welcome.jsx";
+import { SiteFooter } from "./SiteFooter.jsx";
 import { Wiped } from "./Wiped.jsx";
 import { QuickStart } from "./QuickStart.jsx";
 import { UpdatesSheet } from "./Updates.jsx";
@@ -2044,6 +2045,7 @@ export function App() {
             onAdd={CAN_ADD ? requestAdd : null}
             onWearOutfit={(outfit, daily) => { wearOutfit(outfit, daily); setView("styling"); }}
             feedback={!CAN_EDIT ? <Feedback where="入口" className="in-brand" /> : null}
+            footer={<SiteFooter where="入口" onUpdates={() => setUpdatesOpen(true)} />}
           />
         )}
         {view === "landing" && loading && <p className="status">衣櫃載入中</p>}
@@ -2334,6 +2336,10 @@ export function App() {
             </div>
             <p className="studio-backup-note">備份是一個 ZIP,存在你自己手上。換手機、想在電腦上看、清瀏覽資料之前先匯出,把檔案傳過去,到新的地方按「匯入備份」選這個檔。</p>
           </div>
+        )}
+        {/* 頁尾每一頁都有(2026-11-05):歡迎頁、衣服環自己放,其他頁排在最後面 */}
+        {!loading && !showWelcome && !(view === "landing" && ownedItems.length > 0) && (
+          <SiteFooter className="page-foot" where={view === "styling" ? "搭配" : view === "closet" ? "衣櫃" : "入口"} onUpdates={() => setUpdatesOpen(true)} />
         )}
       </main>
 

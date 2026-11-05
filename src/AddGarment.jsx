@@ -727,7 +727,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
     const draft = { ...draftState, ...over };
     const name = draft.name.trim() || (draft.wishlist ? "想買的單品" : "新單品");
     setError("");
-    // 分類改選填(2026-10-21,行銷企劃第 0 週:MYMIKA 加一件零欄位,我們要人選分類才能存)。
+    // 分類改選填(2026-10-21):要人先選分類才能存,加第一件多一道關卡。
     // 沒選就猜:先看品名(「襯衫」「牛仔褲」),再看去背後的形狀(localWardrobe guessPart);猜的標 partGuessed,衣櫃格子會提醒點一下改
     let partGuessed = false;
     if (!draft.part) {
