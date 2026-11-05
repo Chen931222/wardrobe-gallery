@@ -1,7 +1,8 @@
 /* [本 fork 修改] 上游 tandpfun/wardrobe 既有檔案。本 fork 的改動:改暗色襯線配色,新增搭配工作室、入口圓環、今日推薦與新增刪除面板樣式。 */
-@import "@fontsource/cormorant/400.css";
-@import "@fontsource/cormorant/500.css";
-@import "@fontsource/noto-serif-tc/400.css";
+/* 2026-11-05 本人「要粗一點、要有角度,不要那麼圓潤」,看過對照圖選 C:標題思源宋體 700,其他思源黑體 500。
+   各只載一種粗細,規則裡寫的 400、600 都會對到這一種(font-synthesis: none,不會硬描假粗體)。Cormorant 拿掉 */
+@import "@fontsource/noto-sans-tc/500.css";
+@import "@fontsource/noto-serif-tc/700.css";
 
 /* 配色來源:使用者自己衣櫃的實拍照 + 書櫃站的編輯部暗色語言(2026-07-23 指定改暗)。
    深色 = 預設。錨定使用者自己的書櫃站(底 #141310、字 #F2ECE0)—— 近黑暖木配奶油襯線,
@@ -22,6 +23,7 @@
   --fill: #5a4c3a;     /* 色票、留白佔位 */
   --accent: #cdaf7f;   /* 暖金樺木:文字強調、focus 環 */
   --control: #8f7f69;  /* 2026-10-30 本人「按鈕選項跟背景一模一樣,很難分辨」:可按的東西(次要鈕、選項、城市)的邊框,比 --line 深,對紙底 ≥3:1 */
+  --block: #43372a;    /* 重點按鈕的色塊(檔尾 key-button),深色主題比面板亮一階 */
   --band: #2a231b;     /* 入口章節的帶子(深色主題):跟 --surface 同色 */
   --doll: #372f23;     /* 人形剪影:只比 --surface 亮一點點。2026-10-19 調淡(評論:圓頭加膠囊四肢符號感太強,要讓衣服輪廓主導畫面),
                           原本 #4a4030;再更早 #2c2419 是照著 --paper 調的,疊在 --surface 上幾乎消失(對比 1.0:1)。 */
@@ -40,13 +42,12 @@
   --hover-tint: rgba(240, 233, 217, .08);
   --paper-veil: rgba(32, 27, 20, .92);
 
-  /* Cormorant 沒有中文字符,中文會自動落到 Noto Serif TC —— 拉丁字母拿到 Cormorant 的
-     優雅比例,中文拿到正經的襯線體,兩者都不會掉到系統的細明體。 */
   /* 動畫曲線(2026-10-08 加,目前只有目錄用):離場進場用 ease-out,在畫面上移動用 ease-in-out */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-  --font-display: "Cormorant", "Noto Serif TC", Georgia, serif;
-  --font-body: "Noto Serif TC", Georgia, "Times New Roman", serif;
+  --font-title: "Noto Serif TC", Georgia, serif;   /* 標題 */
+  --font-display: var(--font-body);   /* 導覽、按鈕、數字、小標籤(以前是 Cormorant) */
+  --font-body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
 
   font-family: var(--font-body);
   color: var(--body);
@@ -56,23 +57,24 @@
   /* 原生元件(捲軸、單選鈕、日期)跟著暗色走,不要冒出 Windows 亮白的捲軸(審查 F64) */
   color-scheme: dark;
   accent-color: var(--accent);
-  /* Cormorant 預設是舊式數字,「0」像小寫 o、「104」讀成「1o4」(審查 F66) */
+  /* 數字一律齊高(審查 F66 當時的 Cormorant 是舊式數字,「104」讀成「1o4」;換字型後留著不礙事) */
   font-variant-numeric: lining-nums;
 }
 
 /* 淺色 = 打開衣櫃的樺木內裝。2026-10-08 起是預設(index.html 掛 data-theme="light")。 */
 :root[data-theme="light"] {
-  --paper: #ece3d1;    /* 淺樺木層板 */
-  --surface: #f2ead9;
+  --paper: #ecebe6;    /* 頁面底:淡石灰。2026-11-05 本人「不要米黃,有點像字典」又「不要全白」,看過四個底色選 A。衣服是主角,底色中性,顏色才準 */
+  --surface: #e2e0da;  /* 放衣服的格子、人台、視窗:比頁面深一點,白衣服才清楚(白 T 對它 1.18:1,米黃那版 1.07:1) */
   --ink: #3b322a;      /* 深咖啡門片(標題) */
   --body: #544639;     /* 內文 */
   --muted: #6b5c4c;    /* 次要文字 */
-  --line: #d2c4a9;
-  --fill: #ab9a7d;
+  --line: #cfccc4;
+  --fill: #a59c8d;
   --accent: #5d4a37;   /* espresso,可當文字與實心底 */
-  --control: #8a7a64;  /* 可按的東西的邊框(見深色主題同名註解);對 #ece3d1 約 3.1:1 */
-  --band: #e4d9c2;     /* 2026-10-24 入口章節的米紙帶:比 --surface 深一號,跟紙色分得出來(muted 字在上面 4.6:1) */
-  --doll: #e3d7bf;     /* 2026-10-19 調淡:原本 #d6c8ab,改成跟 --surface 只差一點,衣服輪廓主導畫面(#e7dcc7 太淡,手機上幾乎看不到) */
+  --control: #7f776c;  /* 可按的東西的邊框(見深色主題同名註解);對 --paper 3.7:1 */
+  --block: #c4bfb4;    /* 重點按鈕的色塊(檔尾 key-button):墨色字 6.8:1,對頁面 1.5:1,邊框留著 */
+  --band: #dcd9d2;     /* 入口章節的帶子:跟頁面底分得出來,muted 字在上面 4.6:1 */
+  --doll: #d5d2ca;     /* 人台:跟 --surface 只差一點,衣服輪廓主導畫面 */
   --ok: #49604b;       /* 6.2:1 */
   --danger: #8a3f35;   /* 6.7:1 */
   /* 淺色主題下 --ink 是深咖啡,反白面板上的 tint 要用淺色;透明格用深色 */
@@ -83,7 +85,7 @@
   --shadow-soft: rgba(93, 74, 55, .12);
   --shadow-lift: rgba(93, 74, 55, .20);
   --hover-tint: rgba(93, 74, 55, .09);
-  --paper-veil: rgba(236, 227, 209, .88);
+  --paper-veil: rgba(236, 235, 230, .88);
   color-scheme: light;
 }
 
@@ -143,16 +145,16 @@ button { font: inherit; }
   pointer-events: none;
 }
 
-/* 標題走 Cormorant,負字距是參考站的招牌(H1 -0.04em)。中文自動落到 Noto Serif TC。 */
+/* 標題走粗宋體:有尖角,保住印刷品的質感;內文和按鈕是黑體 */
 h1, h2, h3 {
-  font-family: var(--font-display);
-  font-weight: 400;
-  letter-spacing: -0.02em;
+  font-family: var(--font-title);
+  font-weight: 700;
+  letter-spacing: .01em;
   color: var(--ink);
 }
 
-/* 導覽與按鈕:Cormorant 大寫 + 寬字距。中文沒有大小寫,uppercase 只影響拉丁字母;
-   字距收在 .08em,CJK 拉太開會鬆散。 */
+/* 導覽與按鈕:大寫 + 一點字距。中文沒有大小寫,uppercase 只影響拉丁字母;
+   字距收在 .04em,黑體拉太開會鬆散。 */
 .piece-count,
 .view-nav button,
 .studio-actions button,
@@ -164,7 +166,7 @@ h1, h2, h3 {
 .import-button {
   font-family: var(--font-display);
   text-transform: uppercase;
-  letter-spacing: .08em;
+  letter-spacing: .04em;
 }
 
 .app-shell {
@@ -1081,7 +1083,8 @@ h1, h2, h3 {
 .studio-looks h3 {
   margin: 8px 0 10px;
   font-size: 12px;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-weight: 500;
   letter-spacing: .14em;
   text-transform: uppercase;
   color: var(--muted);
@@ -1526,7 +1529,7 @@ h1, h2, h3 {
 .add-actions .secondary-button:disabled { opacity: .45; cursor: default; }   /* 商品圖那步「去背框起來的」是次要鈕,還沒框時也要看得出按不了(2026-10-25 驗收) */
 
 /* ===== 框選 ===== */
-.add-panel .add-step { font-size: 15px; color: var(--ink); }
+.add-panel .add-step { font-family: var(--font-title); font-size: 16px; color: var(--ink); }
 .add-panel .add-hint { color: var(--muted); font-size: 12px; line-height: 1.6; }
 /* overflow: hidden:框外變暗用的是框的大陰影,沒關在照片裡的話會蓋到整個視窗,
    框好之後「去背框起來的」明明可以按,看起來卻是暗的(2026-10-04 本人 iPhone 回報) */
@@ -2777,7 +2780,7 @@ h1, h2, h3 {
 
 .landing-strip-head {
   margin: 0 0 8px;
-  font-family: var(--font-display);
+  font-family: var(--font-title);
   font-size: 13px;
   letter-spacing: .12em;
   text-transform: uppercase;
@@ -2965,7 +2968,7 @@ h1, h2, h3 {
 }
 .story-no {
   grid-area: no; display: block; margin-bottom: clamp(24px, 4vh, 44px);
-  font-family: var(--font-display); font-weight: 500; font-size: clamp(64px, 7vw, 112px); line-height: .9; letter-spacing: -0.02em;
+  font-family: var(--font-title); font-weight: 700; font-size: clamp(64px, 7vw, 112px); line-height: .9; letter-spacing: -0.02em;
   color: var(--accent);
 }
 .story-text { grid-area: text; max-width: 34em; }
@@ -2977,7 +2980,7 @@ h1, h2, h3 {
 /* 03:編號、字一整排,下面前後對照 */
 .story-talk .story-inner { grid-template-columns: minmax(0, 1fr); grid-template-areas: "no" "text" "pair"; }
 .welcome .story-text h3 {
-  margin: 0; font-family: var(--font-body); font-weight: 400;
+  margin: 0; font-family: var(--font-title); font-weight: 700;
   font-size: clamp(30px, 3.4vw, 46px); line-height: 1.35; letter-spacing: .03em; color: var(--ink); text-wrap: balance;
 }
 .welcome .story-text h3 span { display: block; }
@@ -3007,7 +3010,7 @@ h1, h2, h3 {
 .story-pair-side b { display: block; margin-bottom: 2px; font-weight: 500; color: var(--ink); }
 .welcome .story-pair-cmd {
   grid-area: cmd; align-self: center; text-align: center;
-  font-family: var(--font-body); font-size: clamp(22px, 2.2vw, 30px); line-height: 1.5; color: var(--ink);
+  font-family: var(--font-title); font-size: clamp(22px, 2.2vw, 30px); line-height: 1.5; color: var(--ink);
 }
 .story-pair-cmd span { display: block; }
 .welcome .story-pair figcaption { grid-area: note; margin-top: 28px; text-align: center; font-size: 13px; color: var(--muted); }
@@ -3034,7 +3037,7 @@ h1, h2, h3 {
 .story-intro-open:hover, .story-intro-open:focus-visible { opacity: .9; }
 /* 介紹片是 1080×1920(9:16),不是上面操作短片的 720:1558:照那個比例框,cover 會把左右各裁掉約 9%,
    片頭的網址、字幕的頭一個字都在被裁的那條裡(2026-10-29 換片時量到;10-23 那支也一樣被裁) */
-.story-media-intro { aspect-ratio: 9 / 16; border-color: rgba(236, 227, 209, .3); background: transparent; }
+.story-media-intro { aspect-ratio: 9 / 16; border-color: rgba(236, 235, 230, .3); background: transparent; }
 .story-media-intro img, .story-intro-video { display: block; width: 100%; height: 100%; object-fit: cover; background: transparent; }
 
 /* 標誌(2026-10-24 換成「PAIR 鉤 THIS」:底線折成衣架肩膀、兩字中間長出鉤子、鉤子根部綁蝴蝶結):
@@ -3059,10 +3062,10 @@ h1, h2, h3 {
 .landing-home:hover { text-decoration: underline; }
 .welcome .welcome-logo { width: 300px; margin: 0 0 clamp(28px, 5vh, 48px); justify-self: start; }   /* 2026-10-30 本人「logo 放大」:260→300;桌機留在左欄跟標題對齊 */
 
-/* 大字標題:中文用 Noto Serif TC(Cormorant 沒有中文),一個逗號一行;中文不收字距,反而放一點 */
+/* 大字標題:粗宋體,一個逗號一行;中文不收字距,反而放一點 */
 .welcome .welcome-lede {
   margin: 0;
-  font-family: var(--font-body); font-weight: 400;
+  font-family: var(--font-title); font-weight: 700;
   font-size: clamp(26px, 3.1vw, 36px); line-height: 1.5; letter-spacing: .04em;
   color: var(--ink);
 }
@@ -3133,7 +3136,7 @@ h1, h2, h3 {
 .wiped .wiped-logo { display: block; margin: 0 0 clamp(28px, 5vh, 48px); }
 .wiped-title {
   margin: 0;
-  font-family: var(--font-body); font-weight: 400;
+  font-family: var(--font-title); font-weight: 700;
   font-size: clamp(26px, 3.1vw, 36px); line-height: 1.5; letter-spacing: .04em;
   color: var(--ink);
 }
@@ -3176,10 +3179,10 @@ h1, h2, h3 {
 .keep-hint.is-short .keep-hint-actions { margin-top: 0; }
 /* 開在 LINE／IG／Threads 內建瀏覽器裡:加衣服之前要看到(src/InAppTip.jsx)。
    2026-11-04 本人 iPhone 實機「不夠醒目」:原本跟旁邊的說明同大小、只多一條細線,看起來是另一段說明。改成主按鈕那種墨色塊,標題放大。
-   不用紅、黃:全站只有一個強調色,這也不是出錯。Noto Serif TC 只載 400,不加粗(會變假粗體) */
+   不用紅、黃:全站只有一個強調色,這也不是出錯。標題用粗宋體 */
 .add-panel .inapp-tip { align-self: stretch; margin: 0; padding: 14px 16px 16px; border: 1px solid transparent; background: var(--ink); color: var(--paper); font-size: 14px; line-height: 1.7; text-align: left; }   /* 透明框:強制色彩模式背景會被換掉,靠這條畫出邊界 */
 .inapp-tip :focus-visible { outline-color: var(--paper); }   /* 全域的金色外框在墨色上看不見(驗收抓到) */
-.inapp-tip strong { display: block; margin-bottom: 6px; font-size: 18px; font-weight: 400; line-height: 1.4; }
+.inapp-tip strong { display: block; margin-bottom: 6px; font-family: var(--font-title); font-size: 18px; font-weight: 700; line-height: 1.4; }
 .inapp-tip .welcome-tip-actions { margin-top: 12px; }
 .inapp-tip .welcome-tip-actions button { border-color: var(--paper); color: var(--paper); }
 .inapp-tip .welcome-tip-actions a { border-color: var(--paper); background: var(--paper); color: var(--ink); }
@@ -3299,7 +3302,7 @@ h1, h2, h3 {
 .color-field .label-colors { margin-top: 10px; }
 
 /* ===== 更新公告(2026-10-08) =====
-   沿用同步的小視窗;內容靠左排,日期用 Cormorant 數字。整個遮罩捲動(不限高),ScrollRail 畫捲軸 */
+   沿用同步的小視窗;內容靠左排。整個遮罩捲動(不限高),ScrollRail 畫捲軸 */
 .updates-sheet {
   width: min(520px, 100%);
   max-height: none;
@@ -3741,7 +3744,7 @@ h1, h2, h3 {
 .quick-panel { width: min(600px, 100%); align-items: stretch; text-align: left; gap: 18px; padding-bottom: 0; }
 /* 視窗底下不留 padding:黏在底的那條才貼得到螢幕最下面,不會在它下面再露出一截後背包(2026-10-29 桌機截圖) */
 .add-overlay.quick-overlay { padding-bottom: 0; }
-.quick-title { margin: 0 40px 0 0; font-family: var(--font-display); font-size: 26px; font-weight: 600; line-height: 1.25; color: var(--ink); text-wrap: balance; }
+.quick-title { margin: 0 40px 0 0; font-family: var(--font-title); font-size: 26px; font-weight: 700; line-height: 1.25; color: var(--ink); text-wrap: balance; }
 .add-panel .quick-lede { margin: -8px 0 0; font-size: 14px; line-height: 1.7; color: var(--body); max-width: 34em; }
 .quick-group h3 { margin: 0 0 8px; font-size: 14px; font-weight: 600; color: var(--ink); }
 .quick-kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
@@ -3816,7 +3819,7 @@ h1, h2, h3 {
   color: var(--body);
 }
 .crash .crash-logo { width: 180px; margin: 0 0 40px; }
-.crash h1 { margin: 0 0 12px; font-family: var(--font-body); font-size: 26px; font-weight: 500; color: var(--ink); letter-spacing: .02em; }
+.crash h1 { margin: 0 0 12px; font-family: var(--font-title); font-size: 26px; font-weight: 700; color: var(--ink); letter-spacing: .02em; }
 .crash p { margin: 0 0 28px; font-size: 16px; line-height: 1.8; text-wrap: pretty; }
 .crash-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
 .crash-reload {
@@ -3867,3 +3870,10 @@ h1, h2, h3 {
 /* 空衣櫃的歡迎畫面:版面是 1200 寬一格一格排好的,整塊等比放大比逐條改字級穩(zoom 會連格子、影片一起放大) */
 @media (min-width: 1700px) { .welcome { zoom: 1.15; } }
 @media (min-width: 2200px) { .welcome { zoom: 1.3; } }
+
+/* 重點按鈕的色塊(2026-11-05 本人「重點按鍵加一點色塊,因為網站字太多了」):一頁最重要的那顆還是墨色主按鈕,這一層是第二重要的動作,
+   從框線變實心,一眼看得到哪裡能按。取消、不用了、重新框照舊只有框線,全塗就沒有重點。同一個木色系,不加新色相;框線留著,邊界才有 3:1。
+   放檔尾:.add-alt button、.studio-dock button 這些權重一樣,要排在它們後面 */
+button.key-button { border-color: var(--control); background: var(--block); color: var(--ink); }
+button.key-button:hover:not(:disabled) { background: var(--block); color: var(--ink); filter: brightness(.94); }   /* 滑過去變深:原本的 hover 會把色塊換成很淡的底,像被取消(驗收抓到) */
+button.key-button:disabled { background: transparent; opacity: .55; }   /* 還不能按的不給色塊,也要看得出不能按 */

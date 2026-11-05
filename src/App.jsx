@@ -2332,7 +2332,7 @@ export function App() {
                 }}
               />
             </div>
-            <p className="studio-backup-note">備份是一個 ZIP,存在你自己手上。換手機、清瀏覽資料之前先匯出,到新的地方按「匯入備份」選這個檔。</p>
+            <p className="studio-backup-note">備份是一個 ZIP,存在你自己手上。換手機、想在電腦上看、清瀏覽資料之前先匯出,把檔案傳過去,到新的地方按「匯入備份」選這個檔。</p>
           </div>
         )}
       </main>

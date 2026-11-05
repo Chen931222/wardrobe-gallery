@@ -2,13 +2,13 @@
    2026-10-24:頂上放標誌(跟網站一樣用 /brand/logo.svg 當遮罩)、開頭一段改導言、統計事件改成表格;
    同日分成四大段(資料與隱私／儲存與備份／使用說明／使用規則)加目錄,授權和重要修訂放頁尾 */
 :root {
-  --paper: #ece3d1;
+  --paper: #ecebe6;
   --ink: #3b322a;
   --body: #544639;
   --muted: #6b5c4c;
-  --line: #d2c4a9;
+  --line: #cfccc4;
   --accent: #5d4a37;
-  --mark: #dccdb0;
+  --mark: #d5d2ca;
   color-scheme: light;
 }
 * { box-sizing: border-box; }
@@ -17,7 +17,7 @@ body {
   margin: 0;
   background: var(--paper);
   color: var(--body);
-  font-family: "Noto Serif TC", "Songti TC", "PMingLiU", Georgia, serif;
+  font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
   font-size: 16px;
   line-height: 1.8;
 }
@@ -36,7 +36,8 @@ main { max-width: 640px; margin: 0 auto; padding: 40px 20px 96px; }
 }
 .back { font-size: 14px; }
 
-h1 { margin: 0; font-size: 28px; font-weight: 500; letter-spacing: .02em; color: var(--ink); text-wrap: balance; }
+h1, h2, h3 { font-family: "Noto Serif TC", "Songti TC", "PMingLiU", Georgia, serif; font-weight: 700; }
+h1 { margin: 0; font-size: 28px; letter-spacing: .02em; color: var(--ink); text-wrap: balance; }
 .updated { margin: 6px 0 28px; font-size: 13px; line-height: 1.7; color: var(--muted); }
 .lede { margin: 0 0 8px; font-size: 18px; line-height: 1.75; color: var(--ink); }
 /* 段落目錄:四個大段,一行排得下就一行,窄螢幕兩兩換行 */
@@ -45,8 +46,8 @@ h1 { margin: 0; font-size: 28px; font-weight: 500; letter-spacing: .02em; color:
 .toc a:hover { text-decoration: underline; }
 section { scroll-margin-top: 16px; }
 /* 大段:粗線分開,字大一級;大段裡的小題(h3)不加線 */
-h2 { margin: 56px 0 4px; padding-top: 20px; border-top: 2px solid var(--ink); font-size: 21px; font-weight: 500; color: var(--ink); }
-h3 { margin: 28px 0 8px; font-size: 16px; font-weight: 600; color: var(--ink); }
+h2 { margin: 56px 0 4px; padding-top: 20px; border-top: 2px solid var(--ink); font-size: 21px; color: var(--ink); }
+h3 { margin: 28px 0 8px; font-size: 16px; color: var(--ink); }
 .foot { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 14px; line-height: 1.75; color: var(--muted); }
 .foot b { color: var(--body); }
 p { margin: 0 0 12px; }
@@ -59,7 +60,7 @@ a { color: var(--accent); text-underline-offset: 3px; text-decoration-thickness:
 a:hover { color: var(--ink); }
 a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .brand:focus-visible { outline-offset: 6px; }
-code { font-family: ui-monospace, Consolas, monospace; font-size: 14px; padding: 1px 4px; background: #e2d7c1; color: var(--ink); white-space: nowrap; }
+code { font-family: ui-monospace, Consolas, monospace; font-size: 14px; padding: 1px 4px; background: #dcd9d2; color: var(--ink); white-space: nowrap; }
 
 /* 兩欄表格(授權頁在用;隱私頁的統計事件表 2026-11-02 拿掉了)。窄螢幕也維持兩欄,左欄收窄 */
 .events { width: 100%; margin: 4px 0 20px; border-collapse: collapse; font-size: 15px; line-height: 1.65; }
@@ -79,7 +80,7 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 14px; padding:
   padding: 12px 14px;
   max-height: 22rem;
   overflow: auto;
-  background: #e2d7c1;
+  background: #dcd9d2;
   color: var(--ink);
   font-family: ui-monospace, Consolas, monospace;
   font-size: 12.5px;

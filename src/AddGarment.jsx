@@ -930,7 +930,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
               </small>
             )}
             <div className="add-actions">
-              <button type="button" className="secondary-button" onClick={() => { setLink(parsedLink?.notProduct ? null : effectiveLink ? { ...effectiveLink, images: [] } : null); (parsedLink || replacing || !onBatchAdded ? inputRef : multiRef).current?.click(); }}>
+              <button type="button" className="secondary-button key-button" onClick={() => { setLink(parsedLink?.notProduct ? null : effectiveLink ? { ...effectiveLink, images: [] } : null); (parsedLink || replacing || !onBatchAdded ? inputRef : multiRef).current?.click(); }}>
                 {parsedLink ? "改用照片" : "沒有連結,拍照或選照片"}
               </button>
               <button type="submit" className="primary-button" disabled={!parsedLink || parsedLink.notProduct || pageLoading}>

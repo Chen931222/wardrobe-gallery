@@ -1177,7 +1177,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   const wearTodayButton = (
     <button
       type="button"
-      className={`studio-wear-today${recorded ? " done" : ""}`}
+      className={`studio-wear-today${recorded ? " done" : " key-button"}`}
       onClick={wearToday}
       disabled={!wornItems.length || (recorded && !canUndoWear)}
       aria-label={recorded && canUndoWear ? "已記錄今天穿這套;按一下取消" : undefined}
@@ -1238,7 +1238,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
         {closet === "demo" && (!tried || daily?.error) && (
           <p className="studio-try">
             <span className="studio-try-lead">打一句話就能換一套。</span><span>試試:</span>
-            <button type="button" disabled={dailyBusy} onClick={() => { setOccasion(TRY_EXAMPLE); handleRequest(TRY_EXAMPLE); }}>{TRY_EXAMPLE}</button>
+            <button type="button" className="key-button" disabled={dailyBusy} onClick={() => { setOccasion(TRY_EXAMPLE); handleRequest(TRY_EXAMPLE); }}>{TRY_EXAMPLE}</button>
           </p>
         )}
         <div
@@ -1462,7 +1462,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
               <Microphone size={15} weight={listening ? "fill" : "regular"} aria-hidden="true" />
             </button>
           )}
-          <button type="submit" disabled={dailyBusy || !occasion.trim()}>
+          <button type="submit" className="key-button" disabled={dailyBusy || !occasion.trim()}>
             <Sparkle size={14} weight="regular" aria-hidden="true" /> 照這句挑
           </button>
         </form>

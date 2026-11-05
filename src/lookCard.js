@@ -25,15 +25,16 @@ function readTheme() {
   };
 }
 
-async function ensureFonts() {
+// 要給實際的字:字型照字切成很多小檔,不給字只會載到拉丁那一小塊,中文第一次畫會落到系統字(驗收抓到)
+async function ensureFonts(caption = {}) {
   if (!document.fonts?.load) return;
   try {
     await Promise.all([
-      document.fonts.load('600 44px "Cormorant"'),
-      document.fonts.load('500 26px "Cormorant"'),
-      document.fonts.load('400 24px "Noto Serif TC"'),
+      document.fonts.load('700 44px "Noto Serif TC"', caption.title || "今日穿搭"),
+      document.fonts.load('500 26px "Noto Sans TC"', caption.date || "0123456789/"),
+      document.fonts.load('500 23px "Noto Sans TC"', `${caption.subtitle || ""}${[caption.items].flat().join("")}`),
     ]);
-  } catch { /* 字型沒載到就用 fallback serif,不擋合成 */ }
+  } catch { /* 字型沒載到就用系統字,不擋合成 */ }
 }
 
 function loadImage(src) {
@@ -181,11 +182,11 @@ function drawCaption(ctx, box, caption, theme) {
 
   ctx.textBaseline = "alphabetic";
   ctx.fillStyle = theme.ink;
-  ctx.font = '600 44px "Cormorant", "Noto Serif TC", serif';
+  ctx.font = '700 44px "Noto Serif TC", serif';
   if ("letterSpacing" in ctx) ctx.letterSpacing = "0.06em";
   ctx.fillText(caption.title || "今日穿搭", box.x, y);
   if ("letterSpacing" in ctx) ctx.letterSpacing = "0.12em";
-  ctx.font = '500 26px "Cormorant", serif';
+  ctx.font = '500 26px "Noto Sans TC", sans-serif';
   ctx.fillStyle = theme.muted;
   ctx.textAlign = "right";
   ctx.fillText(caption.date || "", box.x + box.w, y);
@@ -194,13 +195,13 @@ function drawCaption(ctx, box, caption, theme) {
 
   if (caption.subtitle) {
     y += 38;
-    ctx.font = '400 23px "Noto Serif TC", serif';
+    ctx.font = '500 23px "Noto Sans TC", sans-serif';
     ctx.fillStyle = theme.muted;
     ctx.fillText(caption.subtitle, box.x, y);
   }
   if (caption.items) {
     y += 40;
-    ctx.font = '400 22px "Noto Serif TC", serif';
+    ctx.font = '500 22px "Noto Sans TC", sans-serif';
     ctx.fillStyle = theme.ink;
     for (const line of fitItems(ctx, caption.items, box.w, 2)) { ctx.fillText(line, box.x, y); y += 32; }
   }
@@ -229,7 +230,7 @@ function fitItems(ctx, items, maxWidth, maxLines) {
  */
 export async function renderLookCard({ style = "flatlay", outfit, fits = {}, slotStyle = {}, caption = {} }) {
   const theme = readTheme();
-  await ensureFonts();
+  await ensureFonts(caption);
   const entries = Object.entries(outfit).filter(([, item]) => item);
   if (!entries.length) throw new Error("身上沒有衣服");
   const pieces = await Promise.all(entries.map(async ([slot, item]) => ({ slot, item, img: await loadImage(await fullImageOf(item)) })));

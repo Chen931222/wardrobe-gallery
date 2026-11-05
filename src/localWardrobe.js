@@ -78,8 +78,8 @@ async function putRecord(record, options) {
 /* 讀不到的圖用這張代替(不是「?」),點開那件可以「換圖」;開了同步的會從雲端拿回原本那張 */
 export const BROKEN_IMAGE = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 240"><rect x="1" y="1" width="198" height="238" fill="none" stroke="#5a4c3a" stroke-dasharray="6 6"/>'
-  + '<text x="100" y="116" text-anchor="middle" font-family="serif" font-size="17" fill="#9b8c73">圖讀不到</text>'
-  + '<text x="100" y="142" text-anchor="middle" font-family="serif" font-size="12" fill="#9b8c73">點開按「換圖」</text></svg>',
+  + '<text x="100" y="116" text-anchor="middle" font-family="sans-serif" font-size="17" fill="#9b8c73">圖讀不到</text>'
+  + '<text x="100" y="142" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#9b8c73">點開按「換圖」</text></svg>',
 )}`;
 
 /* 圖的 object URL 依 id 重用:同步後會常常重讀,每次都新建網址的話,舊的一直不釋放、

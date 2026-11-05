@@ -30,8 +30,8 @@ const BUNDLED = [
   { name: "@unpic/core", use: "圖片縮放", licenseFrom: "@unpic/react" },   // 跟 @unpic/react 同一個 repo(unpic-img)
   { name: "unpic", use: "圖片縮放" },   // npm 版和 repo(ascorbic/unpic)都沒有授權全文,只有 package.json 寫 MIT(2026-10-26 查)
   { name: "@mediapipe/tasks-vision", use: "去背(MagicTouch 模型的執行程式)", licenseText: "tools/licenses/mediapipe-LICENSE.txt" },
-  { name: "@fontsource/cormorant", use: "字型(英文、數字)", label: "Cormorant(字型)" },
-  { name: "@fontsource/noto-serif-tc", use: "字型(中文)", label: "Noto Serif TC(字型)" },
+  { name: "@fontsource/noto-sans-tc", use: "字型(內文)", label: "Noto Sans TC(字型)" },
+  { name: "@fontsource/noto-serif-tc", use: "字型(標題)", label: "Noto Serif TC(字型)" },
 ];
 
 const esc = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");

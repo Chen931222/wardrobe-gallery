@@ -244,11 +244,11 @@ export function Welcome({ demoItems, onAdd, onBack = null, onDemo, onImportFile,
         <div className="welcome-actions">
           <button type="button" className="primary-button" onClick={onBack || onAdd}>{onBack ? "回我的衣櫃" : "加入第一件衣服"}</button>
           {/* 2026-10-24(試用者:「打一句話就能改」藏太深):直接帶這頁那套進搭配,不再先停在衣服環繞的入口 */}
-          {!!demoItems.length && <button type="button" className="secondary-button" onClick={() => (look ? onDemo(demoPayload()) : setDemoWanted(true))} disabled={demoWanted} aria-busy={demoWanted}>看看穿搭示範</button>}
+          {!!demoItems.length && <button type="button" className="secondary-button key-button" onClick={() => (look ? onDemo(demoPayload()) : setDemoWanted(true))} disabled={demoWanted} aria-busy={demoWanted}>看看穿搭示範</button>}
         </div>
         {/* 2026-10-29 本人:用過的人說連拍照都懶。不拍照的那條路接在兩顆按鈕正下方,一行字,不搶「加入第一件」的位置 */}
         {onQuickStart && !!demoItems.length && (
-          <p className="welcome-quick">不想拍照？<button type="button" onClick={onQuickStart}>點幾件代表款，先配一套</button></p>
+          <p className="welcome-quick">不想拍照？<button type="button" className="key-button" onClick={onQuickStart}>點幾件代表款，先配一套</button></p>
         )}
         {ios && !standalone && !app && (
           // 2026-10-24 縮成兩行(事實不變):手機上它排在示範和按鈕後面,三行時第三行掉出 iPhone 第一屏。
