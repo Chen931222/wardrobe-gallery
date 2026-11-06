@@ -30,9 +30,9 @@ async function ensureFonts(caption = {}) {
   if (!document.fonts?.load) return;
   try {
     await Promise.all([
-      document.fonts.load('700 44px "Noto Serif TC"', caption.title || "今日穿搭"),
-      document.fonts.load('500 26px "Noto Sans TC"', caption.date || "0123456789/"),
-      document.fonts.load('500 23px "Noto Sans TC"', `${caption.subtitle || ""}${[caption.items].flat().join("")}`),
+      document.fonts.load('700 44px "PT Title", "Noto Serif TC"', caption.title || "今日穿搭"),
+      document.fonts.load('500 26px "PT Body", "Noto Sans TC"', caption.date || "0123456789/"),
+      document.fonts.load('500 23px "PT Body", "Noto Sans TC"', `${caption.subtitle || ""}${[caption.items].flat().join("")}`),
     ]);
   } catch { /* 字型沒載到就用系統字,不擋合成 */ }
 }
@@ -182,11 +182,11 @@ function drawCaption(ctx, box, caption, theme) {
 
   ctx.textBaseline = "alphabetic";
   ctx.fillStyle = theme.ink;
-  ctx.font = '700 44px "Noto Serif TC", serif';
+  ctx.font = '700 44px "PT Title", "Noto Serif TC", serif';
   if ("letterSpacing" in ctx) ctx.letterSpacing = "0.06em";
   ctx.fillText(caption.title || "今日穿搭", box.x, y);
   if ("letterSpacing" in ctx) ctx.letterSpacing = "0.12em";
-  ctx.font = '500 26px "Noto Sans TC", sans-serif';
+  ctx.font = '500 26px "PT Body", "Noto Sans TC", sans-serif';
   ctx.fillStyle = theme.muted;
   ctx.textAlign = "right";
   ctx.fillText(caption.date || "", box.x + box.w, y);
@@ -195,13 +195,13 @@ function drawCaption(ctx, box, caption, theme) {
 
   if (caption.subtitle) {
     y += 38;
-    ctx.font = '500 23px "Noto Sans TC", sans-serif';
+    ctx.font = '500 23px "PT Body", "Noto Sans TC", sans-serif';
     ctx.fillStyle = theme.muted;
     ctx.fillText(caption.subtitle, box.x, y);
   }
   if (caption.items) {
     y += 40;
-    ctx.font = '500 22px "Noto Sans TC", sans-serif';
+    ctx.font = '500 22px "PT Body", "Noto Sans TC", sans-serif';
     ctx.fillStyle = theme.ink;
     for (const line of fitItems(ctx, caption.items, box.w, 2)) { ctx.fillText(line, box.x, y); y += 32; }
   }

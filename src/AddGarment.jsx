@@ -880,10 +880,9 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
             {replacing && <small className="add-hint">{replacing.standIn
               ? "選一張照片或貼商品連結,框出衣服、去背之後換上。換上之後就不是代表款了,顏色照新圖重抓。"
               : "選一張照片或貼商品連結,框出衣服、去背之後換上。名稱、分類、顏色都不會變。"}</small>}
-            {/* 貼連結放大門(2026-10-21):網購過的不用拍(商品圖照樣去背,只是省掉拍和框);拍照是沒連結時的第二條路 */}
-            {!replacing && <small className="add-hint add-lead">網購過的衣服最快:到商品頁按「分享」拷貝連結,貼在下面,不用拍照。沒有連結的再拍照。</small>}
+            {/* 2026-11-06 本人「修好」:這頁原本七、八段說明。貼連結放大門(2026-10-21)的意思放進輸入框,其他併成按鈕下面一行 */}
             <label className="add-field">
-              <span>貼商品連結</span>
+              <span>{replacing ? "貼商品連結" : "貼商品連結（商品頁按分享，拷貝連結）"}</span>
               {/* type="text" 不是 "url":App「分享」拷出來的是「快來看看【品名】… https://…」整段,
                   type="url" 會被瀏覽器當成不合法網址擋下來,按了沒反應(2026-10-03 WebKit 實測)。網址在 findUrl 裡挑出來 */}
               <input
@@ -892,11 +891,12 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
                 autoComplete="off"
                 value={linkText}
                 onChange={(event) => setLinkText(event.target.value)}
-                placeholder="https://"
+                placeholder={replacing ? "https://" : "網購過的，貼商品網址就好"}
                 aria-invalid={Boolean(linkProblem)}
               />
               {linkProblem && <small className="add-field-error">{linkProblem}</small>}
             </label>
+            {(linkText.trim() || replacing) && (
             <small className="add-hint" role="status">
               {parsedLink?.notProduct
                 ? `這是 ${parsedLink.brand} 的網址,但不是單一商品頁。打開那件商品,按分享、拷貝連結再貼。`
@@ -912,42 +912,33 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
                           ? "這頁讀不到商品圖,網址會存起來,接著選截圖。"
                           : "貼品牌官網或購物網站的商品連結,讀得到就能直接挑圖;讀不到的(像蝦皮、Zara)用截圖。"}
             </small>
+            )}
             {linkDupe && (
               <small className="add-hint add-dupe-early" role="status">
                 這件加過了:「{linkDupe.name}」{linkDupe.wishlist ? ",在想買的裡" : ",已經在衣櫃裡"}。還是可以再加一次。
               </small>
             )}
-            {/* 打開這頁(open)就開始下載去背模型,所以模型大小要在這頁講,不是等到去背中才講(2026-10-24 取捨)。
-                原本這裡是拍照前的皺摺提醒:還沒選要拍照就先講,太早;拍完、框衣服那一步有,附「重拍一張」 */}
-            {/* 照實講什麼時候開始下載:一般是打開這頁就先載(2026-10-05 本人要的,選照片、框衣服時就載完);
-                開了省流量或 2G 不先載(cutout.js 的 preloadsEarly),去背時才下載 */}
-            {!modelReady() && (
-              <small className="add-hint">
-                {preloadsEarly()
-                  ? `第一次去背要下載約 ${MODEL_MB}MB 的模型,打開這一頁就開始下載了。`
-                  : `第一次去背要下載約 ${MODEL_MB}MB 的模型,去背時才開始下載;用行動網路的話,建議連上 Wi-Fi 再選照片。`}
-                照片在這台裝置上處理,不會上傳。
-              </small>
-            )}
             <div className="add-actions">
               <button type="button" className="secondary-button key-button" onClick={() => { setLink(parsedLink?.notProduct ? null : effectiveLink ? { ...effectiveLink, images: [] } : null); (parsedLink || replacing || !onBatchAdded ? inputRef : multiRef).current?.click(); }}>
-                {parsedLink ? "改用照片" : "沒有連結,拍照或選照片"}
+                {parsedLink ? "改用照片" : "沒有連結，拍照或選照片"}
               </button>
-              <button type="submit" className="primary-button" disabled={!parsedLink || parsedLink.notProduct || pageLoading}>
-                {pageLoading ? "讀取中…" : effectiveLink?.images.length ? "列出商品圖" : "選截圖"}
-              </button>
+              {parsedLink && (
+                <button type="submit" className="primary-button" disabled={parsedLink.notProduct || pageLoading}>
+                  {pageLoading ? "讀取中…" : effectiveLink?.images.length ? "列出商品圖" : "選截圖"}
+                </button>
+              )}
             </div>
-            {/* 一次好幾張(2026-11-02):懶的是拍完之後一件件框、等、填,不是拍照 */}
-            {!replacing && !parsedLink && onBatchAdded && <small className="add-hint">從相簿可以一次選好幾張，每張自動去背、直接放進衣櫃。</small>}
-            {/* 第三條路(2026-10-30 本人「代表款不要只放在入口,新增第一件時旁邊也要有」):沒連結也不想拍的,從這裡直接進代表款。
-                先把這個視窗收掉(reset 會把 history 那筆也退掉),再開代表款;換圖時不出現,換圖是換成自己的,不是放代表款 */}
-            {/* 店裡比一下(2026-11-02 本人「新增和店裡比一下是一樣的,感覺可以刪掉」):頁首那顆拿掉,入口收到這裡。功能留著:
-                它不存,是拍正在看的那件、比家裡有幾件像的,跟新增不一樣 */}
-            {!replacing && renderCheck && (
-              <p className="add-alt">在店裡挑衣服？<button type="button" onClick={() => { setLink(null); setLinkText(""); openStore(); }}>拍一張，跟家裡的比一下（不存）</button></p>
-            )}
-            {!replacing && onQuickStart && (
-              <p className="add-alt">不想拍、也沒連結？<button type="button" onClick={() => { reset(); onQuickStart(); }}>點幾件代表款，先配一套</button></p>
+            {/* 模型大小要在這頁講(2026-10-24 取捨):打開這頁就開始下載;開了省流量或 2G、內建瀏覽器不先載(preloadsEarly),去背時才下載 */}
+            <small className="add-hint">
+              {!replacing && !parsedLink && onBatchAdded ? "可以一次選好幾張，自動去背放進衣櫃。" : ""}照片在這台裝置上處理，不會上傳。
+              {!modelReady() && (preloadsEarly() ? `第一次要下載約 ${MODEL_MB}MB，打開這一頁就開始下載。` : `第一次去背要下載約 ${MODEL_MB}MB，去背時才開始下載；行動網路建議連 Wi-Fi。`)}
+            </small>
+            {/* 店裡比一下不存,代表款不用拍(2026-11-02、2026-10-30):收成並排兩顆,換圖時不出現 */}
+            {!replacing && (renderCheck || onQuickStart) && (
+              <p className="add-alt">
+                {renderCheck && <button type="button" onClick={() => { setLink(null); setLinkText(""); openStore(); }}>在店裡比一下（不存）</button>}
+                {onQuickStart && <button type="button" onClick={() => { reset(); onQuickStart(); }}>不想拍？點幾件代表款</button>}
+              </p>
             )}
           </form>
         </div>

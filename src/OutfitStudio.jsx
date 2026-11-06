@@ -1233,7 +1233,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
         {/* 桌機:這一段(人台、指令框、例句、理由、按鈕)跟著畫面走;收藏、準不準、備份留在這一欄最下面(2026-10-08 本人) */}
         <div className="studio-stage-main">
         <div className={`studio-stage-sticky${settling ? " is-settling" : ""}`} ref={stickyRef}>
-        {/* 示範衣櫃才有(2026-10-24 試用者:「打一句話就能改」藏太深,手機輸入框在人台下面、第一屏看不到):
+        {/* 示範衣櫃才有(2026-10-24 試用者:「打一句話就能改」藏太深,當時手機輸入框在人台下面、第一屏看不到,2026-11-06 才搬上來):
             人台上面放一句例句,點了就照這句重挑;說過一句話就收起來。這句沒成功(例如抓不到天氣)就再出現 */}
         {closet === "demo" && (!tried || daily?.error) && (
           <p className="studio-try">

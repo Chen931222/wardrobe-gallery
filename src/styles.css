@@ -1,8 +1,10 @@
 /* [本 fork 修改] 上游 tandpfun/wardrobe 既有檔案。本 fork 的改動:改暗色襯線配色,新增搭配工作室、入口圓環、今日推薦與新增刪除面板樣式。 */
 /* 2026-11-05 本人「要粗一點、要有角度,不要那麼圓潤」,看過對照圖選 C:標題思源宋體 700,其他思源黑體 500。
    各只載一種粗細,規則裡寫的 400、600 都會對到這一種(font-synthesis: none,不會硬描假粗體)。Cormorant 拿掉 */
-@import "@fontsource/noto-sans-tc/500.css";
-@import "@fontsource/noto-serif-tc/700.css";
+/* 2026-11-06:第一次打開要載 20 幾個字型切片(慢 4G 字型 7 秒才齊)。站上用得到的字先做成兩個小檔(tools/make-ui-fonts.py),一次載完;
+   完整字型 main.jsx 等畫面閒下來才載,只有打了小檔裡沒有的字才會用到 */
+@font-face { font-family: "PT Body"; src: url("./fonts/ui-body-500.woff2") format("woff2"); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: "PT Title"; src: url("./fonts/ui-title-700.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
 
 /* 配色來源:使用者自己衣櫃的實拍照 + 書櫃站的編輯部暗色語言(2026-07-23 指定改暗)。
    深色 = 預設。錨定使用者自己的書櫃站(底 #141310、字 #F2ECE0)—— 近黑暖木配奶油襯線,
@@ -45,9 +47,9 @@
   /* 動畫曲線(2026-10-08 加,目前只有目錄用):離場進場用 ease-out,在畫面上移動用 ease-in-out */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-  --font-title: "Noto Serif TC", Georgia, serif;   /* 標題 */
+  --font-title: "PT Title", "Noto Serif TC", Georgia, serif;   /* 標題 */
   --font-display: var(--font-body);   /* 導覽、按鈕、數字、小標籤(以前是 Cormorant) */
-  --font-body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  --font-body: "PT Body", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
 
   font-family: var(--font-body);
   color: var(--body);
@@ -3895,4 +3897,20 @@ button.key-button:disabled { background: transparent; opacity: .55; }   /* 還�
 @media (min-width: 1441px) {
   .gallery-pane.is-page { max-width: clamp(1440px, 72vw, 1900px); margin-inline: auto; }
   .is-page .closet-index, .is-page .closet-search-wrap, .is-page .closet-total { max-width: none; }
+}
+
+/* 新增視窗減字(2026-11-06):沒貼連結時只有一顆滿版按鈕,另外兩條路並排 */
+.add-actions .key-button:only-child { flex: 1 1 auto; }
+.add-panel .add-alt { gap: 8px; align-items: stretch; }
+.add-panel .add-alt button { flex: 1 1 0; min-width: 0; justify-content: center; padding: 6px 8px; text-align: center; }
+/* 搭配頁單欄(2026-11-06 本人「修好」):輸入框和例句移到人台上面,第一屏就看得到;舊版在人台下面,貼文叫大家打字卻要先往下滑。
+   例句一定要一起搬:手機是點輸入框才展開,留在原地等於展開了也看不到 */
+@media (max-width: 860px) {
+  .studio-occasion, .studio-examples { order: -1; }
+}
+@media (max-width: 640px) {
+  .studio-occasion { margin: 0; }
+  .studio-occasion input { flex: 1 1 0; min-width: 0; max-width: none; }
+  .studio-occasion button[type="submit"] { flex: none; }
+  .studio-try-lead { display: none; }
 }
