@@ -71,11 +71,11 @@ const STEPS = [
   { key: "weather", no: "02", title: ["照你那邊的天氣", "配一套，說為什麼"], body: "天氣照你選的城市。圖是示範衣櫃；你的衣櫃有一件上衣、一件下身，就配得出來。" },
   { key: "talk", no: "03", title: ["不喜歡，", "打一句話就換"], body: "說個場合，整套照著重挑；只說不要哪一件，就只動那一件。" },
 ];
-// 第二章:示範衣櫃實際配出來的一套(2026-11-05 換字體、底色後在正式站重拍)。
-// 城市選基隆:那天短暫雨、降雨 60%,看得到「下雨」那幾條判斷。理由照原文、標點換全形,收三條:溫度、下雨、顏色各一
-const WEATHER_SHOT = { src: "/media/weather-demo.jpg", when: "基隆，24°、短暫雨、降雨 60%，2026 年 11 月 5 日" };
+// 第二章:示範衣櫃實際配出來的一套(2026-11-06 手機輸入框搬到人台上面後,在正式站重拍,只拍一次)。
+// 城市選宜蘭:那天短暫陣雨、降雨 80%,看得到「下雨」那幾條判斷。理由照原文、標點換全形,五條收三條:溫度、下雨、顏色各一
+const WEATHER_SHOT = { src: "/media/weather-demo.jpg", when: "宜蘭，24°、短暫陣雨、降雨 80%，2026 年 11 月 6 日" };
 const RECORDED_REASONS = [
-  "體感 26°，薄長袖或短袖都行",
+  "體感 25°，薄長袖或短袖都行",
   "會下雨，加件「深藍連帽防風外套」",
   "只有「深藍連帽防風外套」有顏色，其他低調色襯著它",
 ];
@@ -311,7 +311,7 @@ export function Welcome({ demoItems, onAdd, onBack = null, onDemo, onImportFile,
               )}
               {step.key === "weather" && (
                 <div className="story-media">
-                  <img className="story-video" src={WEATHER_SHOT.src} alt="示範衣櫃的搭配頁：人台穿著深藍連帽防風外套、黑色丹寧上衣、卡其短褲、慢跑鞋，背黑色後背包" loading="lazy" />
+                  <img className="story-video" src={WEATHER_SHOT.src} alt="示範衣櫃的搭配頁：人台穿著深藍連帽防風外套、黑色丹寧上衣、深色直筒牛仔褲、慢跑鞋，背黑色後背包" loading="lazy" />
                 </div>
               )}
               {step.key === "weather" && (
