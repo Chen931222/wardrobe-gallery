@@ -41,6 +41,7 @@ async function loadWeather(city) {
     rainProb: data.rainProb ?? 0,
     tMax: data.tMax,
     tMin: data.tMin,
+    tomorrow: data.tomorrow || null,
     source: data.source,
   };
 }
@@ -106,8 +107,9 @@ const SUNNY_RAIN_MAX = 40;
 /* ---------- 溫度規則(台灣常見穿法) ---------- */
 
 function targetWarmth(feelsLike) {
-  if (feelsLike >= 30) return 1;
-  if (feelsLike >= 26) return 1.5;
+  // 2026-11-06 改:28° 以上才只穿薄的(原本 26–29° 長短袖各半,理由卻寫「選透氣的穿」);24–27° 短袖、薄長袖都行(原本 24–25° 短袖 0%、三成帽 T)
+  if (feelsLike >= 28) return 1;
+  if (feelsLike >= 24) return 1.5;
   if (feelsLike >= 22) return 2.5;
   if (feelsLike >= 18) return 3.5;
   if (feelsLike >= 14) return 5;
@@ -115,7 +117,22 @@ function targetWarmth(feelsLike) {
 }
 
 function needOuter(feelsLike, rainProb) {
-  return feelsLike < 24 || (rainProb >= 60 && feelsLike < 28);
+  return feelsLike < 24 || (rainProb >= 60 && feelsLike < 26);
+}
+
+/** 這件外套這個體感穿得住嗎。原本要穿外套就硬穿:衣櫃只有羽絨時 23°、27° 下雨都穿羽絨(2026-11-06 實測 100%) */
+const outerFits = (outer, feelsLike) => {
+  const warmth = outer.warmth ?? 3;
+  return warmth >= 5 ? feelsLike < 18 : warmth >= 4 ? feelsLike < 20 : true;
+};
+
+/** 什麼時候的天氣:打「明天」或晚上 9 點到清晨 5 點看下一個白天(伺服器算好的 weather.tomorrow),打「今天」或白天看現在 */
+export function weatherFor(weather, intent = null, now = new Date()) {
+  const next = weather?.tomorrow;
+  if (!next || intent?.when === "today") return weather;
+  const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Taipei", hour: "numeric", hourCycle: "h23" }).format(now));
+  if (intent?.when === "tomorrow") return { ...weather, ...next, tomorrow: null, when: "asked" };
+  return hour >= 21 || hour < 5 ? { ...weather, ...next, tomorrow: null, when: "night" } : weather;
 }
 
 /** 使用者說的冷熱(warmthDelta)→ 標籤與理由共用的一句話,兩邊不再一個寫冷、一個寫涼。 */
@@ -402,8 +419,9 @@ export function parseIntent(text) {
   else if (has(["熱"])) warmthDelta = 5;
   const forceRainy = has(["下雨", "會下雨", "雨天", "雷雨", "陣雨", "下雨天", "颱風", "大雨", "暴雨", "梅雨", "淋雨", "會濕"]);
   const palette = paletteOf(t) || null;
+  const when = has(["明天", "明日", "明早", "明晚"]) ? "tomorrow" : has(["今天", "今日", "今晚", "現在"]) ? "today" : null;
 
-  const intent = { raw, understood: null, formality, label, activity, occasionPref, boost, warmthDelta, forceRainy, palette, exclude: exclusions.list, alsoHeard, guessed, heard };
+  const intent = { raw, understood: null, formality, label, activity, occasionPref, boost, warmthDelta, forceRainy, palette, exclude: exclusions.list, alsoHeard, guessed, heard, when };
   intent.understood = describeIntent(intent);
   return intent;
 }
@@ -411,6 +429,7 @@ export function parseIntent(text) {
 /** 「正式場合 · 當冷天穿 · 全黑」:聽懂了什麼,給畫面上那一行用。什麼都沒有回 null。 */
 function describeIntent(intent) {
   const bits = [];
+  if (intent.when) bits.push(intent.when === "tomorrow" ? "明天" : "今天");
   if (intent.label) bits.push(intent.label);
   if (intent.warmthDelta) bits.push(warmthPhrase(intent.warmthDelta));
   if (intent.forceRainy) bits.push("當下雨天");
@@ -927,6 +946,7 @@ export function adjustIntent(prev, adj) {
     else { base.formality = next; base.label = LADDER_LABEL[next]; base.activity = null; base.occasionPref = null; base.boost = null; }
   }
   if (adj.warmthDelta) base.warmthDelta = Math.max(-12, Math.min(12, (base.warmthDelta || 0) + adj.warmthDelta));
+  if (adj.when) base.when = adj.when;   // 「明天涼一點」:微調也要看明天
   if (adj.palette !== undefined) base.palette = adj.palette;   // 色系接在原本的場合上;null = 不限顏色了
   if (adj.exclude?.length) base.exclude = mergeExclude(base.exclude, adj.exclude);   // 「再正式一點,不要包」
   base.alsoHeard = []; base.guessed = false;   // 這兩個只對說出它的那一句有意義,接著用不再講
@@ -1007,7 +1027,7 @@ export function parseRequest(text) {
     const own = parseIntent(sceneText);
     const base = own?.formality && !own.guessed ? { ...own, exclude: intent?.exclude || [] } : null;
     const notes = base ? heardNotes(base, raw, sceneText) : [];
-    return { kind: "adjust", raw, formalityStep: step, warmthDelta: warm, ...(palette !== undefined ? { palette } : {}), exclude: intent?.exclude || [], base, notes };
+    return { kind: "adjust", raw, formalityStep: step, warmthDelta: warm, ...(palette !== undefined ? { palette } : {}), ...(intent?.when ? { when: intent.when } : {}), exclude: intent?.exclude || [], base, notes };
   }
 
   const descriptors = detectDescriptors(t);
@@ -1145,7 +1165,8 @@ export function randomOutfit(items, weather = null) {
     const topTarget = target === null ? null : wantOuter ? Math.max(1, target - 2.4) : target;
     outfit.upperbody = pickOne(topTarget === null ? tops : narrow(tops, (top) => !known(top) || Math.abs(top.warmth - topTarget) <= 1.5));
   }
-  const outers = byPart("wholebody_up");
+  const rainOuter = wantOuter && feels >= 24;   // 只因為下雨才穿:要真的標了不怕雨
+  const outers = byPart("wholebody_up").filter((outer) => feels === null || (outerFits(outer, feels) && (!rainOuter || outer.rainOk === true)));
   if (outers.length) {
     if (wantOuter === null) {
       if (Math.random() < 0.45) outfit.wholebody_up = pickOne(outers);
@@ -1201,7 +1222,8 @@ export function rainOnlySlots(intent, worn, weather, items = []) {
     (items.some((other) => other.part === part && other.rainOk !== false && other.id !== item.id) ? release : stuck).push(slot);
   }
   // 外套:身上沒有,而且這個體感下雨該加(跟 recommendOutfit 同一個 needOuter、降雨一樣拉到 80%)才放開那格
-  if (!worn.wholebody_up && needOuter(weather.feelsLike, Math.max(weather.rainProb ?? 0, 80))) release.push("wholebody_up");
+  if (!worn.wholebody_up && needOuter(weather.feelsLike, Math.max(weather.rainProb ?? 0, 80))
+    && items.some((other) => other.part === "wholebody_up" && !other.wishlist && outerFits(other, weather.feelsLike) && (weather.feelsLike < 24 || other.rainOk === true))) release.push("wholebody_up");
   return { release, stuck };
 }
 
@@ -1257,8 +1279,14 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
   // 外套是最外層、最先淋到:下雨天跟鞋、包一樣先拿掉怕雨的(全都怕雨就不拿,總得穿一件)
   const rainyDay = weather.rainProb >= 50;
   const everyOuter = byPart("wholebody_up");
-  const dryOuters = everyOuter.filter((outer) => outer.rainOk !== false);
-  const allOuters = rainyDay && dryOuters.length ? dryOuters : everyOuter;
+  // 太厚的不穿;只因為下雨才穿(體感 24° 以上)的,要標了「不怕雨」才算,沒標的棉外套加上去沒有意義
+  const onlyForRain = wantOuter && weather.feelsLike >= 24;
+  const fitOuters = everyOuter.filter((outer) => outerFits(outer, weather.feelsLike) && (!onlyForRain || outer.rainOk === true));
+  // 20° 以下:薄球衣不算外套,櫃裡有更保暖的就不拿它充數
+  const warmOuters = fitOuters.filter((outer) => (outer.warmth ?? 3) >= 2);
+  const wearableOuters = wantOuter && weather.feelsLike < 20 && warmOuters.length ? warmOuters : fitOuters;
+  const dryOuters = wearableOuters.filter((outer) => outer.rainOk !== false);
+  const allOuters = rainyDay && dryOuters.length ? dryOuters : wearableOuters;
   const thinOuters = allOuters.filter((outer) => outer.warmth <= 1);
   // 說了色系:敞開穿的那件也要合色系,不然「全黑」披上彩色球衣(這櫃的薄外套全是球衣)
   const layerOuters = thinOuters.filter(fitsPalette);
@@ -1291,6 +1319,9 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
     return value < 0 ? value : recall && value > 0 ? 2 : 0;
   };
 
+  // 短褲:30° 以上才一定偏,28–29° 擲骰子。直接加分會被主迴圈放大成永遠(原本 26° 以上 100% 短褲,見上面薄外套那段註解)
+  const shortsDay = weather.feelsLike >= 30 || (weather.feelsLike >= 28 && Math.random() < 0.7);
+
   let best = null;
   for (const top of tops) {
     for (const bottom of bottoms) {
@@ -1302,9 +1333,11 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
         // 敞開穿的造型層保暖貢獻當 0,免得引擎為了湊保暖度而挑錯上衣
         const upper = top.warmth + (outer && !useOpenLayer ? outer.warmth * 0.8 : 0);
         score += 4 - Math.abs(upper - target) * 2.2;
+        // 20° 以下裡面至少長袖:外套一脫只剩短袖會冷(原本 18–20° 六成短袖＋外套)
+        if (weather.feelsLike <= 20 && top.warmth <= 1) score -= 3;
 
         // 2) 下身:熱天短褲加分,冷天短褲扣分
-        if (weather.feelsLike >= 26 && bottom.warmth <= 1 && intent?.formality !== "formal") score += 1.2;
+        if (shortsDay && bottom.warmth <= 1 && intent?.formality !== "formal") score += 1.2;
         if (weather.feelsLike < 20 && bottom.warmth <= 1) score -= 3;
         // 20–23° 也還不是短褲天;為了保暖才穿外套,下面卻穿短褲,更怪(2026-10-05 示範衣櫃模擬:560 次裡 119 次)。
         // 下雨套防風外套配短褲照舊可以:台灣的雨天常這樣穿,褲管不會濕
@@ -1452,9 +1485,12 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
   // 外面很熱、人說冷:多半是冷氣房、圖書館。外套要講成「帶著進室內穿」,不是「早晚偏涼」
   const indoorCold = intent?.warmthDelta < 0 && forecast.feelsLike >= 28;
   if (intent?.warmthDelta) {
-    reasons.push(`照你說的${warmthPhrase(intent.warmthDelta)}:預報體感 ${forecast.feelsLike}°,照 ${feel}° 的穿法挑,${advice}`);
+    reasons.push(`照你說的${warmthPhrase(intent.warmthDelta)}:${forecast.when ? "明天" : ""}預報體感 ${forecast.feelsLike}°,照 ${feel}° 的穿法挑,${advice}`);
   } else {
-    reasons.push(`體感 ${feel}°,${advice}`);
+    reasons.push(`${forecast.when === "night" ? "晚上了,照明天白天配:" : forecast.when ? "明天" : ""}體感 ${feel}°,${advice}`);
+  }
+  if (wantOuter && !onlyForRain && !best.outer && !wearableOuters.length && everyOuter.length && !locked.wholebody_up && locked.wholebody_up !== null) {
+    reasons.push("櫃裡的外套這個天氣太厚,先不穿");
   }
   if (best.outer && !locked.wholebody_up) {
     const name = `「${best.outer.name}」`;
@@ -1479,8 +1515,8 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
   reasons.push(...exclusion.notes);
   // 使用者自己說會下雨時,別報「降雨 80%」(那是被覆寫的假數字,和面板上的真預報打架);用「你說會下雨」誠實表述
   if (intent?.forceRainy) reasons.push("你說會下雨,記得帶傘");
-  else if (weather.rainProb >= 50) reasons.push(`降雨 ${weather.rainProb}%,記得帶傘`);
-  else if (weather.rainProb >= 30) reasons.push(`降雨 ${weather.rainProb}%,包包塞把折傘`);
+  else if (weather.rainProb >= 50) reasons.push(`${forecast.when ? "明天" : ""}降雨 ${weather.rainProb}%,記得帶傘`);
+  else if (weather.rainProb >= 30) reasons.push(`${forecast.when ? "明天" : ""}降雨 ${weather.rainProb}%,包包塞把折傘`);
   if (skippedShoes.length || skippedBags.length) {
     const avoided = [
       skippedShoes.length && `${materialsOf(skippedShoes).join("、")}的鞋`,

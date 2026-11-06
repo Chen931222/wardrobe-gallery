@@ -3,7 +3,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useIndexIndicator } from "./useIndexIndicator.js";
 import { ArrowCounterClockwise, ArrowsClockwise, CalendarCheck, Export, FloppyDisk, ImageSquare, Lock, LockOpen, MagnifyingGlass, Microphone, Sparkle, Trash, X } from "@phosphor-icons/react";
 import { CitySelect, WeatherCredit } from "./CitySelect.jsx";
-import { adjustIntent, fetchWeather, findItemForSwap, parseRequest, rainOnlySlots, randomOutfit, readWearLog, recommendOutfit, recordWear, unrecordWear } from "./recommend.js";
+import { adjustIntent, fetchWeather, findItemForSwap, parseRequest, rainOnlySlots, randomOutfit, readWearLog, recommendOutfit, weatherFor, recordWear, unrecordWear } from "./recommend.js";
 import { syncCode } from "./sync.js";
 import { track } from "./analytics.js";
 import { downloadBackupZip, importBackupFile } from "./backup.js";
@@ -692,7 +692,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       if (!weatherRef.current) weatherRef.current = await fetchWeather();
       // 等天氣、語音辨識的這段時間可能自己換過衣服:用現在身上的,不用按下去那一刻的(保留身上這套時特別看得出來)
       const wearing = wearingRef.current;
-      const weather = weatherRef.current;
+      const weather = weatherFor(weatherRef.current, intent);   // 打「明天」或晚上:看下一個白天
       const wearLog = readWearLog();
       const lockedStudio = {};
       for (const slot of Object.keys(useLocks)) if (wearing[slot]) lockedStudio[slot] = wearing[slot];
@@ -1207,7 +1207,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       <>
         {daily.weather && (
           <p className="studio-daily-weather">
-            <CitySelect /> {daily.weather.temp}°(體感 {daily.weather.feelsLike}°)· {daily.weather.desc} · 降雨 {daily.weather.rainProb}% <WeatherCredit source={daily.weather.source} />
+            {daily.weather.when && "明天 "}<CitySelect /> {daily.weather.temp}°(體感 {daily.weather.feelsLike}°)· {daily.weather.desc} · 降雨 {daily.weather.rainProb}% <WeatherCredit source={daily.weather.source} />
           </p>
         )}
         {!!main.length && (

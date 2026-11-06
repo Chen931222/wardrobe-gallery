@@ -56,9 +56,10 @@ export function parseCwa(data, now = Date.now()) {
 
   // 現在落在哪一格:開始時間 ≤ 現在的最後一格;都在未來(剛發布)就拿第一格
   const current = (slots) => slots.filter((slot) => slot.start <= now).at(-1) || slots[0];
-  const ahead = (slots) => slots.filter((slot) => slot.end > now && slot.start < now + DAY);
+  const ahead = (slots, span = DAY) => slots.filter((slot) => slot.end > now && slot.start < now + span);
   const temps = ahead(elements.get("溫度")).map((slot) => slot.value).filter(Number.isFinite);
-  const rain = ahead(elements.get("3小時降雨機率")).map((slot) => slot.value).filter(Number.isFinite);
+  // 降雨只看接下來 12 小時(2026-11-06):原本看 24 小時,半夜才下的雨也算進今天
+  const rain = ahead(elements.get("3小時降雨機率"), DAY / 2).map((slot) => slot.value).filter(Number.isFinite);
   const temp = current(elements.get("溫度")).value;
   const feelsLike = current(elements.get("體感溫度")).value;
   if (!Number.isFinite(temp) || !Number.isFinite(feelsLike)) throw new Error("氣象署回的溫度不是數字");
@@ -69,6 +70,28 @@ export function parseCwa(data, now = Date.now()) {
     rainProb: rain.length ? Math.max(...rain) : 0,
     tMax: Math.round(temps.length ? Math.max(...temps) : temp),
     tMin: Math.round(temps.length ? Math.min(...temps) : temp),
+    tomorrow: nextDaytime(elements, now),
+  };
+}
+
+/** 下一個白天(台灣時間 7–19 點)的預報:打「明天」、晚上打開時用。清晨 5 點前的「明天」還是今天白天 */
+function nextDaytime(elements, now) {
+  const TAIPEI = 8 * 60 * 60 * 1000, HOUR = 60 * 60 * 1000;
+  const midnight = Math.floor((now + TAIPEI + 19 * HOUR) / DAY) * DAY - TAIPEI;
+  const from = midnight + 7 * HOUR, to = midnight + 19 * HOUR;
+  const during = (name) => elements.get(name).filter((slot) => slot.end > from && slot.start < to);
+  const numbers = (name) => during(name).map((slot) => slot.value).filter(Number.isFinite);
+  const mean = (list) => Math.round(list.reduce((sum, value) => sum + value, 0) / list.length);
+  const temps = numbers("溫度"), feels = numbers("體感溫度"), rain = numbers("3小時降雨機率");
+  if (!temps.length || !feels.length) return null;
+  const noon = midnight + 12 * HOUR;
+  return {
+    temp: mean(temps),
+    feelsLike: mean(feels),
+    desc: String((during("天氣現象").find((slot) => slot.start <= noon && slot.end > noon) || during("天氣現象")[0])?.value ?? ""),
+    rainProb: rain.length ? Math.max(...rain) : 0,
+    tMax: Math.round(Math.max(...temps)),
+    tMin: Math.round(Math.min(...temps)),
   };
 }
 
@@ -82,8 +105,8 @@ async function fromCwa(city, apiKey, fetchImpl, now) {
 async function fromOpenMeteo(city, fetchImpl) {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${city.lat}&longitude=${city.lon}`
     + `&current=temperature_2m,apparent_temperature,weather_code`
-    + `&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max`
-    + `&timezone=Asia%2FTaipei&forecast_days=1`;
+    + `&daily=temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,precipitation_probability_max,weather_code`
+    + `&timezone=Asia%2FTaipei&forecast_days=2`;
   const response = await fetchImpl(url, { signal: AbortSignal.timeout(8000) });
   if (!response.ok) throw new Error(`Open-Meteo 回 ${response.status}`);
   const data = await response.json();
@@ -94,6 +117,14 @@ async function fromOpenMeteo(city, fetchImpl) {
     rainProb: data.daily.precipitation_probability_max[0] ?? 0,
     tMax: Math.round(data.daily.temperature_2m_max[0]),
     tMin: Math.round(data.daily.temperature_2m_min[0]),
+    tomorrow: {
+      temp: Math.round((data.daily.temperature_2m_max[1] + data.daily.temperature_2m_min[1]) / 2),
+      feelsLike: Math.round((data.daily.apparent_temperature_max[1] + data.daily.apparent_temperature_min[1]) / 2),
+      desc: WMO_DESC[data.daily.weather_code[1]] || "",
+      rainProb: data.daily.precipitation_probability_max[1] ?? 0,
+      tMax: Math.round(data.daily.temperature_2m_max[1]),
+      tMin: Math.round(data.daily.temperature_2m_min[1]),
+    },
   };
 }
 
