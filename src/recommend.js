@@ -104,6 +104,22 @@ const takesBelt = (bottom) => Boolean(bottom) && !/抽繩|鬆緊|drawstring|elas
 const isSunglasses = (item) => /太陽|墨鏡|sunglass|sun-glass/i.test(`${item?.name || ""} ${(item?.tags || []).join(" ")}`);
 const SUNNY_RAIN_MAX = 40;
 
+/** 從接近最高分的候選裡,依分數抽一個(2026-11-06)。
+ * 舊做法是每組加一點隨機再取最高:組合一多,最高分總會落在同一邊,一點分差就變成「永遠」或「從不」(26° 以上 100% 短褲)。
+ * window:差最高分超過這麼多的直接不考慮,扣 2 分以上的(怕雨、冷天短褲、差一級保暖)不會被抽到。
+ * temperature:越小越偏高分;差 1 分機率差 e^(1/temperature) 倍。 */
+function pickByScore(candidates, { window = 2, temperature = 0.8 } = {}) {
+  const top = Math.max(...candidates.map((entry) => entry.score));
+  const near = candidates.filter((entry) => entry.score >= top - window);
+  const weights = near.map((entry) => Math.exp((entry.score - top) / temperature));
+  let roll = Math.random() * weights.reduce((sum, weight) => sum + weight, 0);
+  for (let i = 0; i < near.length; i += 1) {
+    roll -= weights[i];
+    if (roll <= 0) return near[i];
+  }
+  return near[near.length - 1];
+}
+
 /* ---------- 溫度規則(台灣常見穿法) ---------- */
 
 function targetWarmth(feelsLike) {
@@ -1282,9 +1298,9 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
   // 太厚的不穿;只因為下雨才穿(體感 24° 以上)的,要標了「不怕雨」才算,沒標的棉外套加上去沒有意義
   const onlyForRain = wantOuter && weather.feelsLike >= 24;
   const fitOuters = everyOuter.filter((outer) => outerFits(outer, weather.feelsLike) && (!onlyForRain || outer.rainOk === true));
-  // 20° 以下:薄球衣不算外套,櫃裡有更保暖的就不拿它充數
+  // 要穿外套的天氣,薄球衣不算外套,櫃裡有更保暖的就不拿它充數
   const warmOuters = fitOuters.filter((outer) => (outer.warmth ?? 3) >= 2);
-  const wearableOuters = wantOuter && weather.feelsLike < 20 && warmOuters.length ? warmOuters : fitOuters;
+  const wearableOuters = wantOuter && warmOuters.length ? warmOuters : fitOuters;
   const dryOuters = wearableOuters.filter((outer) => outer.rainOk !== false);
   const allOuters = rainyDay && dryOuters.length ? dryOuters : wearableOuters;
   const thinOuters = allOuters.filter((outer) => outer.warmth <= 1);
@@ -1319,10 +1335,10 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
     return value < 0 ? value : recall && value > 0 ? 2 : 0;
   };
 
-  // 短褲:30° 以上才一定偏,28–29° 擲骰子。直接加分會被主迴圈放大成永遠(原本 26° 以上 100% 短褲,見上面薄外套那段註解)
-  const shortsDay = weather.feelsLike >= 30 || (weather.feelsLike >= 28 && Math.random() < 0.7);
+  // 短褲:30° 以上幾乎都穿,28–29° 偏短褲,以下不加分
+  const shortsBonus = weather.feelsLike >= 30 ? 2.5 : weather.feelsLike >= 28 ? 1.2 : 0;
 
-  let best = null;
+  const combos = [];
   for (const top of tops) {
     for (const bottom of bottoms) {
       for (const outer of outers.length ? outers : [null]) {
@@ -1337,7 +1353,7 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
         if (weather.feelsLike <= 20 && top.warmth <= 1) score -= 3;
 
         // 2) 下身:熱天短褲加分,冷天短褲扣分
-        if (shortsDay && bottom.warmth <= 1 && intent?.formality !== "formal") score += 1.2;
+        if (bottom.warmth <= 1 && intent?.formality !== "formal") score += shortsBonus;
         if (weather.feelsLike < 20 && bottom.warmth <= 1) score -= 3;
         // 20–23° 也還不是短褲天;為了保暖才穿外套,下面卻穿短褲,更怪(2026-10-05 示範衣櫃模擬:560 次裡 119 次)。
         // 下雨套防風外套配短褲照舊可以:台灣的雨天常這樣穿,褲管不會濕
@@ -1369,13 +1385,13 @@ export function recommendOutfit(items, weather, wearLog, intent = null, locked =
         if (!locked.lowerbody) score += seen(bottom, 1.4);
         if (!locked.wholebody_up) score += seen(outer, 1.4);
 
-        // 6) 一點隨機,讓連按有變化
-        score += Math.random() * 1.6;
-
-        if (!best || score > best.score) best = { top, bottom, outer, score };
+        combos.push({ top, bottom, outer, score });
       }
     }
   }
+
+  // 6) 不取最高分:從接近最高分的組合裡依分數抽,連按才有變化(見 pickByScore)
+  const best = pickByScore(combos);
 
   const outfit = { upperbody: best.top, lowerbody: best.bottom };
   if (best.outer) outfit.wholebody_up = best.outer;
