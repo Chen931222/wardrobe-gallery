@@ -175,7 +175,7 @@ const TRY_SEEN_KEY = "pairthis-try-seen";
 /** 指令要的東西怎麼說:「黑色」＋「開襟」＋「外套」;都沒講就用那一格的名稱 */
 function askedLabel(spec, fallback) {
   const descriptors = (spec.descriptors || []).map((group) => group[0]).filter((word) => !(spec.category || "").includes(word));
-  return `${spec.color?.word ? `${spec.color.word}色` : ""}${descriptors.join("")}${spec.category || fallback}`;
+  return `${spec.color?.word ? `${spec.color.word}色` : ""}${descriptors.join("")}${spec.category || fallback}`.replace(/t(?=恤)|(?<=[帽學])t/g, "T");   // 比對時轉過小寫,講回來要是帽T
 }
 
 /**
@@ -788,6 +788,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       });
     } catch (cause) {
       console.warn("weather failed", cause);
+      if (intent?.raw) setOccasion(intent.raw);   // 沒配成:那句話放回框裡,不用重打
       setDaily({ error: "抓不到天氣資料,檢查一下網路再試" });
     } finally {
       setDailyBusy(false);
@@ -852,13 +853,13 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       const result = recommendOutfit(items, weather, readWearLog(), lastIntentRef.current, toEngineLocks(lockedStudio), avoid, readTaste());
       const next = result.outfit?.[engineSlot];
       const label = SLOT_LABEL[slot];
-      if (!next || next.id === wearing[slot]?.id) { setDaily({ understood: `換${label}`, reasons: [`櫃裡沒有別的${label}可以換`] }); return; }
+      if (!next || next.id === wearing[slot]?.id) { setDaily({ understood: `櫃裡沒有別的${label}可以換`, did: true }); return; }
       const nextSlot = slotOf(next);
       setAdjusting(null);
       pushHistory(wearing); dirtyRef.current = true;
       setWearing((current) => ({ ...current, [nextSlot]: next }));
       noteRecommendation({ ...wearing, [nextSlot]: next });
-      setDaily({ understood: `換${label}`, reasons: [`換上「${next.name}」,是配著身上其他幾件挑的`] });
+      setDaily({ understood: `換上「${next.name}」`, did: true, reasons: ["配著身上其他幾件挑的"] });
     } finally {
       setDailyBusy(false);
     }
@@ -870,6 +871,8 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     const req = parseRequest(text);
     if (!req) return;
     markTried();
+    // 送出就清空(2026-11-06):字留在框裡、「照這句挑」還亮著,看起來像還沒送。聽不懂的留著,方便改
+    if (req.kind !== "unknown") setOccasion("");
     // 句子裡講「襯衫」、要留著/解鎖/脫掉的是上衣那格:改成襯衫格(換單品不用改,找到的那件自己會放進襯衫格)
     if (req.slot === "upperbody" && /襯衫/.test(req.raw || text) && ["keep", "unlock", "remove"].includes(req.kind)) req.slot = "shirt";
 
@@ -918,7 +921,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
       // 「穿哈利波特那件」這種點名:品名、標籤裡找不到那幾個字,就當成沒學過的詞,不亂換一件
       if (req.byText && !found?.textHit) { runRecommend(null, null, req.raw); return; }
       const askedSlotLabel = SLOT_LABEL[req.slot] || "這件";
-      if (!found) { setDaily({ understood: `換${askedSlotLabel}`, reasons: [`櫃裡沒有${askedSlotLabel}這一類的單品`] }); return; }
+      if (!found) { setDaily({ understood: `櫃裡沒有${askedSlotLabel}這一類的單品`, did: true }); return; }
       // 找到的那件可能建檔在別格(「灰色細針織開襟外套」在上衣):放進它自己的格子,不是硬塞進講的那一格
       const slot = slotOf(found.item);
       const label = SLOT_LABEL[slot];
@@ -929,9 +932,9 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
         const worn = (item) => Object.values(wearing).some((piece) => piece?.id === item.id);
         const alt = found.altColor && !worn(found.altColor) ? found.altColor : null;
         setDaily({
-          understood: `換${askedSlotLabel}:${asked}`,
+          understood: `櫃裡沒有${asked},這套先不換`,   // 沒換就第一句講沒換,不是「聽你說的」
+          did: true,
           reasons: [
-            `櫃裡沒有${asked},身上這套先不換`,
             ...(found.catHit && !worn(found.item) ? [`同一類最接近的是「${found.item.name}」`] : []),
             ...(alt ? [`顏色對的有「${alt.name}」`] : []),
             "要換的話,在衣架上點那一件",
@@ -950,8 +953,9 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
         return next;
       });
       setDaily({
-        understood: `換${label}${vague ? "" : `:${req.byText ? req.phrase : asked}`}`,
-        reasons: [found.exact ? `換上「${found.item.name}」` : `櫃裡沒有${asked},最接近的是「${found.item.name}」,先換上這件`],
+        understood: `換上「${found.item.name}」`,   // 2026-11-06:原本只把打的字講一遍(「換上衣:帽t」),換成哪件要看別處
+        did: true,
+        reasons: found.exact ? [] : [`櫃裡沒有${asked},這件最接近`],
       });
       return;
     }
@@ -1009,7 +1013,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
     rec.onresult = (event) => {
       const text = event.results?.[0]?.[0]?.transcript?.trim();
       if (!text) return;
-      setOccasion(text);           // 留在框裡,讓你看到它聽成什麼
+      setOccasion(text);           // 聽不懂時留在框裡,讓你看到它聽成什麼
       handleRequest(text);         // 講完直接跑,不用再按
     };
     rec.onerror = (event) => {
@@ -1191,7 +1195,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
   // 手機、平板照舊放同一個框;桌機說明搬到右欄衣架上面(2026-10-20,見上面 stickyRef 的註解)
   const dailyHead = daily && (daily.error ? <p className="studio-daily-error">{daily.error}</p> : daily.understood ? (
     <p className="studio-daily-understood">
-      {(daily.sticky || !daily.weather) && <span className="studio-daily-label">聽你說的</span>}{daily.understood}
+      {(daily.sticky || !daily.weather) && !daily.did && <span className="studio-daily-label">聽你說的</span>}{daily.understood}
       {daily.sticky && clearIntentButton}
     </p>
   ) : null);
@@ -1490,7 +1494,7 @@ export function OutfitStudio({ items, initialOutfit = null, initialDaily = null,
         {daily && (stacked ? (dailyHead || dailyExplain) && (
           <div className="studio-daily" role="status">{dailyHead}{dailyExplain}</div>
         ) : dailyHead && (
-          <div className="studio-daily" role="status">{dailyHead}</div>
+          <div className="studio-daily is-line" role="status">{dailyHead}</div>
         ))}
 
         {/* 動作分三層,只有「今日推薦」是 accent 實心:一眼看到主要下一步。

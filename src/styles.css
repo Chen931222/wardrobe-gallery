@@ -3914,3 +3914,7 @@ button.key-button:disabled { background: transparent; opacity: .55; }   /* 還�
   .studio-occasion button[type="submit"] { flex: none; }
   .studio-try-lead { display: none; }
 }
+
+/* 桌機:回覆只有一句時不是框,是輸入框下面一行字(2026-11-06:灰底同輸入框,看起來像不能按的欄位) */
+.studio-daily.is-line { padding: 0; border: 0; background: none; }
+.studio-daily.is-line .studio-daily-understood { margin: 0; font-size: 14px; letter-spacing: .02em; color: var(--ink); }
