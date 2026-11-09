@@ -6,12 +6,7 @@ import { Feedback } from "./Feedback.jsx";
 export function SiteFooter({ where = "", onUpdates = null, className = "" }) {
   return (
     <footer className={`site-foot ${className}`.trim()}>
-      {onUpdates && (
-        <>
-          <button type="button" onClick={onUpdates}>更新紀錄</button>
-          <span aria-hidden="true"> · </span>
-        </>
-      )}
+      {/* 更新紀錄 2026-11-08 本人要先不顯示給訪客(updates.js 留著);入口那顆也拿掉了,onUpdates 保留不接線 */}
       <a href="/privacy.html">隱私與使用說明</a>
       <span aria-hidden="true"> · </span>
       <Feedback where={where} label="意見回饋" />

@@ -94,12 +94,6 @@ export async function buildLicenses() {
 
       <p class="lede">這個網站用了別人寫的程式、字型和資料。下面列出每一樣用在哪、是什麼授權，授權要求附上的聲明也都在這頁。</p>
 
-      <section id="source" aria-labelledby="source-title">
-        <h2 id="source-title">原始碼</h2>
-        <p>原始碼在 <a href="${SOURCE}" rel="noopener">GitHub</a>。上游 Open Wardrobe 和本站自己寫的部分是 MIT；用到的別人的程式和字型列在下面，各照各的授權。</p>
-        <p>2026 年 10 月 27 日以前的版本，去背用的是 <span class="nowrap">@imgly/background-removal</span>（<a class="nowrap" href="https://www.gnu.org/licenses/agpl-3.0.html" rel="noopener">AGPL-3.0</a>），那些版本整體依 AGPL-3.0 提供，原始碼在 GitHub 的歷史紀錄裡。之後換成 Google 的 MediaPipe，網站不再含 AGPL 的程式。</p>
-      </section>
-
       <section id="parts" aria-labelledby="parts-title">
         <h2 id="parts-title">用到的程式和字型</h2>
         <table class="events">

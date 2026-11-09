@@ -447,12 +447,7 @@ export function LandingRing({ items, onOpen, onEnter, onWearOutfit, onSync = nul
               同步{syncAlert && <span className="sync-dot" aria-hidden="true" />}
             </button>
           )}
-          {/* 更新公告(2026-10-08):有還沒看過的,旁邊亮一個小點 */}
-          {onUpdates && (
-            <button type="button" onClick={onUpdates} aria-label={updatesUnseen ? "更新(有新的)" : undefined}>
-              更新{updatesUnseen && <span className="update-dot" aria-hidden="true" />}
-            </button>
-          )}
+          {/* 更新公告 2026-11-08 本人要先不顯示給訪客(updates.js、Updates.jsx 留著);入口這顆和頁尾那顆都拿掉 */}
         </nav>
       </header>
 
