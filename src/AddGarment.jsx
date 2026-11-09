@@ -355,14 +355,14 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
 
   // 其他品牌:貼上就在背景讀商品頁(停 350ms 等貼完),讀到圖就跟 GU 一樣挑圖;擋機器人、讀不到就照舊用截圖
   const pageUrl = parsedLink?.page ? parsedLink.url : null;
-  const [pageInfo, setPageInfo] = useState(null);   // { url, status: loading|ok|blocked|empty, name, brand, images, error }
+  const [pageInfo, setPageInfo] = useState(null);   // { url, status: loading|ok|blocked|gone|empty, name, brand, images, error }
   useEffect(() => {
     if (!pageUrl) return undefined;
     setPageInfo({ url: pageUrl, status: "loading", images: [] });
     const controller = new AbortController();
     const timer = setTimeout(() => {
       fetchProductPage(pageUrl, controller.signal).then((data) => {
-        const status = data.images.length ? "ok" : data.blocked ? "blocked" : "empty";
+        const status = data.images.length ? "ok" : data.blocked ? "blocked" : data.gone ? "gone" : "empty";
         setPageInfo({ url: pageUrl, status, name: data.name || "", brand: data.brand || "", images: data.images, price: data.price || null, error: data.error || "" });
       }).catch(() => { /* 換了網址,這次的不要了 */ });
     }, 350);
@@ -904,7 +904,9 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
                   ? "讀取商品頁…"
                   : effectiveLink?.images.length
                     ? `${effectiveLink.brand} 的商品圖抓得到${effectiveLink.page ? `(${effectiveLink.images.length} 張)` : ""}。下一步挑一張平拍的。`
-                    : page?.status === "blocked"
+                    : page?.status === "gone"
+                      ? "這個商品頁打不開，可能已經下架。網址會存起來，接著選截圖。"
+                      : page?.status === "blocked"
                       ? `這個網站擋住了自動讀取(大品牌和蝦皮常這樣),網址會存起來,接著選截圖${effectiveLink?.name ? `;品名先填「${effectiveLink.name}」` : ""}。`
                       : effectiveLink?.name
                         ? `${effectiveLink.brand || "這個網站"}的圖抓不到,品名先填「${effectiveLink.name}」,接著選截圖。`

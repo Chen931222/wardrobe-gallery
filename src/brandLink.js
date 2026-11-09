@@ -83,12 +83,15 @@ export async function fetchPriceForUrl(url) {
 /** 讀其他品牌的商品頁:{ name, brand, images: [{ thumb, full }] },擋住了回 { blocked: true },其他失敗回 { error }。 */
 export async function fetchProductPage(url, signal) {
   try {
-    const response = await fetch(`/api/product-page?${new URLSearchParams({ url })}`, { signal: signal || AbortSignal.timeout(15000) });
+    // 最多等 20 秒(伺服器那邊整趟 17 秒);呼叫端給的 signal(換網址就取消)和時限兩個都要算,舊版有給 signal 就沒有時限
+    const limit = AbortSignal.timeout(20000);
+    const both = signal && AbortSignal.any ? AbortSignal.any([signal, limit]) : signal || limit;
+    const response = await fetch(`/api/product-page?${new URLSearchParams({ url })}`, { signal: both });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) return { error: data.error || `讀取失敗(${response.status})`, images: [] };
     return { ...data, images: Array.isArray(data.images) ? data.images : [] };
   } catch (error) {
-    if (error?.name === "AbortError") throw error;
+    if (error?.name === "AbortError" && signal?.aborted) throw error;   // 換了網址才往外丟;時限到了照「讀不到」回
     return { error: navigator.onLine === false ? "現在沒有網路" : "讀不到這個商品頁", images: [] };
   }
 }

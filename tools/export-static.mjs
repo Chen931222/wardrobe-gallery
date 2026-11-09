@@ -148,6 +148,8 @@ const IMMUTABLE = [{ key: "Cache-Control", value: "public, max-age=31536000, imm
 const WWW_TO_APEX = [{ source: "/(.*)", has: [{ type: "host", value: "www.pairthis.app" }], destination: "https://pairthis.app/$1", permanent: true }];
 await writeFile(join(OUT, "vercel.json"), JSON.stringify({
   git: { deploymentEnabled: false },
+  // 商品頁要等慢的網站(樂天 9～11 秒)最多 14 秒＋Shopify 追加讀取:寫明 25 秒,不靠帳號的預設值(2026-11-09)
+  functions: { "api/product-page.mjs": { maxDuration: 25 } },
   redirects: WWW_TO_APEX,
   headers: [
     { source: "/(.*)", headers: SECURITY_HEADERS },

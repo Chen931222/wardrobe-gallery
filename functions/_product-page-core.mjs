@@ -53,15 +53,17 @@ async function assertPublicHost(url) {
   if (!records.length || records.some((record) => isPrivateIp(record.address))) throw new Error("這個網址指到不允許的位址");
 }
 
-/** 自己跟轉址(最多 5 次,每一站都檢查:網址字串＋實際解析到的位址),讀到上限就停。 */
-async function fetchLimited(start, accept, limit, { truncate }) {
+/** 自己跟轉址(最多 5 次,每一站都檢查:網址字串＋實際解析到的位址),讀到上限就停。
+    timeout 是整趟(含轉址、讀內容)共用一個期限,不是每一站各算一次。 */
+async function fetchLimited(start, accept, limit, { truncate, timeout = 9000 }) {
+  const signal = AbortSignal.timeout(timeout);
   let current = start;
   for (let hop = 0; hop < 6; hop += 1) {
     await assertPublicHost(current);
     const response = await fetch(current, {
       headers: { "User-Agent": UA, Accept: accept, "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.6" },
       redirect: "manual",
-      signal: AbortSignal.timeout(9000),
+      signal,
     });
     const location = response.headers.get("location");
     if (response.status >= 300 && response.status < 400 && location) {
@@ -206,8 +208,11 @@ function productFromLd(html) {
   return null;
 }
 
-const looksBlocked = (status, html) => status === 403 || status === 429 || status === 503
-  || /captcha|cf-chl|challenge-platform|px-captcha|are you a robot|verify you are human|access denied/i.test(html.slice(0, 30000));
+/* 404、410 是商品頁沒了(下架),不是擋:91APP 的「商品頁已關閉或不存在」頁裡有 captcha 字樣,
+   舊版照字樣判成擋機器人(2026-11-09 無印良品、PUMA、Under Armour),介面叫人以為是網站擋 */
+const isGone = (status) => status === 404 || status === 410;
+const looksBlocked = (status, html) => !isGone(status) && (status === 403 || status === 429 || status === 503
+  || /captcha|cf-chl|challenge-platform|px-captcha|are you a robot|verify you are human|access denied/i.test(html.slice(0, 30000)));
 
 /* Shopify 的圖可以用網址參數要小一點的:挑圖時給 480 寬,下載去背給 1400 寬,不用整張原圖 */
 function sized(src, width) {
@@ -225,9 +230,12 @@ const sign = (secret, src) => createHmac("sha256", secret).update(src).digest("b
 export async function readProductPage(pageUrl, secret) {
   const start = checkUrl(pageUrl);
   if (!start) return { status: 400, body: { error: "這個網址不能讀" } };
+  const began = Date.now();
   let page;
   try {
-    page = await fetchLimited(start, "text/html,application/xhtml+xml", MAX_HTML, { truncate: true });
+    // 商品頁給 14 秒(樂天市場從台灣連也要 9～11 秒才回第一個位元組,2026-11-09 實測;舊版 9 秒被當成擋住)。
+    // 前端 fetchProductPage 等 20 秒,要比這裡(含下面 Shopify 追加讀取)長
+    page = await fetchLimited(start, "text/html,application/xhtml+xml", MAX_HTML, { truncate: true, timeout: 14000 });
   } catch (error) {
     // 不拒絕也不回應(H&M 實測等 30 秒都沒回),是大品牌常見的擋法:當成擋住了,前端叫人改用截圖
     if (error?.name === "TimeoutError") return { status: 200, body: { blocked: true, timeout: true, images: [] } };
@@ -236,15 +244,17 @@ export async function readProductPage(pageUrl, secret) {
   const { response, url, bytes } = page;
   const html = new TextDecoder().decode(bytes);
   if (!response.ok || !/html/i.test(response.headers.get("content-type") || "html")) {
-    return { status: 200, body: { blocked: looksBlocked(response.status, html), images: [], status: response.status } };
+    return { status: 200, body: { blocked: looksBlocked(response.status, html), gone: isGone(response.status), images: [], status: response.status } };
   }
 
   let name = "", brand = "", sources = [];
   // Shopify:/products/<handle> 有一份公開的 .js,整組圖都在裡面
   const handle = url.pathname.match(/^(.*\/products\/[^/?#]+)/)?.[1];
-  if (handle && /Shopify|cdn\/shop\//.test(html)) {
+  // 追加讀取用剩下的時間,整趟不超過 17 秒(前端 20 秒,留 DNS 和回傳的餘裕);剩不到 1 秒就不讀
+  const left = 17000 - (Date.now() - began);
+  if (handle && left > 1000 && /Shopify|cdn\/shop\//.test(html)) {
     try {
-      const shop = await fetchLimited(new URL(`${handle}.js`, url.origin), "application/json", MAX_HTML, { truncate: false });
+      const shop = await fetchLimited(new URL(`${handle}.js`, url.origin), "application/json", MAX_HTML, { truncate: false, timeout: Math.min(9000, left) });
       const data = JSON.parse(new TextDecoder().decode(shop.bytes));
       name = decode(data.title);
       brand = decode(data.vendor);
@@ -291,7 +301,9 @@ export async function fetchProductImage(src, signature, secret) {
   const url = checkUrl(src);
   if (!url) return { status: 400, body: null };
   const { response, bytes } = await fetchLimited(url, "image/avif,image/webp,image/png,image/jpeg,image/*", MAX_IMAGE, { truncate: false });
-  const type = (response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+  // PAZZO 的圖回 image/jpg(不是標準寫法,2026-11-09),舊版整張拒收;照標準名稱轉給瀏覽器
+  const raw = (response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+  const type = raw === "image/jpg" || raw === "image/pjpeg" ? "image/jpeg" : raw;
   if (!response.ok || !IMAGE_TYPES.test(type)) return { status: 502, body: null };
   return { status: 200, body: bytes, type };
 }
