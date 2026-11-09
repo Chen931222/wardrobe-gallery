@@ -64,15 +64,14 @@ export function isPrivateIp(address) {
   const w = v6Words(address);
   if (!w) return true;   // 看不懂的位址當成不允許
   const zeros = (from, to) => w.slice(from, to).every((x) => x === 0);
-  // 裡面藏著 IPv4 的寫法(2026-11-09 驗收代理補):照那個 IPv4 判
-  if (zeros(0, 5) && w[5] === 0xffff) return isPrivateIp(v4Of(w[6], w[7]));      // ::ffff:a.b.c.d
-  if (zeros(0, 6)) return true;                                                   // ::、::1、舊式 ::a.b.c.d
-  if (w[0] === 0x64 && w[1] === 0xff9b && zeros(2, 6)) return isPrivateIp(v4Of(w[6], w[7]));   // NAT64 64:ff9b::/96
-  if (w[0] === 0x64 && w[1] === 0xff9b) return true;                             // 64:ff9b:1::/48 內部 NAT64
-  if (w[0] === 0x2002) return isPrivateIp(v4Of(w[1], w[2]));                      // 6to4 2002::/16
-  if (w[0] === 0x2001 && (w[1] === 0 || w[1] === 0xdb8)) return true;             // Teredo、文件範例段
-  if (w[0] === 0x100 && zeros(1, 4)) return true;                                 // 100::/64 丟棄段
-  return (w[0] & 0xfe00) === 0xfc00 || (w[0] & 0xffc0) === 0xfe80 || (w[0] & 0xffc0) === 0xfec0 || (w[0] & 0xff00) === 0xff00;
+  // ::ffff:a.b.c.d(IPv4 對應位址)照裡面那個 IPv4 判
+  if (zeros(0, 5) && w[5] === 0xffff) return isPrivateIp(v4Of(w[6], w[7]));
+  // 其他一律白名單(2026-11-09 背景安全檢查建議):只放行公開單播 2000::/3,
+  // 再扣掉裡面的特殊段;::/8(含 ::ffff:0:a.b.c.d、舊式 ::a.b.c.d)、NAT64、fc/fe/ff 開頭都不在 2000::/3 裡,自動擋掉
+  if ((w[0] & 0xe000) !== 0x2000) return true;
+  if (w[0] === 0x2002) return isPrivateIp(v4Of(w[1], w[2]));                      // 6to4:照藏著的 IPv4 判
+  if (w[0] === 0x2001 && (w[1] < 0x200 || w[1] === 0xdb8)) return true;           // Teredo、ORCHID、基準測試等特殊段、文件範例段
+  return false;
 }
 const PRIVATE = "PT_PRIVATE_ADDRESS";
 function safeLookup(hostname, options, callback) {
@@ -95,6 +94,10 @@ async function fetchLimited(start, accept, limit, { truncate, timeout = 9000 }) 
   const signal = AbortSignal.timeout(timeout);
   let current = start;
   for (let hop = 0; hop < 6; hop += 1) {
+    // 每一站(含第一站、Shopify 追加讀取)都重新檢查網址;IP 直接寫在網址裡 Node 不查 DNS、safeLookup 管不到,一律不打
+    // (2026-11-09 背景安全檢查抓到:Shopify 網址是拿頁面路徑拼的,路徑「//127.0.0.1/products/x」會拼成連到 127.0.0.1)
+    current = checkUrl(current?.href ?? current);
+    if (!current || isIP(current.hostname.replace(/^\[|\]$/g, ""))) throw new Error("這個網址不能讀");
     let response;
     try {
       response = await fetch(current, {
@@ -300,7 +303,11 @@ export async function readProductPage(pageUrl, secret) {
   const left = 17000 - (Date.now() - began);
   if (handle && left > 1000 && /Shopify|cdn\/shop\//.test(html)) {
     try {
-      const shop = await fetchLimited(new URL(`${handle}.js`, url.origin), "application/json", MAX_HTML, { truncate: false, timeout: Math.min(9000, left) });
+      // 固定在同一個網域:用 origin 開新網址再設路徑,路徑開頭是「//」也不會變成別的主機
+      const shopUrl = new URL(url.origin);
+      shopUrl.pathname = `/${handle.replace(/^\/+/, "")}.js`;
+      if (shopUrl.origin !== url.origin) throw new Error("Shopify 網址跑到別的網域");
+      const shop = await fetchLimited(shopUrl, "application/json", MAX_HTML, { truncate: false, timeout: Math.min(9000, left) });
       const data = JSON.parse(new TextDecoder().decode(shop.bytes));
       name = decode(data.title);
       brand = decode(data.vendor);
