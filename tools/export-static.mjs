@@ -104,7 +104,9 @@ await copyFile(join(ROOT, "src", "city.js"), join(OUT, "api", "_city.mjs"));
 await copyFile(join(ROOT, "functions", "keep.mjs"), join(OUT, "api", "keep.mjs"));
 await writeFile(join(OUT, "api", "_proxy-secret.mjs"), `export const SECRET = ${JSON.stringify(randomBytes(32).toString("hex"))};\n`);
 const blobVersion = JSON.parse(await readFile(join(ROOT, "node_modules", "@vercel", "blob", "package.json"), "utf8")).version;
-await writeFile(join(OUT, "package.json"), JSON.stringify({ private: true, type: "module", dependencies: { "@vercel/blob": blobVersion } }, null, 2) + "\n");
+// undici(2026-11-09):讀別人商品頁用自己鎖定的版本,不靠 Vercel 上 Node 內建的那份(版本看不到);連線鎖 IP 的 Agent 也來自它
+const undiciVersion = JSON.parse(await readFile(join(ROOT, "node_modules", "undici", "package.json"), "utf8")).version;
+await writeFile(join(OUT, "package.json"), JSON.stringify({ private: true, type: "module", dependencies: { "@vercel/blob": blobVersion, undici: undiciVersion } }, null, 2) + "\n");
 
 // 安全標頭(2026-10-03,審查報告的資安項)。同步碼存在瀏覽器裡,萬一哪天被塞進一段腳本,
 // CSP 讓它只能連到下面這幾個地方,碼送不出去。每一條都對得到用途,加新的外部服務要記得補:

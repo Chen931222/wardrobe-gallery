@@ -10,8 +10,9 @@
 // 也只收常見的點陣圖(svg 能帶程式,從我們的網域送出去等於開一個洞)。
 
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { lookup } from "node:dns/promises";
+import { lookup } from "node:dns";
 import { isIP } from "node:net";
+import { Agent, fetch } from "undici";
 
 const UA = "Mozilla/5.0 (compatible; WardrobeLinkPreview/1.0; +https://pairthis.app)";
 const MAX_HTML = 2_000_000;
@@ -34,24 +35,59 @@ export function checkUrl(text) {
 
 /* 網域實際指到哪(2026-10-09 資安盤點):checkUrl 只看網址字串,擋得掉 127.0.0.1,擋不掉「名字正常、但解析到內網」的網域
    (實測 localtest.me → 127.0.0.1、169.254.169.254.nip.io → 雲端主機資訊位址,舊版都真的連過去,只是 Vercel 上那裡沒東西)。
-   連線前先查 DNS,任何一個位址是內網、本機、保留段就不打。限制:查完到真正連線之間 DNS 還是可能換(rebinding),
-   要完全擋得改成連到查到的那個 IP;Vercel 上目前沒有可以打的內部服務,先做到這樣。 */
-function isPrivateIp(address) {
-  if (isIP(address) === 4) {
-    const [a, b] = address.split(".").map(Number);
-    return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254)
-      || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 198 && (b === 18 || b === 19)) || a >= 224;
+   任何一個位址是內網、本機、保留段就不打。2026-11-09 起查 DNS 放在連線那一刻(safeLookup 交給 undici 的 Agent):
+   查到的位址檢查過,socket 就連那一個;舊版是先查一次、fetch 再自己查一次,中間 DNS 可以換成內網(rebinding)。轉址每一站都重走。 */
+/** IPv6 拆成 8 組 16 位元的數字(含 ::、結尾帶 IPv4 的寫法);拆不開回 null */
+function v6Words(text) {
+  let body = text.toLowerCase().replace(/%.*$/, "");
+  const v4 = body.match(/(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (v4) {
+    const [p, q, r, t] = v4.slice(1).map(Number);
+    body = body.slice(0, v4.index) + `${((p << 8) | q).toString(16)}:${((r << 8) | t).toString(16)}`;
   }
-  const v6 = address.toLowerCase();
-  if (v6 === "::" || v6 === "::1") return true;
-  const mapped = v6.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-  if (mapped) return isPrivateIp(mapped[1]);
-  return /^(fc|fd|fe8|fe9|fea|feb|ff)/.test(v6);
+  const halves = body.split("::");
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(":") : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
+  const fill = halves.length === 2 ? 8 - head.length - tail.length : 0;
+  const words = [...head, ...Array(Math.max(0, fill)).fill("0"), ...tail].map((w) => parseInt(w, 16));
+  return words.length === 8 && words.every((w) => w >= 0 && w <= 0xffff) ? words : null;
 }
-async function assertPublicHost(url) {
-  const records = await lookup(url.hostname, { all: true, verbatim: true });
-  if (!records.length || records.some((record) => isPrivateIp(record.address))) throw new Error("這個網址指到不允許的位址");
+const v4Of = (hi, lo) => `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
+export function isPrivateIp(address) {
+  if (isIP(address) === 4) {
+    const [a, b, c] = address.split(".").map(Number);
+    return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254)
+      || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 198 && (b === 18 || b === 19)) || a >= 224
+      || (a === 192 && b === 0 && (c === 0 || c === 2)) || (a === 198 && b === 51 && c === 100) || (a === 203 && b === 0 && c === 113);
+  }
+  const w = v6Words(address);
+  if (!w) return true;   // 看不懂的位址當成不允許
+  const zeros = (from, to) => w.slice(from, to).every((x) => x === 0);
+  // 裡面藏著 IPv4 的寫法(2026-11-09 驗收代理補):照那個 IPv4 判
+  if (zeros(0, 5) && w[5] === 0xffff) return isPrivateIp(v4Of(w[6], w[7]));      // ::ffff:a.b.c.d
+  if (zeros(0, 6)) return true;                                                   // ::、::1、舊式 ::a.b.c.d
+  if (w[0] === 0x64 && w[1] === 0xff9b && zeros(2, 6)) return isPrivateIp(v4Of(w[6], w[7]));   // NAT64 64:ff9b::/96
+  if (w[0] === 0x64 && w[1] === 0xff9b) return true;                             // 64:ff9b:1::/48 內部 NAT64
+  if (w[0] === 0x2002) return isPrivateIp(v4Of(w[1], w[2]));                      // 6to4 2002::/16
+  if (w[0] === 0x2001 && (w[1] === 0 || w[1] === 0xdb8)) return true;             // Teredo、文件範例段
+  if (w[0] === 0x100 && zeros(1, 4)) return true;                                 // 100::/64 丟棄段
+  return (w[0] & 0xfe00) === 0xfc00 || (w[0] & 0xffc0) === 0xfe80 || (w[0] & 0xffc0) === 0xfec0 || (w[0] & 0xff00) === 0xff00;
 }
+const PRIVATE = "PT_PRIVATE_ADDRESS";
+function safeLookup(hostname, options, callback) {
+  lookup(hostname, { all: true, verbatim: true }, (error, records) => {
+    if (error) return callback(error);
+    if (!records.length || records.some((record) => isPrivateIp(record.address))) {
+      return callback(Object.assign(new Error("這個網址指到不允許的位址"), { code: PRIVATE }));
+    }
+    // Node 開 autoSelectFamily 時要全部位址(all: true),否則要一個
+    if (options?.all) return callback(null, records);
+    return callback(null, records[0].address, records[0].family);
+  });
+}
+// 只給讀別人網頁用;8 秒連不上就放棄(含查 DNS)
+const dispatcher = new Agent({ connect: { lookup: safeLookup, timeout: 8000 } });
 
 /** 自己跟轉址(最多 5 次,每一站都檢查:網址字串＋實際解析到的位址),讀到上限就停。
     timeout 是整趟(含轉址、讀內容)共用一個期限,不是每一站各算一次。 */
@@ -59,16 +95,26 @@ async function fetchLimited(start, accept, limit, { truncate, timeout = 9000 }) 
   const signal = AbortSignal.timeout(timeout);
   let current = start;
   for (let hop = 0; hop < 6; hop += 1) {
-    await assertPublicHost(current);
-    const response = await fetch(current, {
-      headers: { "User-Agent": UA, Accept: accept, "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.6" },
-      redirect: "manual",
-      signal,
-    });
+    let response;
+    try {
+      response = await fetch(current, {
+        headers: { "User-Agent": UA, Accept: accept, "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.6" },
+        redirect: "manual",
+        signal,
+        dispatcher,
+      });
+    } catch (error) {
+      // undici 把連線錯誤包成「fetch failed」,原因在 cause:內網位址照舊回清楚的訊息
+      if (error?.cause?.code === PRIVATE) throw new Error("這個網址指到不允許的位址");
+      // 對方把連線丟掉不回(8 秒連不上),跟整趟逾時一樣當成太慢/擋住,不要把「fetch failed」原樣丟給使用者
+      if (error?.cause?.code === "UND_ERR_CONNECT_TIMEOUT") throw new DOMException("連不上", "TimeoutError");
+      throw error;
+    }
     const location = response.headers.get("location");
     if (response.status >= 300 && response.status < 400 && location) {
       const next = checkUrl(new URL(location, current).href);
       if (!next) throw new Error("轉到不允許的網址");
+      await response.body?.cancel().catch(() => {});   // 轉址那頁的內容不要了,不讓它佔著連線
       current = next;
       continue;
     }

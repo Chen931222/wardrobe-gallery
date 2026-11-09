@@ -2,7 +2,9 @@
 // 實測連打 20 次全收,別人可以把這個網站當免費的爬蟲代理,燒掉 Function 額度(Hobby 每月 100 萬次、CPU 4 小時,用完整站停)。
 //
 // 每個 IP 每分鐘幾次,超過回 429。計數記在 function 的記憶體:Vercel 同時開好幾台時各算各的,
-// 擋的是大量亂打,不是精準攻擊;要嚴格得換成共用的計數(Redis 之類)。CDN 快取命中的請求不會進到這裡,本來就不花額度。
+// 擋的是大量亂打,不是精準攻擊。共用的計數在 Vercel 防火牆(2026-11-09):規則「api-per-ip」,/api/ 底下全部加起來
+// 每個 IP 每分鐘 120 次,在邊緣算、不分哪台 function(`vercel firewall rules list` 看得到;Hobby 只能有一條限速規則)。
+// 這裡的分項上限留著,管單一支 API。CDN 快取命中的請求不會進到這裡,本來就不花額度。
 // IP 用 Vercel 填的 x-forwarded-for 第一個(Vercel 會覆寫這個標頭,使用者偽造不了)。
 
 const buckets = new Map();
