@@ -2948,7 +2948,7 @@ h1, h2, h3 {
 }
 /* 矮的筆電(1280×650 這種)以前另有一段讓人台從字標那列開始;2026-10-26 人台改成從最上面開始、上面的空白照視窗高度算,那段拿掉 */
 .welcome-logo { grid-area: logo; }
-.welcome-lede { grid-area: lede; }
+.welcome-head { grid-area: lede; }
 .welcome-start { grid-area: start; }
 .welcome-look { grid-area: look; }
 .welcome-copy { grid-area: copy; }
@@ -3072,6 +3072,9 @@ h1, h2, h3 {
   color: var(--ink);
 }
 .welcome-lede span { display: block; }
+/* 標題下兩句(2026-11-16):一句一行,放不下才在句子裡斷;比按鈕下的小字大一級 */
+.welcome .welcome-sub { margin-top: 14px; font-size: 15px; line-height: 1.8; color: var(--body); }
+.welcome-sub span { display: block; text-wrap: balance; }
 
 /* 按鈕緊貼標題(36px),先講清楚的事跟它拉開(56px):按鈕跟標題那句是一組,說明是另一組。
    標題下那三句 2026-10-24 拿掉(01、02 章講同一件事),按鈕直接接在標題後面 */
@@ -3224,6 +3227,13 @@ h1, h2, h3 {
   .welcome-look { display: flex; gap: 18px; align-items: center; margin: 24px -18px 0; padding: 20px 18px; background: var(--band); }
   .welcome-look .mini-look { width: 136px; flex: none; }
   .welcome-look figcaption { margin: 0; }
+  /* 2026-11-16 本人「手機版…字都會跑掉」(390 寬實測):人台旁那欄只有 200px,
+     「台中 23°，／示範衣櫃今天這樣穿：」逗號掛在行尾 → 城市和溫度自己一行、逗號不畫;
+     「顏色不／會打架」→ 理由照逗號分段換行(Welcome.jsx 的 byClause);「跟過／去，怎麼帶走」→「不用註冊」那句照分號分兩行 */
+  .welcome-look-when .when-sep { display: none; }
+  .welcome-look-when .nowrap { display: block; margin-top: 4px; }
+  .welcome-free span { display: block; text-wrap: balance; }
+  .welcome .welcome-sub { margin-top: 10px; font-size: 14px; line-height: 1.75; }
   .welcome-copy { margin-top: 16px; }
   .welcome .welcome-tip { margin-top: 16px; }
   .welcome .welcome-foot { margin-top: 36px; }
@@ -3236,6 +3246,11 @@ h1, h2, h3 {
   .welcome-look { margin-top: 18px; padding-block: 14px; }
   .welcome-look .mini-look { width: 112px; }
   .welcome-start { margin-top: 18px; }
+}
+/* 2026-11-16 標題下兩句:只在很矮的手機藏(iPhone SE 548、568;長理由那天按鈕底已經到 548,再加 58 會掉出去)。
+   門檻 620 不跟上面的 680 共用:360×640 的 Android 放得下(驗收:這是最常見的矮手機,藏掉等於多數人看不到) */
+@media (max-width: 760px) and (max-height: 620px) {
+  .welcome-sub { display: none; }
 }
 /* 320 寬:24px 時「它照你那邊的天氣配一套，」放不下一行,剩「套，」掉到下一行,標題多一行把按鈕推出第一屏(驗收)。22px 剛好一行 */
 /* 同寬度:冷天理由帶長品名(「駝色斜紋厚棉襯衫式外套」)時米紙帶比人台高,320×568 按鈕掉出 31px(驗收,35 次抽樣)。人台和理由字各縮一號 */

@@ -17,6 +17,8 @@ const FALLBACK_WEATHER = { temp: null, feelsLike: 25, desc: "", rainProb: 0, tMa
 // 理由裡引號框住的單品名整段換行,不從中間斷(「深藍連帽防風／外套」,2026-10-24 手機截圖)。
 // 用 inline-block 不用 nowrap:一行放不下整個品名時才在品名裡面斷,不會撐出窄欄被切掉(320 寬的「駝色斜紋厚棉襯衫式外套」,驗收)
 const keepQuotes = (text) => text.split(/(「[^」]+」)/).map((part, i) => (i % 2 ? <span key={i} className="keep-together">{part}</span> : part));
+// 第一屏的理由(2026-11-16 手機那欄只有 200px):一句照逗號分段,整段放不下才換行,不要斷成「低調／色，」
+const byClause = (text) => (text.match(/[^，；]+[，；]?/g) || [text]).map((part, i) => <span key={i} className="keep-together">{keepQuotes(part)}</span>);
 
 /** 一套穿搭穿在人台上,只看不能動。比例跟搭配頁同一把尺(src/dollLayout.js):圖載入時量身形,量好才顯示。 */
 function MiniLook({ outfit }) {
@@ -205,9 +207,9 @@ export function Welcome({ demoItems, onAdd, onBack = null, onDemo, onImportFile,
     <figure className="welcome-look">
       <MiniLook outfit={look.outfit} />
       <figcaption>
-        <span className="welcome-look-when">{realWeather ? <><CitySelect /> {weather.temp}°，</> : ""}<span className="nowrap">{realWeather ? "示範衣櫃今天這樣穿" : "示範衣櫃的一套"}{realWeather && look.reasons.length ? "：" : ""}</span></span>
+        <span className="welcome-look-when">{realWeather ? <><CitySelect /> {weather.temp}°<span className="when-sep">，</span></> : ""}<span className="nowrap">{realWeather ? "示範衣櫃今天這樣穿" : "示範衣櫃的一套"}{realWeather && look.reasons.length ? "：" : ""}</span></span>
         {realWeather && look.reasons.length > 0 && (
-          <ul className="welcome-look-why">{look.reasons.map((reason) => <li key={reason}>{keepQuotes(reason)}</li>)}</ul>
+          <ul className="welcome-look-why">{look.reasons.map((reason) => <li key={reason}>{byClause(reason)}</li>)}</ul>
         )}
       </figcaption>
     </figure>
@@ -230,9 +232,21 @@ export function Welcome({ demoItems, onAdd, onBack = null, onDemo, onImportFile,
       <Logo className="welcome-logo" />
       {/* 入口的字(2026-10-22 本人「寫的太 AI」):不做條列、不做「兩個字加粗當標題」,就幾段講話,長短不齊。每句都是實測過的事,限制照講。
           2026-10-30 本人「縮短標題字」:三行 23 字 →兩行 17 字;三件事都還在(你的衣服、今天的天氣、搭一套說為什麼),示範那套的理由就在正下方 */}
-      <h2 id="welcome-title" className="welcome-lede">
-        <span>你的衣服，今天的天氣，</span><span>搭一套、說為什麼。</span>
-      </h2>
+      {/* 2026-11-16 本人「上面…可以加幾句什麼網購啊，說明一下為什麼」:標題下補兩句,一句一行。
+          10-24 拿掉的三句講的是怎麼加;這兩句講的是網購的人為什麼要用(不用拍、買之前先比)。
+          兩句都對過程式:貼連結挑商品圖(AddGarment);想買的列出櫃裡很像的、用已經有的配三套(wishCheck)。
+          手機上多 58px:393×700 按鈕仍在第一屏;很矮的手機(高 ≤620,iPhone SE)不顯示,不然長理由那天按鈕掉出第一屏 */}
+      <div className="welcome-head">
+        <h2 id="welcome-title" className="welcome-lede">
+          <span>你的衣服，今天的天氣，</span><span>搭一套、說為什麼。</span>
+        </h2>
+        <p className="welcome-sub">
+          {/* 驗收改過:「不用拍」只對讀得到圖的網站成立(Zara、蝦皮要截圖)→ 寫「連結或截圖」;
+              空衣櫃貼連結預設「已經有了」、想買的也沒東西可配 → 第二句講明是有了幾件之後 */}
+          <span>網購過的，貼商品連結或截圖就加進衣櫃。</span>
+          <span>有了幾件之後，想買的先貼進來看配不配。</span>
+        </p>
+      </div>
 
       {demoFirst && demo}
 
@@ -258,7 +272,7 @@ export function Welcome({ demoItems, onAdd, onBack = null, onDemo, onImportFile,
           </p>
         )}
         {/* 2026-10-26 本人要的:把「只在這台」講成交易,不是缺點。入口只留一句＋連結,四句的全文在隱私說明「儲存與備份」(入口第一屏放不下) */}
-        <p className="welcome-free">不用註冊，衣櫃存在這個瀏覽器裡；換手機它不會自己跟過去，<a href="/privacy.html#storage">怎麼帶走</a>。</p>
+        <p className="welcome-free"><span>不用註冊，衣櫃存在這個瀏覽器裡；</span><span>換手機它不會自己跟過去，<a href="/privacy.html#storage">怎麼帶走</a>。</span></p>
       </div>
 
       {!demoFirst && demo}
