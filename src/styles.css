@@ -3933,3 +3933,22 @@ button.key-button:disabled { background: transparent; opacity: .55; }   /* 還�
 /* 桌機:回覆只有一句時不是框,是輸入框下面一行字(2026-11-06:灰底同輸入框,看起來像不能按的欄位) */
 .studio-daily.is-line { padding: 0; border: 0; background: none; }
 .studio-daily.is-line .studio-daily-understood { margin: 0; font-size: 14px; letter-spacing: .02em; color: var(--ink); }
+
+/* iPhone 主畫面 app 的狀態列(2026-11-26 本人「按叉叉的部分…會被 iPhone 上面…看時間那一行給擋住」)。
+   index.html 用 black-translucent:主畫面 app 從狀態列底下開始畫,env(safe-area-inset-top) 約 47–59px。
+   原本彈出視窗離頂端 12px、單品頁的 ✕ 離頂端 18–20px,剛好壓在時間底下。
+   Safari、桌機、Android 的 inset 是 0,下面每一條都等於原本的值。排在檔尾,蓋過前面同權重的規則 */
+.add-overlay, .lookcard-overlay {
+  padding-top: max(24px, calc(env(safe-area-inset-top) + 8px));
+  padding-bottom: max(24px, calc(env(safe-area-inset-bottom) + 8px));
+}
+@media (max-width: 640px) {
+  .add-overlay {
+    padding-top: max(12px, calc(env(safe-area-inset-top) + 8px));
+    padding-bottom: max(12px, calc(env(safe-area-inset-bottom) + 8px));
+  }
+}
+@media (max-width: 860px) {
+  .viewer-icon-close { top: max(18px, env(safe-area-inset-top)); }
+  .has-modeled-image .viewer-icon-close, .modeled-heading { top: calc(20px + env(safe-area-inset-top)); }
+}

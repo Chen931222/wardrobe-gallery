@@ -2314,7 +2314,9 @@ export function App() {
         )}
         {/* 衣櫃頁也放備份(2026-11-02 本人:「我還是沒看到匯出備份」「衣櫃也要有」):原本只在搭配頁最底下,
             正上方還有一顆「匯出這套」(匯出的是那套搭配的圖),找不到。提醒卡只在有自己拍的之後才出現 */}
-        {view === "closet" && CAN_ADD && hasMine && activeType !== "trash" && !searching && !picking && (
+        {/* 2026-11-26 本人「衣櫃也要看得到」:站主把自己加的都丟進垃圾桶後(hasMine 變 false)這行就不見了,
+            只剩搭配頁有。站主一律顯示;訪客照舊,沒加過衣服的匯入在入口頁 */}
+        {view === "closet" && CAN_ADD && (hasMine || CAN_EDIT) && activeType !== "trash" && !searching && !picking && (
           <div className="studio-backup closet-backup">
             <div className="studio-backup-controls">
               <span className="studio-backup-label">紀錄備份</span>
