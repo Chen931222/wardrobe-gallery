@@ -30,6 +30,10 @@ export function CutoutPicker({ input, cut, strokes: initialStrokes, onDone, onCa
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [problem, setProblem] = useState("");
+  // 2026-11-27 本人「加回來跟去掉那個…到底有沒有點到它,而且我點那個去掉的」:舊的圖例是兩個帶白圈的圓點,
+  // 長得像選項鈕,點了沒反應,點圖也看不出有沒有點到。圖例改成一句字(沒有圓點),每點一下講這一點做了什麼、留下的部分變多少
+  const [share, setShare] = useState(null);       // 現在留下的部分佔畫面幾 %
+  const [lastTap, setLastTap] = useState(null);   // { mode: "add" | "remove", before: % }
   const changed = strokes !== initialStrokes;
   const anySelected = strokes.some((stroke) => stroke.brushMode !== 2);
 
@@ -67,6 +71,12 @@ export function CutoutPicker({ input, cut, strokes: initialStrokes, onDone, onCa
         const probeContext = probe.getContext("2d", { willReadFrequently: true });
         probeContext.drawImage(selected, 0, 0, canvas.width, canvas.height);
         keptRef.current = { data: probeContext.getImageData(0, 0, canvas.width, canvas.height).data, w: canvas.width, h: canvas.height };
+        const { data } = keptRef.current;
+        let on = 0, all = 0;
+        for (let i = 3; i < data.length; i += 4 * 7) { all += 1; if (data[i] > 128) on += 1; }   // 每 7 格取一格,夠準
+        setShare(all ? Math.round((on / all) * 100) : 0);
+      } else {
+        setShare(0);
       }
       const r = Math.max(6, Math.round(canvas.width / 70));
       for (const stroke of strokes) {
@@ -116,10 +126,18 @@ export function CutoutPicker({ input, cut, strokes: initialStrokes, onDone, onCa
     const kept = keptRef.current;
     const isKept = Boolean(kept) && anySelected
       && kept.data[(Math.min(kept.h - 1, Math.floor(y * kept.h)) * kept.w + Math.min(kept.w - 1, Math.floor(x * kept.w))) * 4 + 3] > 128;
+    setLastTap({ mode: isKept ? "remove" : "add", before: share });
     reselect([...strokes, strokeAt(isKept ? "remove" : "add", x, y)]);
   };
-  const undo = () => { if (strokes.length) reselect(strokes.slice(0, -1)); };
-  const restart = () => reselect([]);
+  const undo = () => { if (strokes.length) { setLastTap(null); reselect(strokes.slice(0, -1)); } };
+  const restart = () => { setLastTap(null); reselect([]); };
+  // 這一點的結果:點完、重選好了才講;留下的部分一下多了很多(多半是點到背景),提醒按上一點
+  const tapNote = lastTap && !busy && share !== null && lastTap.before !== null ? (() => {
+    const word = lastTap.mode === "add" ? "加回來（綠點）" : "去掉（紅點）";
+    const grew = share - lastTap.before;
+    const tail = lastTap.mode === "add" && grew >= 25 ? "一下加回了一大塊，點錯了按「上一點」。" : "";
+    return `剛點的那一下是${word}：留下的部分從 ${lastTap.before}% 變成 ${share}%。${tail}`;
+  })() : null;
 
   return (
     <div className="eraser picker">
@@ -144,8 +162,10 @@ export function CutoutPicker({ input, cut, strokes: initialStrokes, onDone, onCa
         />
         {busy && <span className="picker-busy" role="status">重選中…</span>}
       </div>
+      <p className="picker-note" role="status" aria-live="polite">
+        {busy ? "重選中…" : tapNote || <>點的是上面的照片。點完圖上會多一個點：<b className="is-add">綠點</b>是加回來，<b className="is-remove">紅點</b>是去掉。</>}
+      </p>
       <div className="eraser-tools">
-        <p className="picker-legend" aria-hidden="true"><span className="is-add" />加回來的<span className="is-remove" />去掉的</p>
         <div className="picker-history">
           <button type="button" className="secondary-button" onClick={undo} disabled={busy || !strokes.length}>上一點</button>
           <button type="button" className="secondary-button" onClick={restart} disabled={busy || !strokes.length}>從頭點</button>

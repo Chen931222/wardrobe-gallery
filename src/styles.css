@@ -1590,11 +1590,12 @@ h1, h2, h3 {
 /* 點一下修正的說明(2026-11-02):三步編號,第一步講怎麼看、第二步講怎麼點,不再一整句塞在一起 */
 .picker-steps { margin: 0; padding-left: 1.4em; display: grid; gap: 4px; font-size: 13px; line-height: 1.65; color: var(--body); }
 .picker-steps li::marker { color: var(--muted); }
-/* 畫布上的小圓點代表什麼:綠 = 加回來、紅 = 去掉(顏色跟 CutoutPicker 畫的一樣) */
-.picker-legend { margin: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
-.picker-legend span { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 2px #fff; }
-.picker-legend .is-add { background: #2e6b3a; }
-.picker-legend .is-remove { background: #b3261e; margin-left: 10px; }
+/* 畫布下面一句話(2026-11-27 取代圓點圖例:兩個帶白圈的圓點像選項鈕,本人點了沒反應)。
+   沒點過講綠紅點是什麼;點過講剛才那一點做了什麼。顏色跟 CutoutPicker 畫在圖上的點一樣,只上在字上,不畫成圓點 */
+.picker-note { margin: 0; font-size: 13px; line-height: 1.65; color: var(--body); min-height: 3.3em; }
+.picker-note b { font-weight: 600; }
+.picker-note .is-add { color: #2e6b3a; }
+.picker-note .is-remove { color: #b3261e; }
 .eraser-sizes button:disabled { opacity: .45; cursor: default; }
 .picker-busy {
   position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
