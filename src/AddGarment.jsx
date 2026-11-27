@@ -14,6 +14,7 @@ import { CURRENCIES, parsePrice } from "./price.js";
 import { brandInUrl, brandOf, brandSuggestions, canonicalBrand } from "./brands.js";
 import { track } from "./analytics.js";
 import { autoNamedKind } from "./standIns.js";
+import { colorName } from "./recommend.js";
 import { BATCH_MAX, BatchAdd } from "./BatchAdd.jsx";
 import { InAppTip } from "./InAppTip.jsx";
 
@@ -197,6 +198,12 @@ const PAD = 0.1;
 // 店裡比一下的快速分類:店裡最常比的五類,其他的收在「其他…」
 const STORE_PARTS = ["upperbody", "wholebody_up", "lowerbody", "shoes", "bag"];
 /** 店裡比一下的品名:打的字 + 點的版型、款式(例「UNIQLO 寬版T恤」),拿去比對,存的話也存成這個名字 */
+/* 名稱沒填時的名字(2026-11-27 本人「名稱…一開始就辨識上去」):去背抓到的顏色＋分類(選了用選的,沒選用形狀猜的),
+   「灰色上衣」「黑色褲子」。不上傳照片、不另外下載模型;品牌從照片認不出來,只有貼連結才有。
+   「下身」當名字不像話,叫褲子(站主 104 件的下身大多是褲子;裙子猜錯了自己改) */
+const NAME_NOUN = { lowerbody: "褲子", bag: "包", accessories_up: "配件", carry: "小物" };
+export const autoName = (color, part) => (part ? `${colorName(color) || ""}${NAME_NOUN[part] || PARTS[part]?.singular || ""}` : "");
+
 const storeName = (draft) => [draft.name.trim(), `${draft.fit || ""}${draft.kind || ""}`].filter(Boolean).join(" ");
 
 /** 框往外多留 10% 再去背:框得太貼,模型看不到背景,中間色的條紋會被去成半透明、旁邊留一條陰影(審查 F19)。去背完再裁回原本的框。 */
@@ -669,6 +676,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
 
   // 照片放歪了(2026-11-02 本人):去背好就看一次,上衣、外套、下身斜了 25° 以上才講。分類還沒選就照形狀猜那一類來判
   const [tilt, setTilt] = useState(null);
+  const [shapePart, setShapePart] = useState(null);   // 沒選分類時,照去背形狀猜的(名稱預填用)
   useEffect(() => {
     setTilt(null);
     if (!draft?.blob || store) return undefined;
@@ -678,6 +686,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
       try {
         bitmap = await createImageBitmap(draft.blob);
         const part = draft.part || guessPart(bitmap);
+        if (alive && !draft.part) setShapePart(part);
         const result = TILT_PARTS.includes(part) ? looksTilted(bitmap) : null;
         if (alive && result?.tilted) setTilt(result);
       } catch { /* 讀不到就不講 */ } finally { bitmap?.close?.(); }
@@ -725,13 +734,13 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
   // over:店裡比一下的「放進想買的」「買了」直接帶著選擇存,不用先改 draft 再存
   const save = async (over = {}) => {
     const draft = { ...draftState, ...over };
-    const name = draft.name.trim() || (draft.wishlist ? "想買的單品" : "新單品");
+    const typed = draft.name.trim();
     setError("");
     // 分類改選填(2026-10-21):要人先選分類才能存,加第一件多一道關卡。
     // 沒選就猜:先看品名(「襯衫」「牛仔褲」),再看去背後的形狀(localWardrobe guessPart);猜的標 partGuessed,衣櫃格子會提醒點一下改
     let partGuessed = false;
     if (!draft.part) {
-      let guessed = partFromName(name);
+      let guessed = partFromName(typed);
       if (!guessed && draft.blob) {
         let bitmap = null;
         try { bitmap = await createImageBitmap(draft.blob); guessed = guessPart(bitmap); } catch { /* 讀不到就當上衣 */ } finally { bitmap?.close?.(); }
@@ -739,6 +748,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
       draft.part = guessed || "upperbody";
       partGuessed = true;
     }
+    const name = typed || autoName(draft.color, draft.part) || (draft.wishlist ? "想買的單品" : "新單品");
     // 存不進去要講(2026-10-21 iPad 無痕實測:舊版沒接這個錯,按了「加入衣櫃」什麼都沒發生,表單也不關)
     try {
       await saveLocalItem({
@@ -1256,7 +1266,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
               <input
                 value={draft.name}
                 onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
-                placeholder={draft.wishlist ? "例:GU 寬版牛仔褲" : "例:白色帆布鞋"}
+                placeholder={autoName(draft.color, draft.part || shapePart) ? `沒填就叫「${autoName(draft.color, draft.part || shapePart)}」，可以改` : draft.wishlist ? "例:GU 寬版牛仔褲" : "例:白色帆布鞋"}
               />
             </label>
 
