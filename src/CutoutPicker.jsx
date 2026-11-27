@@ -34,6 +34,10 @@ export function CutoutPicker({ input, cut, strokes: initialStrokes, onDone, onCa
   // 長得像選項鈕,點了沒反應,點圖也看不出有沒有點到。圖例改成一句字(沒有圓點),每點一下講這一點做了什麼、留下的部分變多少
   const [share, setShare] = useState(null);       // 現在留下的部分佔畫面幾 %
   const [lastTap, setLastTap] = useState(null);   // { mode: "add" | "remove", before: % }
+  // 2026-11-27 本人第二輪「紅點跟綠點根本沒有地方讓我選…到底要按哪一個」:改回先選再點。
+  // 11-02 拿掉過「這也是／這不是」切換(預設停在「這也是」,沒切就點,鞋子反而被加進來);這次不給預設,沒選就點照片先講要選
+  const [mode, setMode] = useState(null);         // null | "remove" | "add"
+  const [needMode, setNeedMode] = useState(false);
   const changed = strokes !== initialStrokes;
   const anySelected = strokes.some((stroke) => stroke.brushMode !== 2);
 
@@ -122,19 +126,21 @@ export function CutoutPicker({ input, cut, strokes: initialStrokes, onDone, onCa
     const rect = canvasRef.current.getBoundingClientRect();
     const x = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
     const y = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
-    // 點到現在有留著的(照原色)= 這不是;點到變淡的 = 這也是。什麼都沒選時一定是「這也是」
-    const kept = keptRef.current;
-    const isKept = Boolean(kept) && anySelected
-      && kept.data[(Math.min(kept.h - 1, Math.floor(y * kept.h)) * kept.w + Math.min(kept.w - 1, Math.floor(x * kept.w))) * 4 + 3] > 128;
-    setLastTap({ mode: isKept ? "remove" : "add", before: share });
-    reselect([...strokes, strokeAt(isKept ? "remove" : "add", x, y)]);
+    // 什麼都沒選時只能加回來;其他時候照上面選的那顆
+    const use = anySelected ? mode : "add";
+    if (!use) { setNeedMode(true); return; }
+    setNeedMode(false);
+    setLastTap({ mode: use, before: share });
+    reselect([...strokes, strokeAt(use, x, y)]);
   };
   const undo = () => { if (strokes.length) { setLastTap(null); reselect(strokes.slice(0, -1)); } };
-  const restart = () => { setLastTap(null); reselect([]); };
+  const restart = () => { setLastTap(null); setMode("add"); reselect([]); };
   // 這一點的結果:點完、重選好了才講;留下的部分一下多了很多(多半是點到背景),提醒按上一點
   const tapNote = lastTap && !busy && share !== null && lastTap.before !== null ? (() => {
     const word = lastTap.mode === "add" ? "加回來（綠點）" : "去掉（紅點）";
     const grew = share - lastTap.before;
+    // 去掉本來就變淡的、加回本來就留著的:數字不會動,直接講(實測點背景角落「去掉」是 42% → 42%,看起來像沒反應)
+    if (Math.abs(grew) < 1) return `剛點的那一下是${word}，但沒有變：那裡本來就${lastTap.mode === "add" ? "留著" : "會去掉"}了。`;
     const tail = lastTap.mode === "add" && grew >= 25 ? "一下加回了一大塊，點錯了按「上一點」。" : "";
     return `剛點的那一下是${word}：留下的部分從 ${lastTap.before}% 變成 ${share}%。${tail}`;
   })() : null;
@@ -144,12 +150,23 @@ export function CutoutPicker({ input, cut, strokes: initialStrokes, onDone, onCa
       <p className="add-step">點一下修正</p>
       {anySelected ? (
         <ol className="picker-steps">
-          <li>照原色的會留下來,變淡的會去掉。</li>
-          <li>哪裡不對就點哪裡:多出來的(別件衣服、鞋、床單)點一下就去掉;漏掉的(袖子、另一隻鞋)點一下就加回來。</li>
-          <li>點錯了按「上一點」。</li>
+          <li>先看照片：照原色的會留下來，變淡的會去掉。中間那個綠點是一開始自動點的，從那裡認出衣服，不用管它。</li>
+          <li>照片上面選一個：多了東西（別件衣服、床單、衣架）選「去掉」；少了一塊（袖子、另一隻鞋）選「加回來」。</li>
+          <li>再點照片上那一塊。點完那裡會多一個點，照片下面會寫結果。</li>
+          <li>點錯了按「上一點」；看起來對了按「改好了」。</li>
         </ol>
       ) : (
-        <small className="add-hint">點一下衣服,點到的那件會照原色亮起來;成雙的鞋兩隻都點。</small>
+        <small className="add-hint">點一下衣服，點到的那件會照原色亮起來；成雙的鞋兩隻都點。</small>
+      )}
+      {anySelected && (
+        <div className="picker-mode" role="group" aria-label="點照片要做什麼">
+          <button type="button" className={mode === "remove" ? "is-remove is-on" : "is-remove"} aria-pressed={mode === "remove"} onClick={() => { setMode("remove"); setNeedMode(false); }} disabled={busy}>
+            <span aria-hidden="true" />去掉（紅點）
+          </button>
+          <button type="button" className={mode === "add" ? "is-add is-on" : "is-add"} aria-pressed={mode === "add"} onClick={() => { setMode("add"); setNeedMode(false); }} disabled={busy}>
+            <span aria-hidden="true" />加回來（綠點）
+          </button>
+        </div>
       )}
       <div className="eraser-stage">
         <canvas
@@ -163,7 +180,11 @@ export function CutoutPicker({ input, cut, strokes: initialStrokes, onDone, onCa
         {busy && <span className="picker-busy" role="status">重選中…</span>}
       </div>
       <p className="picker-note" role="status" aria-live="polite">
-        {busy ? "重選中…" : tapNote || <>點的是上面的照片。點完圖上會多一個點：<b className="is-add">綠點</b>是加回來，<b className="is-remove">紅點</b>是去掉。</>}
+        {busy ? "重選中…"
+          : needMode ? <b>先在照片上面選「去掉」還是「加回來」，再點照片。</b>
+          : tapNote || (!anySelected ? "點照片上的衣服。"
+            : mode ? <>現在點照片會{mode === "remove" ? <b className="is-remove">去掉</b> : <b className="is-add">加回來</b>}點到的那一塊。</>
+            : "還沒選要去掉還是加回來。")}
       </p>
       <div className="eraser-tools">
         <div className="picker-history">

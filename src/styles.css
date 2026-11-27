@@ -1592,6 +1592,23 @@ h1, h2, h3 {
 .picker-steps li::marker { color: var(--muted); }
 /* 畫布下面一句話(2026-11-27 取代圓點圖例:兩個帶白圈的圓點像選項鈕,本人點了沒反應)。
    沒點過講綠紅點是什麼;點過講剛才那一點做了什麼。顏色跟 CutoutPicker 畫在圖上的點一樣,只上在字上,不畫成圓點 */
+/* 先選再點(2026-11-27 第二輪):兩顆一樣寬,選到的那顆實心上它自己的顏色,另一顆留框;沒選的時候兩顆都是框 */
+.picker-mode { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.picker-mode button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 48px; padding: 0 10px;
+  border: 1px solid var(--control); background: transparent; color: var(--ink);
+  font: inherit; font-size: 15px; cursor: pointer;
+}
+.picker-mode button span { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.picker-mode .is-remove span { background: #b3261e; }
+.picker-mode .is-add span { background: #2e6b3a; }
+.picker-mode button.is-on { color: #fff; font-weight: 600; }
+.picker-mode .is-remove.is-on { background: #b3261e; border-color: #b3261e; }
+.picker-mode .is-add.is-on { background: #2e6b3a; border-color: #2e6b3a; }
+.picker-mode button.is-on span { background: #fff; }
+.picker-mode button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.picker-mode button:disabled { opacity: .5; cursor: default; }
 .picker-note { margin: 0; font-size: 13px; line-height: 1.65; color: var(--body); min-height: 3.3em; }
 .picker-note b { font-weight: 600; }
 .picker-note .is-add { color: #2e6b3a; }
