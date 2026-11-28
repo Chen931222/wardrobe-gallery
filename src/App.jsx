@@ -1671,6 +1671,43 @@ export function App() {
     }
   };
 
+  /* 一次加完好幾件(2026-11-28):湊得成一套就配、帶進搭配頁,回 true;湊不成(還差哪一類)或天氣抓不到,講清楚、回 false 讓呼叫的那邊照舊去衣櫃。
+     理由第一句講分類是猜的:猜錯的話整套就不對(firstLook 同一個道理) */
+  const batchLook = async (saved) => {
+    await settleRefresh();
+    let mine = [];
+    try {
+      mine = ((await loadLocalItems()) || [])
+        .filter((item) => !item.wishlist && !item.trashedAt)
+        .map((item) => (item.warmth === undefined ? { ...item, warmth: guessWarmth(item) } : item));
+    } catch { return false; }
+    const has = (part) => mine.some((item) => item.part === part);
+    const need = [!has("upperbody") && !has("wholebody_up") && "上衣", !has("lowerbody") && "下身"].filter(Boolean);
+    if (need.length) {
+      setActiveType("all");
+      setView("closet");
+      window.scrollTo({ top: 0 });
+      say(`${saved} 件放進衣櫃了。還差${need.map((part) => `${part} 1 件`).join("、")}就能配一套;分類是猜的,猜錯的點開那件改。`);
+      return true;
+    }
+    say(`${saved} 件放進衣櫃了,正在照今天的天氣配一套…`);
+    try {
+      const weather = await Promise.race([fetchWeather(), new Promise((_, reject) => setTimeout(() => reject(new Error("天氣等太久")), 4000))]);
+      const result = recommendOutfit(mine, weather, readWearLog(), null, {}, null, readTaste());
+      if (result.error) throw new Error(result.error);
+      noteRecommendation(result.outfit, result.recalled);
+      rememberWearing(result.outfit, "mine");
+      setPendingOutfit(result.outfit);
+      setPendingDaily({ weather, reasons: [`剛放進衣櫃的 ${saved} 件,分類是猜的;配錯了到衣櫃點開那件改分類。`, ...(result.reasons || [])], details: result.details || [] });
+      setView("styling");
+      window.scrollTo({ top: 0 });
+      say(`${saved} 件放進衣櫃了,照今天的天氣配了一套。`);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const requestAdd = () => {
     setView("closet");
     setAddRequest((count) => count + 1);
@@ -2104,6 +2141,9 @@ export function App() {
                     // 一次加好幾件(src/BatchAdd.jsx):存好帶去衣櫃「全部」,看得到猜的分類標記
                     if (!saved) return;
                     if (!CAN_EDIT) { setClosetChoice("mine"); setPendingOutfit(null); }
+                    // 2026-11-28 本人「做」:訪客一次加完,湊得成一套就直接照今天的天氣配好、帶進搭配頁(跟代表款起步 quickSaved 同一條)。
+                    // 影片講的是「拍照 → 一次丟進去 → 照天氣配一套」,以前加完停在衣櫃頁、最上面是備份提醒,第三步要自己找
+                    if (!CAN_EDIT && await batchLook(saved)) return;
                     await refresh();
                     setActiveType("all");
                     setView("closet");

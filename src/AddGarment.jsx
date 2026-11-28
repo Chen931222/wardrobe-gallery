@@ -942,7 +942,7 @@ export function AddGarment({ onAdded, existing = [], openRequest = 0, onOpenHand
             </div>
             {/* 模型大小要在這頁講(2026-10-24 取捨):打開這頁就開始下載;開了省流量或 2G、內建瀏覽器不先載(preloadsEarly),去背時才下載 */}
             <small className="add-hint">
-              {!replacing && !parsedLink && onBatchAdded ? "可以一次選好幾張，自動去背放進衣櫃。" : ""}照片在這台裝置上處理，不會上傳。
+              {!replacing && !parsedLink && onBatchAdded ? "可以一次選好幾張，自動去背放進衣櫃。皺的也可以，配色只看顏色。" : ""}照片在這台裝置上處理，不會上傳。
               {!modelReady() && (preloadsEarly() ? `第一次要下載約 ${MODEL_MB}MB，打開這一頁就開始下載。` : `第一次去背要下載約 ${MODEL_MB}MB，去背時才開始下載；行動網路建議連 Wi-Fi。`)}
             </small>
             {/* 店裡比一下不存,代表款不用拍(2026-11-02、2026-10-30):收成並排兩顆,換圖時不出現 */}
